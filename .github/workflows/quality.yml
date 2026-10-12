@@ -14,6 +14,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test artwork validator
+        run: python -m unittest discover -s tests -p 'test_*.py'
       - name: Verify JavaScript syntax
         run: |
           for file in prototype/*.js tests/*.js; do node --check "$file"; done
