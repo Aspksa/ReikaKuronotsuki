@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Reika offline asset build: validate, clean, inspect, and ZIP. Sources untouched."""
 import argparse
+import math
 import json
 import sys
 import os
@@ -14,7 +15,7 @@ from audit_alpha_edges import audit
 from validate_assets import validate_layers
 
 def build(source, output, *, require_complete=False, threshold=10, median=3, feather=1, max_alpha_loss=0.5):
-    if not 0 <= max_alpha_loss <= 1:
+    if isinstance(max_alpha_loss,bool) or not isinstance(max_alpha_loss,(int,float)) or not math.isfinite(max_alpha_loss) or not 0 <= max_alpha_loss <= 1:
         raise ValueError('max_alpha_loss must be between 0 and 1')
     source=Path(source).resolve()
     output=Path(output).resolve()
