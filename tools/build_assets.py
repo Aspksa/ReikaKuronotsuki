@@ -39,14 +39,17 @@ def build(source, output, *, require_complete=False, threshold=10, median=3, fea
         erased={}
         for name, original in raw.items():
             with Image.open(original) as before, Image.open(checked[name]) as after:
-                before_count=sum(before.convert('RGBA').getchannel('A').histogram()[1:])
-                after_count=sum(after.convert('RGBA').getchannel('A').histogram()[1:])
-                removed=sum(a>0 and b==0 for a,b in zip(before.convert('RGBA').getchannel('A').getdata(),after.convert('RGBA').getchannel('A').getdata()))
-            loss=round(max(0,before_count-after_count)/before_count,6) if before_count else 0.0
-            losses[name]=loss
-            erased[name]=round(removed/before_count,6) if before_count else 0.0
-            if before_count and (loss > max_alpha_loss or erased[name] > max_alpha_loss):
-                raise ValueError(f'{name}: cleanup removed {max(loss,erased[name]):.1%} of visible pixels (limit {max_alpha_loss:.1%})')
+                original_alpha=before.convert('RGBA').getchannel('A')
+                cleaned_alpha=after.convert('RGBA').getchannel('A')
+                before_count=sum(original_alpha.histogram()[1:])
+                after_count=sum(cleaned_alpha.histogram()[1:])
+                removed=sum(a>0 and b==0 for a,b in zip(original_alpha.getdata(),cleaned_alpha.getdata()))
+            lost_fraction=max(0,before_count-after_count)/before_count if before_count else 0.0
+            erased_fraction=removed/before_count if before_count else 0.0
+            losses[name]=round(lost_fraction,6)
+            erased[name]=round(erased_fraction,6)
+            if before_count and (lost_fraction > max_alpha_loss or erased_fraction > max_alpha_loss):
+                raise ValueError(f'{name}: cleanup removed {max(lost_fraction,erased_fraction):.1%} of visible pixels (limit {max_alpha_loss:.1%})')
         diagnostic=report(cleaned)
         edge_audit=audit(cleaned)
         manifest={"version":1,"status":"EXPERIMENTAL_REQUIRES_MANUAL_REVIEW",
