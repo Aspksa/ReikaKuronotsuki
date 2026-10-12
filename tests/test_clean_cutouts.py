@@ -1,5 +1,6 @@
 import importlib.util
 import tempfile
+import math
 import unittest
 from pathlib import Path
 from PIL import Image
@@ -24,6 +25,13 @@ class CleanupTests(unittest.TestCase):
     def test_validations(self):
         with self.assertRaises(ValueError):mod.clean(Image.new("RGBA",(3,3)),median=2)
         with self.assertRaises(ValueError):mod.clean(Image.new("RGBA",(3,3)),threshold=256)
+    def test_nonfinite_and_invalid_cleanup_parameters(self):
+        image=Image.new('RGBA',(3,3))
+        for value in (math.nan,math.inf,-math.inf):
+            with self.assertRaises(ValueError):mod.clean(image,feather=value)
+        for value in (1.5,True):
+            with self.assertRaises(ValueError):mod.clean(image,median=value)
+        with self.assertRaises(ValueError):mod.clean(image,threshold=1.5)
     def test_directory_processing(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td);src=base/"raw";dst=base/"clean";src.mkdir()
@@ -31,4 +39,5 @@ class CleanupTests(unittest.TestCase):
             self.assertEqual(mod.process(src,dst),1)
             self.assertTrue((dst/"reika_tail_1.png").exists())
             with self.assertRaises(ValueError):mod.process(src,src)
+            with self.assertRaises(ValueError):mod.process(src,src/'nested')
 if __name__=="__main__":unittest.main()
