@@ -7,6 +7,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 from clean_cutouts import process
 from inspect_cutouts import report
+from audit_alpha_edges import audit
 from validate_assets import validate_layers
 
 def build(source, output, *, require_complete=False, threshold=10, median=3, feather=1):
@@ -25,19 +26,22 @@ def build(source, output, *, require_complete=False, threshold=10, median=3, fea
     if dimensions!=processed_dims or set(raw)!=set(checked):
         raise ValueError("Cleaned layer set differs from input")
     diagnostic=report(cleaned)
+    edge_audit=audit(cleaned)
     manifest={"version":1,"status":"EXPERIMENTAL_REQUIRES_MANUAL_REVIEW",
               "dimensions":list(processed_dims),"layer_count":count,
               "missing_layers":processed_missing,
               "settings":{"threshold":threshold,"median":median,"feather":feather},
+              "alpha_checks_pass":edge_audit["automated_checks_pass"],
               "warning":"No semantic segmentation or reconstruction of hidden pixels is performed."}
     output.mkdir(parents=True,exist_ok=True)
     (output/"manifest.json").write_text(json.dumps(manifest,indent=2),encoding="utf-8")
     (output/"alpha-report.json").write_text(json.dumps(diagnostic,indent=2),encoding="utf-8")
+    (output/"edge-report.json").write_text(json.dumps(edge_audit,indent=2),encoding="utf-8")
     archive=output/"reika_cleaned_experimental.zip"
     with ZipFile(archive,"w",ZIP_DEFLATED) as z:
         for path in sorted(cleaned.glob("reika_*.png")):
             z.write(path,"layers/"+path.name)
-        for name in ("manifest.json","alpha-report.json"):
+        for name in ("manifest.json","alpha-report.json","edge-report.json"):
             z.write(output/name,name)
     return archive
 

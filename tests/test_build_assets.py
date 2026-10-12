@@ -1,3 +1,4 @@
+import json
 import importlib.util
 import sys
 import tempfile
@@ -22,6 +23,12 @@ class PipelineTests(unittest.TestCase):
             with ZipFile(archive) as z:
                 self.assertIn("layers/reika_tail_1.png",z.namelist())
                 self.assertIn("alpha-report.json",z.namelist())
+                self.assertIn("edge-report.json",z.namelist())
+                edge=json.loads(z.read("edge-report.json"))
+                manifest=json.loads(z.read("manifest.json"))
+                self.assertEqual(edge["status"],"MANUAL_REVIEW_REQUIRED")
+                self.assertEqual(edge["layers"]["tail_1"]["border_occupied_pixels"],124)
+                self.assertFalse(manifest["alpha_checks_pass"])
             with self.assertRaises(ValueError):build(inp,base/"another",require_complete=True)
     def test_refuse_in_source_directory(self):
         with tempfile.TemporaryDirectory() as td:
