@@ -118,7 +118,7 @@
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }
   });
 
-  document.getElementById('clear').addEventListener('click', async () => {
+  document.getElementById('menu-clear').addEventListener('click', async () => {
     if (!confirm('Удалить всю историю переписки?')) return;
     await ready;
     await backend.clear();
