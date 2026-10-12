@@ -5,23 +5,23 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { tmpProject, read, prepareUpdate, SHA_B } = require('./update-helpers');
+const { tmpProject, read, prepareUpdate, copyTree, SHA_B } = require('./update-helpers');
 
 const projectRoot = path.join(__dirname, '..');
 
 function copyProject(port) {
   const root = tmpProject();
-  for (const dir of ['core', 'server', 'web', 'update', 'launcher']) fs.cpSync(path.join(projectRoot, dir), path.join(root, dir), { recursive: true });
+  for (const dir of ['core', 'server', 'web', 'update', 'launcher']) copyTree(path.join(projectRoot, dir), path.join(root, dir));
   fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify({ port }));
   return root;
 }
 
 function boot(root) {
-  const child = spawn(process.execPath, [path.join(root, 'launcher', 'boot.js')], { env: { ...process.env, REIKA_STABLE_MS: '400', REIKA_READY_TIMEOUT_MS: '8000' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [path.join(root, 'launcher', 'boot.js')], { env: { ...process.env, REIKA_STABLE_MS: '400', REIKA_READY_TIMEOUT_MS: '20000', REIKA_HEALTH_WAIT_MS: '1500' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   child.stdout.on('data', (c) => { out += c; });
   child.stderr.on('data', (c) => { out += c; });
-  const until = async (re, ms = 15000) => {
+  const until = async (re, ms = 40000) => {
     const end = Date.now() + ms;
     while (Date.now() < end) { const m = re.exec(out); if (m) return m; await new Promise((r) => setTimeout(r, 50)); }
     throw new Error(`timeout waiting for ${re}\n--- output ---\n${out}`);
@@ -75,6 +75,22 @@ test('a server that answers 500 to the health check does not count as a working 
   const b = boot(root);
   try {
     await b.until(/Возвращаю прежнюю/);
+    await b.until(/REIKA_READY/); // the rollback is finished once the previous version is serving again
     assert.ok(!fs.readFileSync(path.join(root, 'server', 'server.js'), 'utf8').includes('sendJson(res, 500, { ok: false'));
   } finally { await b.stop(); }
+});
+
+test('when the launcher is killed, its server does not stay behind holding the port', async () => {
+  const root = copyProject(39400);
+  const b = boot(root);
+  const info = JSON.parse((await b.until(/REIKA_READY (\{.*\})/))[1]);
+  assert.equal((await health(info.url)).ok, true);
+  b.child.kill('SIGKILL'); // no chance to clean up
+  const end = Date.now() + 8000;
+  let alive = true;
+  while (alive && Date.now() < end) {
+    alive = await fetch(info.url + 'api/health').then(() => true, () => false);
+    if (alive) await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.equal(alive, false, 'the orphaned server is still answering');
 });

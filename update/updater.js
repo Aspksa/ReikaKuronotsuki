@@ -348,6 +348,7 @@ class ProjectUpdater {
         }
       });
       await this.step('test', () => this.run(staging, process.execPath, ['tests/run.js']));
+      this.throwIfCancelled(); // never leave a cancelled update "ready"
       await this.writeJson('ready.json', { sha, files: entries.map((e) => ({ path: e.path, sha: e.sha })), removals, description: this.latest.description, notes: (this.latest.changes ?? []).slice(0, 12).map((c) => ({ title: c.title })), createdAt: new Date().toISOString() });
       await this.emit('update_prepared', '', 'ready', { sha });
       this.state.phase = 'ready';
@@ -366,7 +367,12 @@ class ProjectUpdater {
     } finally { this.busy = false; this.abort = null; this.child = null; }
   }
 
+  throwIfCancelled() {
+    if (this.abort?.signal.aborted) throw new Error('cancelled');
+  }
+
   async step(id, work) {
+    this.throwIfCancelled(); // a cancel that arrived between two steps must stop the next one
     const s = this.state.checks.find((c) => c.id === id);
     s.status = 'active'; this.state.message = s.title;
     try { await work(); s.status = 'done'; } catch (e) { s.status = 'error'; throw e; }
@@ -462,6 +468,7 @@ class ProjectUpdater {
     } catch { /* already gone */ }
   }
   async run(cwd, command, args) {
+    this.throwIfCancelled();
     if (this.runner) return this.runner(cwd, command, args, this.abort?.signal ?? new AbortController().signal);
     await new Promise((resolve, reject) => {
       const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: { ...scrubbedEnv(), REIKA_UPDATE_CHECK: '1' }, detached: process.platform !== 'win32' });

@@ -13,6 +13,7 @@ const { applyPreparedUpdate, applyRollbackRequest, confirmUpdate, rollbackFailed
 const root = process.env.REIKA_ROOT ? path.resolve(process.env.REIKA_ROOT) : path.resolve(__dirname, '..');
 const RESTART_CODE = 75;
 const READY_TIMEOUT_MS = Number(process.env.REIKA_READY_TIMEOUT_MS) || 30_000;
+const HEALTH_WAIT_MS = Number(process.env.REIKA_HEALTH_WAIT_MS) || 5_000; // how long a fresh server may take to answer /api/health
 const STABLE_MS = Number(process.env.REIKA_STABLE_MS) || 15_000; // a new version must stay up this long to be final
 const say = (text) => console.log(text);
 
@@ -39,7 +40,7 @@ function runServer({ updateApplied, port }) {
     let settled = false, confirmed = false, serverUrl = null;
     const finish = (result) => { if (!settled) { settled = true; resolve(result); } };
     child = spawn(process.execPath, [path.join(root, 'server', 'main.js')], {
-      cwd: root, stdio: ['ignore', 'pipe', 'inherit'],
+      cwd: root, stdio: ['pipe', 'pipe', 'inherit'], // stdin stays open: the server quits when it closes (supervisor died)
       env: { ...process.env, REIKA_SUPERVISED: '1', ...(port ? { REIKA_PORT: String(port) } : {}) },
     });
     let buffer = '';
@@ -69,7 +70,8 @@ function runServer({ updateApplied, port }) {
   });
 }
 async function waitHealthy(url) {
-  for (let i = 0; i < 20; i++) { if (await healthy(url)) return true; await new Promise((r) => setTimeout(r, 250)); }
+  const end = Date.now() + HEALTH_WAIT_MS;
+  do { if (await healthy(url)) return true; await new Promise((r) => setTimeout(r, 250)); } while (Date.now() < end);
   return false;
 }
 function killChild() { try { child?.kill(); } catch { /* gone */ } }

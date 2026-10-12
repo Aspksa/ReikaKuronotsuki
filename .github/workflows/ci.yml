@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 jobs:
   # The updater requires a successful check run named exactly "tests" for a commit before it offers it.

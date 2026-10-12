@@ -139,18 +139,27 @@ test('a prepared update is still shown after the server restarts (and so are con
   assert.equal(st.removalsConfirmed, true);
 });
 
-test('cancel interrupts the preparation and leaves nothing ready', async () => {
-  const root = tmpProject();
-  let release;
-  const u = make(root, { files: FILES, ci: passing }, { runner: (cwd, cmd, args, signal) => new Promise((resolve, reject) => { release = () => resolve(); signal.addEventListener('abort', () => reject(new Error('cancelled'))); }) });
-  const running = u.start();
-  while (u.status().phase !== 'testing') await new Promise((r) => setTimeout(r, 5));
-  u.cancel();
-  await running;
-  assert.equal(u.status().phase, 'idle');
-  assert.match(u.status().message, /отменена/);
-  assert.ok(!fs.existsSync(path.join(root, '.updates', 'ready.json')));
-  assert.throws(() => u.cancel(), /Нечего отменять/);
+test('cancel interrupts the preparation and leaves nothing ready, whichever step it hits', async () => {
+  // Cancelling the instant the phase becomes "testing" used to race: the verify step ignored it and the tests still ran.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const root = tmpProject();
+    let testsCompleted = 0;
+    const runner = (cwd, cmd, args, signal) => new Promise((resolve, reject) => {
+      if (signal.aborted) return reject(new Error('cancelled'));
+      signal.addEventListener('abort', () => reject(new Error('cancelled')));
+      setTimeout(() => { testsCompleted++; resolve(); }, 300);
+    });
+    const u = make(root, { files: FILES, ci: passing }, { runner });
+    const running = u.start();
+    while (u.status().phase !== 'testing') await new Promise((r) => setImmediate(r));
+    u.cancel();
+    await running;
+    assert.equal(u.status().phase, 'idle', `attempt ${attempt}`);
+    assert.match(u.status().message, /отменена/);
+    assert.equal(testsCompleted, 0);
+    assert.ok(!fs.existsSync(path.join(root, '.updates', 'ready.json')));
+    assert.throws(() => u.cancel(), /Нечего отменять/);
+  }
 });
 
 test('a GitHub rate limit is explained and not hammered', async () => {
