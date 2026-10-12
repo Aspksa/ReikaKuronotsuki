@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const m=require('../prototype/tail-motion-v56.js'),base=require('../prototype/tail-composition.js');
+test('v50 three motion presets bounded',()=>{for(const name of ['calm','lively','still'])assert.ok(m.validate(m.preset(name)));assert.throws(()=>m.preset('unknown'),RangeError);});
+test('v51 zero amplitude preserves base rotation',()=>assert.equal(m.angle(0,3,22,{amplitude:0,frequency:1,secondary:.2}),22));
+test('v52 nine tail output deterministic',()=>{const x=m.sample(base.defaults(),2,m.preset('calm'));assert.deepEqual(x,m.sample(base.defaults(),2,m.preset('calm')));assert.equal(x.length,9);});
+test('v53 settings reject NaN and out-of-range',()=>{assert.throws(()=>m.validate({amplitude:NaN}),RangeError);assert.throws(()=>m.validate({secondary:1}),RangeError);});
+test('v54 reject invalid time and index',()=>{assert.throws(()=>m.angle(9,0,0,{}),RangeError);assert.throws(()=>m.angle(0,-1,0,{}),RangeError);});
+test('v55 still preset gives stable orientation',()=>assert.equal(m.angle(3,0,10,m.preset('still')),m.angle(3,9,10,m.preset('still'))));
+test('v56 full nine-tail validation',()=>assert.throws(()=>m.sample(base.defaults().slice(1),0,{}),RangeError));
