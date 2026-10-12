@@ -1,0 +1,18 @@
+'use strict';
+(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ReikaPreferences=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
+const KEY='reika-preferences-v152',STYLES=['gentle','playful','composed'];
+function validate(v){if(!v||typeof v!=='object'||Array.isArray(v))throw new TypeError('Invalid preferences');if(!STYLES.includes(v.style)||typeof v.nickname!=='string'||v.nickname.length>40||/[<>\r\n]/.test(v.nickname)||typeof v.autoVoice!=='boolean')throw new RangeError('Invalid preferences');return {style:v.style,nickname:v.nickname.trim(),autoVoice:v.autoVoice};}
+function defaults(){return {style:'gentle',nickname:'',autoVoice:false};}
+function deserialize(text){if(typeof text!=='string'||text.length>1000)throw new RangeError('Invalid stored preferences');const raw=JSON.parse(text);if(raw.version!==152)return defaults();return validate(raw.data);}
+function serialize(p){return JSON.stringify({version:152,data:validate(p)});}
+function pauseUnits(text){return String(text??'').slice(0,500).split(/([,;:.!?]+)/).filter(Boolean).map(part=>({text:part,pause:/^[,;:.!?]+$/.test(part)?Math.min(500,part.length*110):0}));}
+function cue(text,elapsed){if(!Number.isFinite(elapsed)||elapsed<0)return 0;const chunks=pauseUnits(text);const count=chunks.filter(c=>c.pause===0).map(c=>c.text).join('');return Math.floor(elapsed/155)%3===2?0:Math.min(1,.3+count.length/100);}
+function mount(){const host=document.querySelector('.voice-persona');if(!host)return;const ui=document.createElement('div');ui.className='reika-preferences';ui.innerHTML='<h4>Предпочтения · v135–v152</h4><label for="reikaNickname">Как к вам обращаться (до 40 символов)</label><input id="reikaNickname" maxlength="40" autocomplete="off"><label><input id="reikaRemember" type="checkbox"> Сохранять предпочтения в этом браузере</label><button id="reikaPreferencesSave" type="button">Сохранить</button><button id="reikaPreferencesClear" type="button">Удалить предпочтения</button><p id="reikaPreferencesStatus" role="status" aria-live="polite">Предпочтения не сохраняются автоматически.</p>';host.append(ui);
+const $=id=>ui.querySelector('#'+id),style=document.getElementById('voicePersonaStyle'),auto=document.getElementById('voicePersonaAuto'),status=$('reikaPreferencesStatus');let enabled=false;
+try{const raw=localStorage.getItem(KEY);if(raw){const p=deserialize(raw);$('reikaNickname').value=p.nickname;style.value=p.style;style.dispatchEvent(new Event('change'));auto.checked=p.autoVoice;enabled=true;$('reikaRemember').checked=true;status.textContent='Настройки загружены из браузера.';}}catch(_){status.textContent='Локальное хранилище недоступно.';}
+$('reikaPreferencesSave').onclick=()=>{try{const p=validate({style:style.value,nickname:$('reikaNickname').value,autoVoice:auto.checked});if($('reikaRemember').checked){localStorage.setItem(KEY,serialize(p));enabled=true;status.textContent='Настройки сохранены только в этом браузере.';}else{localStorage.removeItem(KEY);enabled=false;status.textContent='Настройки действуют только до перезагрузки.';}}catch(_){status.textContent='Не удалось сохранить настройки.';}};
+$('reikaPreferencesClear').onclick=()=>{try{localStorage.removeItem(KEY);}catch(_){}enabled=false;$('reikaNickname').value='';$('reikaRemember').checked=false;auto.checked=false;style.value='gentle';style.dispatchEvent(new Event('change'));status.textContent='Локальные предпочтения удалены.';};
+return {get nickname(){return $('reikaNickname').value.trim();},get saved(){return enabled;}};}
+return {KEY,STYLES,defaults,validate,deserialize,serialize,pauseUnits,cue,mount};
+});
+if(typeof window!=='undefined')window.ReikaPreferencesController=window.ReikaPreferences.mount();
