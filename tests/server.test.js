@@ -39,7 +39,6 @@ test('serves the UI as UTF-8 and the page declares Russian', () => withServer(as
 test('static assets have correct types', () => withServer(async (base) => {
   assert.match((await fetch(`${base}/app.js`)).headers.get('content-type'), /javascript; charset=utf-8/);
   assert.match((await fetch(`${base}/style.css`)).headers.get('content-type'), /text\/css; charset=utf-8/);
-  assert.match((await fetch(`${base}/manifest.webmanifest`)).headers.get('content-type'), /manifest\+json/);
 }));
 
 test('chat answers Cyrillic and stores history', () => withServer(async (base) => {

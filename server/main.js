@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const core = require('../core/reika-core');
 const { createApp } = require('./server');
-const { findFreePort, lanAddresses } = require('./ports');
+const { findFreePort } = require('./ports');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -25,17 +25,16 @@ function listen(server, host, port) {
 }
 
 async function main() {
-  const config = Object.assign({ port: 8731, lan: false }, readConfig());
+  const config = Object.assign({ port: 8731 }, readConfig());
   const dataDir = core.resolveDataDir(projectRoot);
   const server = createApp({ webRoot: path.join(projectRoot, 'web'), dataDir });
-  const host = config.lan ? '0.0.0.0' : '127.0.0.1';
+  const host = '127.0.0.1'; // local only: the chat is never exposed to the network
   const free = await findFreePort(Number(config.port) || 8731, { host });
   const port = await listen(server, host, free.port);
   if (!free.preferred) console.log(`Порт ${config.port} занят, использую свободный: ${port}`);
-  const runtime = { pid: process.pid, port, url: `http://127.0.0.1:${port}/`, lan: config.lan ? lanAddresses().map((a) => `http://${a.address}:${port}/`) : [], dataDir };
+  const runtime = { pid: process.pid, port, url: `http://127.0.0.1:${port}/`, dataDir };
   console.log(`REIKA_READY ${JSON.stringify(runtime)}`);
   console.log(`Reika Kuronotsuki: ${runtime.url}`);
-  for (const url of runtime.lan) console.log(`С телефона (та же Wi-Fi сеть): ${url}`);
   process.on('SIGINT', () => process.exit(0));
   process.on('SIGTERM', () => process.exit(0));
 }

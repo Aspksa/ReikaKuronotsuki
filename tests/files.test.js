@@ -1,5 +1,5 @@
 'use strict';
-// Static checks on the project files: encodings (Cyrillic!), launcher format, mobile-readiness.
+// Static checks on the project files: encodings (Cyrillic!), launcher format, browser page.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -18,7 +18,7 @@ function walk(dir, out = []) {
 }
 
 test('all text sources are valid UTF-8 without replacement characters', () => {
-  const exts = new Set(['.js', '.html', '.css', '.json', '.md', '.svg', '.webmanifest', '.ps1', '.bat']);
+  const exts = new Set(['.js', '.html', '.css', '.json', '.md', '.svg', '.ps1', '.bat']);
   const files = walk(root).filter((f) => exts.has(path.extname(f)));
   assert.ok(files.length > 10);
   for (const file of files) {
@@ -54,22 +54,16 @@ test('launcher never uses absolute drive paths (portable on any medium)', () => 
   }
 });
 
-test('web UI is mobile-ready', () => {
+test('web UI is a plain desktop-browser page', () => {
   const html = read('web', 'index.html').toString('utf8');
-  assert.match(html, /<meta name="viewport"[^>]*width=device-width/);
-  assert.match(html, /viewport-fit=cover/);
   assert.match(html, /<meta charset="utf-8">/i);
-  assert.match(html, /manifest\.webmanifest/);
-  const css = read('web', 'style.css').toString('utf8');
-  assert.match(css, /100dvh/);
-  assert.match(css, /safe-area-inset-bottom/);
-  const manifest = JSON.parse(read('web', 'manifest.webmanifest').toString('utf8'));
-  assert.equal(manifest.display, 'standalone');
-  assert.equal(manifest.lang, 'ru');
+  assert.match(html, /lang="ru"/);
+  assert.ok(!/manifest|viewport/.test(html), 'mobile/PWA leftovers in index.html');
+  assert.ok(!fs.existsSync(path.join(root, 'web', 'manifest.webmanifest')));
 });
 
-test('config.json is valid and local-only by default', () => {
+test('config.json is valid and has no network-exposure switch', () => {
   const config = JSON.parse(read('config.json').toString('utf8'));
-  assert.equal(config.lan, false);
+  assert.equal(config.lan, undefined);
   assert.ok(Number.isInteger(config.port));
 });

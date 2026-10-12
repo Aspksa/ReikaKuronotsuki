@@ -1,8 +1,7 @@
 'use strict';
-// Local address / port helpers: find a free port without guessing, and list usable LAN addresses.
+// Local port helper: find a free port without guessing.
 
 const net = require('node:net');
-const os = require('node:os');
 
 // Resolves true only if we can actually bind host:port right now (the only reliable "is it free" check).
 function isPortFree(port, host = '127.0.0.1') {
@@ -23,20 +22,4 @@ async function findFreePort(preferred = 8731, { host = '127.0.0.1', range = 50 }
   return { port: 0, preferred: false };
 }
 
-function isPrivateIPv4(address) {
-  const [a, b] = address.split('.').map(Number);
-  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-}
-
-// LAN IPv4 addresses a phone could reach: private ranges only, no loopback and no 169.254.x.x link-local.
-function lanAddresses(interfaces = os.networkInterfaces()) {
-  const found = [];
-  for (const [name, list] of Object.entries(interfaces)) {
-    for (const item of list || []) {
-      if (item && item.family === 'IPv4' && !item.internal && isPrivateIPv4(item.address)) found.push({ name, address: item.address });
-    }
-  }
-  return found;
-}
-
-module.exports = { isPortFree, findFreePort, isPrivateIPv4, lanAddresses };
+module.exports = { isPortFree, findFreePort };

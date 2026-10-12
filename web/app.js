@@ -114,7 +114,7 @@
 
   input.addEventListener('input', autosize);
   input.addEventListener('keydown', (event) => {
-    // Desktop: Enter sends, Shift+Enter makes a new line. On touch keyboards Enter also sends via the "send" key.
+    // Enter sends, Shift+Enter makes a new line.
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }
   });
 

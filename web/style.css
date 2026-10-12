@@ -2,19 +2,19 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: 720px; margin: 0 auto; padding-top: env(safe-area-inset-top); }
+.app { display: flex; flex-direction: column; height: 100vh; max-width: 720px; margin: 0 auto; }
 .top { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; background: var(--user); border: 1px solid var(--gold); }
 .who { flex: 1; min-width: 0; }
 .who h1 { margin: 0; font-size: 1.05rem; color: var(--gold); }
 .who p { margin: 0; font-size: .85rem; color: var(--muted); }
-.ghost { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 8px 12px; min-height: 40px; }
-.log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
+.ghost { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 8px 12px;  }
+.log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px;  }
 .msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; background: var(--user); border-bottom-right-radius: 4px; }
 .msg.reika { align-self: flex-start; background: var(--reika); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .msg time { display: block; margin-top: 4px; font-size: .7rem; color: var(--muted); }
-.composer { display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--panel); }
+.composer { display: flex; gap: 8px; padding: 10px 12px 10px; border-top: 1px solid var(--line); background: var(--panel); }
 textarea { flex: 1; resize: none; max-height: 140px; min-height: 44px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
 button[type=submit] { min-height: 44px; padding: 0 18px; border-radius: 12px; border: 0; background: var(--gold); color: #1b1620; font-weight: 600; }
 button:disabled { opacity: .5; }
