@@ -1,23 +1,35 @@
-# ReikaKuronotsuki
+# Reika Kuronotsuki
 
-**Reika Kuronotsuki (黒ノ月 麗華)** — a personal AI character project featuring an elegant adult nine-tailed kitsune assistant.
+Виртуальная спутница Рэйка: чат в браузере, который запускается одним файлом.
 
-## Official visual canon v1.0
+## Запуск (Windows)
 
-Reika has bright sky-blue eyes, long pearl-silver hair, white fox ears and **exactly nine silver-white tails**. Her signature *Imperial Moon* costume is white, black and gold, with an ornate moonlit palace as the principal environment.
+Дважды щёлкните **`Reika Kuronotsuki.bat`**. Что происходит:
 
-### Canon documents
+1. Если Node.js нет, переносная версия скачивается в папку `runtime/` внутри проекта.
+2. Запускаются тесты. Если хоть один не прошёл, запуск отменяется.
+3. Окно скрывается, Рэйка работает в трее рядом с часами (двойной щелчок — открыть чат, правая кнопка — «Выход»).
+4. Чат сам открывается в браузере.
 
-- [Visual canon](assets/character/canon/VISUAL_CANON.md)
-- [Color tokens](assets/character/canon/colors.json)
-- [Master generation prompt](assets/character/canon/MASTER_PROMPT.txt)
-- [Production notes](assets/character/canon/NOTES.md)
+Сервер слушает только этот компьютер (127.0.0.1). Если порт 8731 занят, берётся следующий свободный.
 
-## Roadmap
+Проект можно копировать на флешку или в любую папку, включая путь с кириллицей и пробелами: все пути относительные. Если носитель только для чтения, данные пишутся в профиль пользователя.
 
-1. Publish the official corrected portrait asset.
-2. Create expression and turnaround sheets.
-3. Build Live2D/3D model specifications.
-4. Implement UI, memory and character behavior in separately reviewed stages.
+## Веб-версия (без сервера)
 
-> Current stage: visual documentation only; no executable application is shipped yet.
+Папка `web/` самодостаточна: откройте `web/index.html` двойным щелчком или выложите папку на любой статический хостинг (GitHub Pages, Netlify и т. п.). Движок ответов работает прямо в браузере, история хранится в `localStorage` на этом устройстве, и страница сама определяет, что сервера нет. С `.bat` или `node server/main.js` та же страница хранит историю на диске.
+
+## Без Windows (Linux, macOS)
+
+```
+node tests/run.js && node server/main.js
+```
+
+## Структура
+
+- `core/` ядро: нормализация текста, эмоции, ответы, история
+- `server/` HTTP-сервер и API (`/api/chat`, `/api/history`, `/api/health`)
+- `web/` браузерный интерфейс и общий движок `reika-chat.js` (работает и в браузере, и в Node)
+- `launcher/` запуск, трей, проверка Node.js
+- `tests/` тесты (`node tests/run.js`)
+- `data/` история переписки (не попадает в git)
