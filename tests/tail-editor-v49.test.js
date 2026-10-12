@@ -1,0 +1,11 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const base=require('../prototype/tail-composition.js');
+const editor=require('../prototype/tail-editor-v42.js');
+test('v43 preserve individual pivots in JSON import',()=>{const pivots=Array.from({length:9},(_,i)=>({x:20+i,y:70+i}));const json=JSON.stringify({...editor.pack(base.defaults()),pivots});assert.deepEqual(editor.parse(json).pivots,pivots);});
+test('v44 reject invalid pivots',()=>{assert.throws(()=>editor.validatePivots([{x:30,y:40}]),RangeError);assert.throws(()=>editor.validatePivots(Array.from({length:9},()=>({x:Infinity,y:30}))),RangeError);});
+test('v45 old version 35 remains importable',()=>{const result=editor.parse(JSON.stringify({version:35,tails:base.defaults()}));assert.equal(result.pivots.length,9);});
+test('v46 imported pivots cannot alias caller state',()=>{const p=Array.from({length:9},()=>({x:50,y:90}));const copy=editor.validatePivots(p);copy[0].x=12;assert.equal(p[0].x,50);});
+test('v47 invalid animation data rejected',()=>{assert.throws(()=>editor.parse(JSON.stringify({...editor.pack(base.defaults()),settings:{amplitude:50}})),RangeError);});
+test('v48 motion deterministic at paused amplitude zero',()=>{assert.equal(editor.swing(-30,3,5,0),-30);});
+test('v49 JSON size and transform constraints enforced',()=>{assert.throws(()=>editor.parse('x'.repeat(20001)),RangeError);const t=base.defaults();t[0].z=t[1].z;assert.throws(()=>editor.parse(JSON.stringify({version:42,tails:t})),RangeError);});
