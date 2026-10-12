@@ -28,8 +28,22 @@ class PipelineTests(unittest.TestCase):
                 manifest=json.loads(z.read("manifest.json"))
                 self.assertEqual(edge["status"],"MANUAL_REVIEW_REQUIRED")
                 self.assertEqual(edge["layers"]["tail_1"]["border_occupied_pixels"],124)
-                self.assertFalse(manifest["alpha_checks_pass"])
+                self.assertFalse(manifest["alpha_checks_pass"])\n                self.assertEqual(manifest["alpha_pixel_loss_by_layer"]["tail_1"],0)
             with self.assertRaises(ValueError):build(inp,base/"another",require_complete=True)
+    def test_reject_destructive_cleaning(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td);src=base/"source";src.mkdir()
+            image=Image.new("RGBA",(16,16),(255,255,255,0))
+            image.putpixel((8,8),(255,255,255,255))
+            image.save(src/"reika_tail_1.png")
+            with self.assertRaisesRegex(ValueError,"cleanup removed"):
+                build(src,base/"output",feather=0,max_alpha_loss=.25)
+            self.assertEqual(Image.open(src/"reika_tail_1.png").getpixel((8,8))[3],255)
+    def test_reject_bad_loss_limit(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            with self.assertRaisesRegex(ValueError,"max_alpha_loss"):
+                build(base,base/"output",max_alpha_loss=1.5)
     def test_refuse_in_source_directory(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
