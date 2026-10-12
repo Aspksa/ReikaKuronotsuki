@@ -9,14 +9,14 @@ function mount(){
  const section=document.createElement('section');section.className='speech-tools';
  section.innerHTML='<h3>Голос Рэйки</h3><label for="speechText">Текст для озвучивания</label><textarea id="speechText" rows="3" maxlength="500" placeholder="Привет! Я Рэйка."></textarea><div class="speech-actions"><button id="speechPlay" type="button">Произнести</button><button id="speechStop" type="button">Остановить речь</button></div><p id="speechStatus" role="status" aria-live="polite">Локальная озвучка браузера.</p>';
  panel.append(section);
- const synth=root.speechSynthesis,Supported=!!synth&&typeof root.SpeechSynthesisUtterance==='function';
+ const synth=window.speechSynthesis,Supported=!!synth&&typeof window.SpeechSynthesisUtterance==='function';
  const start=section.querySelector('#speechPlay'),stop=section.querySelector('#speechStop'),status=section.querySelector('#speechStatus'),field=section.querySelector('#speechText');
  const controller=createController();let token=0;
  if(!Supported){start.disabled=true;stop.disabled=true;status.textContent='Озвучивание не поддерживается этим браузером.';}
  start.addEventListener('click',()=>{
   const text=normalizeText(field.value);if(!text||!Supported){status.textContent='Введите текст для озвучивания.';return;}
   token++;const mine=token;synth.cancel();controller.stop();
-  const utterance=new root.SpeechSynthesisUtterance(text);utterance.lang='ru-RU';utterance.rate=1;utterance.pitch=1;
+  const utterance=new window.SpeechSynthesisUtterance(text);utterance.lang='ru-RU';utterance.rate=1;utterance.pitch=1;
   utterance.onstart=()=>{if(mine!==token)return;controller.start();status.textContent='Рэйка говорит…';};
   utterance.onboundary=()=>{if(mine===token)controller.boundary();};
   utterance.onend=()=>{if(mine===token){controller.stop();status.textContent='Речь завершена.';}};
@@ -24,7 +24,7 @@ function mount(){
   try{synth.speak(utterance);}catch(_){controller.stop();status.textContent='Не удалось запустить озвучивание.';}
  });
  stop.addEventListener('click',()=>{token++;controller.stop();if(Supported)synth.cancel();status.textContent='Речь остановлена.';});
- root.addEventListener('pagehide',()=>{token++;controller.stop();if(Supported)synth.cancel();},{once:true});
+ window.addEventListener('pagehide',()=>{token++;controller.stop();if(Supported)synth.cancel();},{once:true});
  return controller;
 }
 return {LIMIT,normalizeText,mouthPath,createController,mount};
