@@ -2,8 +2,9 @@
 // "Обновление проекта" window. Shown only when the local server (with the updater) answers; the static web build has none.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const dialog = $('update-dialog');
-  if (!dialog || location.protocol === 'file:') return;
+  const page = $('page-update');
+  if (!page || location.protocol === 'file:') return;
+  const onPage = () => !page.hidden;
   let timer = null;
 
   async function call(path, method = 'GET', body) {
@@ -46,7 +47,7 @@
     try {
       const working = render(await call('status'));
       clearTimeout(timer);
-      if (dialog.open) timer = setTimeout(refresh, working ? 700 : 5000);
+      if (onPage()) timer = setTimeout(refresh, working ? 700 : 5000);
     } catch (e) { $('up-error').hidden = false; $('up-error').textContent = e.message; }
   }
   async function refreshHistory() {
@@ -81,8 +82,19 @@
     const wait = setInterval(async () => { try { const r = await fetch('api/health', { cache: 'no-store' }); if (r.ok) { clearInterval(wait); location.reload(); } } catch { /* restarting */ } }, 1000);
   }
 
-  $('menu-update').addEventListener('click', () => { dialog.showModal(); refresh(); refreshHistory(); });
-  dialog.addEventListener('close', () => clearTimeout(timer));
-  // The button appears only when the updater is reachable (local server mode).
-  fetch('api/update/status').then((r) => { if (r.ok) $('menu-update').hidden = false; }).catch(() => {});
+  // Polling runs only while the page is on screen (the shell announces route changes).
+  window.addEventListener('reika:route', (event) => {
+    clearTimeout(timer);
+    if (event.detail === 'update') { refresh(); refreshHistory(); }
+  });
+
+  // Is there something new? One quiet request at start-up feeds the dot in the menu and the cards on the home page.
+  const hasNewVersion = (st) => !!st.latest && /^[0-9a-f]{40}$/.test(st.localVersion || '') && st.latest.sha !== st.localVersion;
+  async function summary() {
+    try {
+      const st = await call('status');
+      window.dispatchEvent(new CustomEvent('reika:update-summary', { detail: { available: hasNewVersion(st) || st.phase === 'ready', version: st.localVersion, phase: st.phase, latest: st.latest ? st.latest.version : null } }));
+    } catch { /* the server (or its updater) is not there */ }
+  }
+  fetch('api/update/status').then((r) => { if (r.ok) { window.dispatchEvent(new CustomEvent('reika:updater-present')); summary(); } }).catch(() => {});
 })();
