@@ -1,0 +1,12 @@
+'use strict';
+const {test,expect}=require('@playwright/test');const path=require('node:path'),{pathToFileURL}=require('node:url');const url=pathToFileURL(path.resolve(__dirname,'../prototype/index.html')).href;
+test('motion preview scrub pause and reset',async({page})=>{const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url);
+await expect(page.locator('#tailMotionPreset')).toBeVisible();
+await page.locator('#tailMotionPreset').selectOption('lively');
+expect(await page.evaluate(()=>window.ReikaTailMotionController.options.amplitude)).toBe(13);
+await page.locator('#tailMotionTime').evaluate(el=>{el.value='40';el.dispatchEvent(new Event('input',{bubbles:true}));});
+expect(await page.evaluate(()=>window.ReikaTailMotionController.seconds)).toBe(4);
+await page.locator('#tailMotionStop').click();
+expect(await page.evaluate(()=>window.ReikaTailMotionController.seconds)).toBe(0);
+await expect(page.locator('#tailMotionPreset')).toHaveValue('still');expect(errors).toEqual([]);});
+test('motion honors reduced-motion at startup',async({page})=>{await page.emulateMedia({reducedMotion:'reduce'});await page.goto(url);await page.locator('#tailMotionPlay').click();await expect(page.locator('#tailMotionStatus')).toContainText('уменьшения движения');});
