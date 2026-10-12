@@ -18,7 +18,8 @@ class TailReferenceTests(unittest.TestCase):
             self.assertEqual(report['status'],'REFERENCE_CROPS_NOT_RIG_LAYERS')
             files=list(output.glob('tail_reference_*.png'))
             self.assertEqual(len(files),9)
-            self.assertEqual(Image.open(files[0]).size,(72,121))
+            with Image.open(output/'tail_reference_01.png') as first:
+                self.assertEqual(first.size,(72,121))
             with self.assertRaisesRegex(ValueError,'overwrite'):
                 extract(source,output)
     def test_reject_different_sheet(self):
