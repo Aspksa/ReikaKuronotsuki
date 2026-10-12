@@ -1,3 +1,4 @@
 * text=auto eol=lf
-*.bat text eol=crlf
-*.ps1 text eol=crlf
+# Windows scripts are stored WITH CRLF (no conversion): the updater downloads blobs as they are, and ZIP exports do not convert either.
+*.bat -text
+*.ps1 -text

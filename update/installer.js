@@ -10,7 +10,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
-const { SHA, BACKUP_NAME, safeUpdatePath, gitHash, readOrNull, atomicWrite, assertNoLinks } = require('./shared');
+const { SHA, BACKUP_NAME, pathKey, safeUpdatePath, gitHash, readOrNull, atomicWrite, assertNoLinks } = require('./shared');
 
 const KEEP_BACKUPS = 3;
 const MAX_DATA_SNAPSHOT_BYTES = 500 * 1024 * 1024;
@@ -194,9 +194,9 @@ async function recoverInterrupted(root) {
 function validateManifest(manifest) {
   if (!manifest || !SHA.test(manifest.sha) || !Array.isArray(manifest.files) || manifest.files.length > 2500
     || !manifest.files.every((f) => f && safeUpdatePath(f.path) && SHA.test(f.sha))
-    || new Set(manifest.files.map((f) => f.path.toLowerCase())).size !== manifest.files.length
+    || new Set(manifest.files.map((f) => pathKey(f.path))).size !== manifest.files.length
     || (manifest.removals !== undefined && (!Array.isArray(manifest.removals) || manifest.removals.length > 2500
-      || !manifest.removals.every((p) => safeUpdatePath(p) && !manifest.files.some((f) => f.path.toLowerCase() === p.toLowerCase()))))) {
+      || !manifest.removals.every((p) => safeUpdatePath(p) && !manifest.files.some((f) => pathKey(f.path) === pathKey(p)))))) {
     throw new Error('Повреждён или небезопасен манифест обновления');
   }
 }

@@ -10,13 +10,18 @@ const SHA = /^[0-9a-f]{40}$/;
 const BACKUP_NAME = /^[\w.-]{1,120}$/;
 // Never touched by an update: user data, local settings, update bookkeeping, downloaded runtime, version marker.
 const BLOCKED = new Set(['.git', '.updates', '.env', 'data', 'runtime', 'node_modules', '.reika-version', 'config.json']);
+// Characters Windows cannot have in a file name (and control characters): an update must install on every system.
+const WINDOWS_FORBIDDEN = /[<>:"|?*\u0000-\u001f]/;
 const RESERVED_WINDOWS = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;
 
 function safeUpdatePath(p) {
   return typeof p === 'string' && p.length > 0 && p.length < 1024
-    && !p.startsWith('/') && !p.includes('\\') && !p.includes(':') && !p.includes('\0')
+    && !p.startsWith('/') && !p.includes('\\') && !WINDOWS_FORBIDDEN.test(p)
     && p.split('/').every((s) => s && s !== '.' && s !== '..' && !BLOCKED.has(s) && !RESERVED_WINDOWS.test(s) && !/[. ]$/.test(s));
 }
+
+// Two paths that are the same file on Windows/macOS (case or Unicode normalisation differ) share one key.
+const pathKey = (p) => p.normalize('NFC').toLowerCase();
 
 // Same value as `git hash-object`: lets file bytes be checked against the GitHub tree listing.
 function gitHash(bytes) {
@@ -49,4 +54,4 @@ async function assertNoLinks(root, rel) {
   }
 }
 
-module.exports = { REPO, SHA, BACKUP_NAME, BLOCKED, safeUpdatePath, gitHash, readOrNull, atomicWrite, assertNoLinks };
+module.exports = { pathKey, REPO, SHA, BACKUP_NAME, BLOCKED, safeUpdatePath, gitHash, readOrNull, atomicWrite, assertNoLinks };
