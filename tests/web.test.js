@@ -44,22 +44,48 @@ test('every file the page references exists', () => {
   for (const [, ref] of html.matchAll(/(?:src|href)="([^"#:]+)"/g)) assert.ok(fs.existsSync(path.join(web, ref)), `${ref} is missing`);
 });
 
-test('every element id used by the page scripts exists in index.html (menu, update dialog, chat)', () => {
+test('every element id used by the page scripts exists in index.html (sidebar, orb, chat, update page)', () => {
   const html = read('index.html');
   const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
-  for (const file of ['app.js', 'update.js', 'menu.js']) {
+  for (const file of ['app.js', 'update.js', 'shell.js', 'orb.js']) {
     const code = read(file);
     const used = [...code.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]).concat([...code.matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]));
     for (const id of used) assert.ok(ids.has(id), `${file} uses #${id} but index.html has no such element`);
   }
 });
 
-test('the menu holds the update entry and the history clearing; the old header buttons are gone', () => {
+test('left menu: home, chat and (hidden until a server answers) update; no old header menu', () => {
   const html = read('index.html');
-  const menu = html.slice(html.indexOf('id="menu"'), html.indexOf('</div>', html.indexOf('id="menu"')));
-  assert.match(menu, /id="menu-update"/);
-  assert.match(menu, /id="menu-clear"/);
-  assert.ok(!/id="open-update"|id="clear"/.test(html));
-  assert.ok(html.indexOf('menu.js') > 0 && html.indexOf('menu.js') > html.indexOf('update.js'));
-  assert.match(html, /id="menu-update"[^>]*hidden/, 'the update entry stays hidden until a server answers');
+  const side = html.slice(html.indexOf('<aside'), html.indexOf('</aside>'));
+  assert.match(side, /id="nav-home"/);
+  assert.match(side, /id="nav-chat"/);
+  assert.match(side, /id="nav-update"[^>]*hidden/);
+  assert.match(side, /id="side-toggle"/);
+  assert.ok(!/id="menu-btn"|id="menu-update"|id="menu-clear"|id="open-update"/.test(html), 'leftovers of the old dropdown menu');
+  assert.ok(html.indexOf('<aside') < html.indexOf('<main'), 'the menu is on the left (before the content)');
+  assert.match(read('style.css'), /\.shell\s*\{[^}]*grid-template-columns:\s*var\(--sidebar\)\s+1fr/);
+});
+
+test('the chat opens from the floating logo: hidden panel, draggable orb with keyboard and remembered place', () => {
+  const html = read('index.html');
+  assert.match(html, /<section id="chat-panel"[^>]*hidden/);
+  assert.match(html, /<button id="orb"[^>]*aria-controls="chat-panel"[^>]*aria-expanded="false"/);
+  for (const id of ['log', 'form', 'input', 'send', 'chat-clear', 'chat-close']) assert.ok(new RegExp(`id="${id}"`).test(html.slice(html.indexOf('id="chat-panel"'), html.indexOf('id="orb"'))), `#${id} must live inside the chat panel`);
+  const orb = read('orb.js');
+  assert.match(orb, /pointerdown/); assert.match(orb, /setPointerCapture/); assert.match(orb, /ArrowLeft/); assert.match(orb, /localStorage/); assert.match(orb, /Escape/);
+  assert.match(read('style.css'), /\.orb\s*\{[^}]*position:\s*fixed/);
+  assert.ok(html.indexOf('orb.js') > html.indexOf('app.js'));
+});
+
+test('the artwork used by the home page and the chat avatar exists and is a reasonable size', () => {
+  const file = path.join(web, 'assets', 'reika.jpg');
+  assert.ok(fs.existsSync(file));
+  assert.ok(fs.statSync(file).size < 1_500_000, 'keep the repository light');
+  assert.match(read('index.html'), /assets\/reika\.jpg/);
+  assert.match(read('style.css'), /assets\/reika\.jpg/);
+});
+
+test('motion is optional: petals and glow respect prefers-reduced-motion', () => {
+  assert.match(read('shell.js'), /prefers-reduced-motion: reduce/);
+  assert.match(read('style.css'), /@media \(prefers-reduced-motion: reduce\)/);
 });

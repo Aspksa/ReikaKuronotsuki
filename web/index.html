@@ -8,57 +8,136 @@
 <title>Reika Kuronotsuki</title>
 </head>
 <body>
-<div class="app">
-  <header class="top">
-    <div class="avatar" id="avatar" aria-hidden="true">🦊</div>
-    <div class="who">
-      <h1>Рэйка Куроноцуки</h1>
-      <p id="mood">Спокойствие</p><p id="mode" class="mode" hidden>Работает в браузере: история хранится на этом устройстве</p>
+<div class="sky" aria-hidden="true"><div class="moon"></div><div id="petals"></div></div>
+
+<div class="shell" id="shell">
+  <aside class="sidebar" id="sidebar" aria-label="Главное меню">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><use href="#reika-logo"/></svg>
+      <div class="brand-text"><b>Рэйка</b><small>Куроноцуки</small></div>
     </div>
-    <div class="menu-wrap">
-      <button id="menu-btn" class="ghost" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="menu" aria-label="Меню">☰ Меню</button>
-      <div id="menu" class="menu" role="menu" hidden>
-        <p id="menu-mode" class="menu-note"></p>
-        <button id="menu-update" role="menuitem" type="button" hidden>⟳ Обновление проекта</button>
-        <button id="menu-clear" role="menuitem" type="button">🗑 Очистить историю чата</button>
+    <nav class="nav">
+      <a href="#/home" id="nav-home" class="nav-item" data-route="home" title="Главная">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg><span class="label">Главная</span>
+      </a>
+      <button id="nav-chat" class="nav-item" type="button" aria-controls="chat-panel" aria-expanded="false" title="Чат с Рэйкой">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span class="label">Чат с Рэйкой</span>
+      </button>
+      <a href="#/update" id="nav-update" class="nav-item" data-route="update" title="Обновление проекта" hidden>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5"/></svg><span class="label">Обновление</span><i id="update-dot" class="dot" hidden aria-label="Доступна новая версия"></i>
+      </a>
+    </nav>
+    <div class="side-foot">
+      <p id="menu-mode" class="side-note"></p>
+      <button id="side-toggle" class="collapse" type="button" aria-label="Свернуть меню" aria-pressed="false" title="Свернуть меню">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="content" id="content">
+    <section class="page" id="page-home" data-page="home" aria-labelledby="home-title">
+      <div class="hero">
+        <div class="hero-text">
+          <p class="eyebrow">REIKA KURONOTSUKI · 黒ノ月 麗華</p>
+          <h1 id="home-title">Рэйка<br>Куроноцуки</h1>
+          <p class="lead">Твоя виртуальная спутница — девятихвостая кицунэ. Серебряные волосы, лунный дворец и тихий голос, который всегда рядом.</p>
+          <div class="hero-actions">
+            <button id="hero-chat" class="primary" type="button">Открыть чат</button>
+            <a class="secondary" href="#/update" id="hero-update" hidden>Обновление проекта</a>
+          </div>
+          <p class="hint">Круглый логотип в углу — это чат. Его можно перетащить в любое место, он будет на всех страницах.</p>
+          <ul class="cards">
+            <li><span class="card-k">Режим</span><b id="card-mode">—</b></li>
+            <li><span class="card-k">Версия</span><b id="card-version">—</b></li>
+            <li><span class="card-k">Обновления</span><b id="card-update">—</b></li>
+          </ul>
+        </div>
+        <figure class="art">
+          <div class="art-frame"><img src="assets/reika.jpg" alt="Рэйка Куроноцуки: девятихвостая кицунэ с серебряными волосами и голубыми глазами в чёрно-белом наряде с красными кистями" width="1086" height="1448"></div>
+        </figure>
       </div>
+    </section>
+
+    <section class="page" id="page-update" data-page="update" aria-labelledby="update-title" hidden>
+      <header class="page-head"><h2 id="update-title">Обновление проекта</h2></header>
+      <div class="update">
+        <p class="muted">Источник: github.com/Aspksa/ReikaKuronotsuki · установлено: <b id="up-local">…</b> · доступно: <b id="up-latest">—</b></p>
+        <p id="up-blocked" class="warn" hidden></p>
+        <ol class="route" aria-label="Маршрут обновления">
+          <li id="node-github">GitHub</li><li class="lane"><span id="fly" class="fly" hidden></span></li>
+          <li id="node-check">Проверка</li><li class="lane"></li><li id="node-project">Проект</li>
+        </ol>
+        <div class="bar"><div id="up-bar"></div></div>
+        <p id="up-message" class="muted">Ожидание</p>
+        <p id="up-error" class="warn" hidden></p>
+        <ul id="up-checks" class="checks"></ul>
+        <div id="up-removals" class="removals" hidden>
+          <p>Новая версия удаляет файлы. Они будут удалены только после вашего подтверждения:</p>
+          <ul id="up-removals-list"></ul><button id="up-confirm" type="button">Подтвердить удаление</button>
+        </div>
+        <div class="actions">
+          <button id="up-check" type="button">Проверить</button><button id="up-download" type="button">Скачать и проверить</button>
+          <button id="up-cancel" type="button" hidden>Отмена</button><button id="up-install" type="button" hidden>Установить и перезапустить</button>
+        </div>
+        <label class="row">Канал <select id="up-channel"><option value="fresh">Свежий (последние изменения)</option><option value="stable">Стабильный (последний выпуск)</option></select></label>
+        <label class="row">Автопроверка <select id="up-auto"><option value="hourly">Раз в час</option><option value="daily">Раз в сутки</option><option value="off">Отключена</option></select></label>
+        <h3>История</h3><ul id="up-history" class="history"></ul>
+        <button id="up-rollback" type="button" class="ghost" hidden>Откатить последнюю установку</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Chat: opens from the floating logo (orb), which can be dragged anywhere and stays on every page. -->
+<section id="chat-panel" class="chat-panel" role="dialog" aria-label="Чат с Рэйкой" hidden>
+  <header class="chat-head">
+    <div class="face" aria-hidden="true"><span id="avatar" class="mood-badge">🦊</span></div>
+    <div class="who">
+      <h2>Рэйка Куроноцуки</h2>
+      <p id="mood">Спокойствие</p>
+      <p id="mode" class="mode" hidden>Работает в браузере: история хранится на этом устройстве</p>
     </div>
+    <button id="chat-clear" class="icon-btn" type="button" title="Очистить историю чата" aria-label="Очистить историю чата">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>
+    </button>
+    <button id="chat-close" class="icon-btn" type="button" title="Закрыть (Esc)" aria-label="Закрыть чат">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </header>
-  <main id="log" class="log" aria-live="polite"></main>
+  <div id="log" class="log" role="log" aria-live="polite"></div>
   <form id="form" class="composer" autocomplete="off">
     <label for="input" class="sr">Сообщение</label>
     <textarea id="input" rows="1" maxlength="2000" placeholder="Напиши Рэйке…"></textarea>
     <button id="send" type="submit">Отправить</button>
   </form>
-</div>
-<dialog id="update-dialog" class="update">
-  <form method="dialog" class="update-head"><h2>Обновление проекта</h2><button class="ghost" aria-label="Закрыть">✕</button></form>
-  <p class="muted">Источник: github.com/Aspksa/ReikaKuronotsuki · установлено: <b id="up-local">…</b> · доступно: <b id="up-latest">—</b></p>
-  <p id="up-blocked" class="warn" hidden></p>
-  <ol class="route" aria-label="Маршрут обновления">
-    <li id="node-github">GitHub</li><li class="lane"><span id="fly" class="fly" hidden></span></li>
-    <li id="node-check">Проверка</li><li class="lane"></li><li id="node-project">Проект</li>
-  </ol>
-  <div class="bar"><div id="up-bar"></div></div>
-  <p id="up-message" class="muted">Ожидание</p>
-  <p id="up-error" class="warn" hidden></p>
-  <ul id="up-checks" class="checks"></ul>
-  <div id="up-removals" class="removals" hidden>
-    <p>Новая версия удаляет файлы. Они будут удалены только после вашего подтверждения:</p>
-    <ul id="up-removals-list"></ul><button id="up-confirm" type="button">Подтвердить удаление</button>
-  </div>
-  <div class="actions">
-    <button id="up-check" type="button">Проверить</button><button id="up-download" type="button">Скачать и проверить</button>
-    <button id="up-cancel" type="button" hidden>Отмена</button><button id="up-install" type="button" hidden>Установить и перезапустить</button>
-  </div>
-  <label class="row">Канал <select id="up-channel"><option value="fresh">Свежий (последние изменения)</option><option value="stable">Стабильный (последний выпуск)</option></select></label>
-  <label class="row">Автопроверка <select id="up-auto"><option value="hourly">Раз в час</option><option value="daily">Раз в сутки</option><option value="off">Отключена</option></select></label>
-  <h3>История</h3><ul id="up-history" class="history"></ul>
-  <button id="up-rollback" type="button" class="ghost" hidden>Откатить последнюю установку</button>
-</dialog>
+</section>
+
+<button id="orb" class="orb" type="button" aria-label="Чат с Рэйкой: открыть. Перетащите, чтобы переместить; стрелки двигают" aria-controls="chat-panel" aria-expanded="false" title="Чат с Рэйкой (перетащите, чтобы переместить)">
+  <svg viewBox="0 0 64 64" aria-hidden="true"><use href="#reika-logo"/></svg>
+</button>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <radialGradient id="g-moon" cx="38%" cy="32%" r="80%"><stop offset="0" stop-color="#fffdf8"/><stop offset="1" stop-color="#d4d7e6"/></radialGradient>
+    <symbol id="reika-logo" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="30" fill="#0f1020" stroke="#d8b46a" stroke-width="2"/>
+      <path d="M14 30 L17 8 L31 19Z" fill="#fdf7f4" stroke="#d8b46a" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M50 30 L47 8 L33 19Z" fill="#fdf7f4" stroke="#d8b46a" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M19 24 L20 14 L27 20Z M45 24 L44 14 L37 20Z" fill="#e5a9b5"/>
+      <circle cx="32" cy="36" r="19" fill="url(#g-moon)"/>
+      <ellipse cx="25.5" cy="35" rx="3" ry="4.2" fill="#6fb7ff"/><ellipse cx="38.5" cy="35" rx="3" ry="4.2" fill="#6fb7ff"/>
+      <circle cx="24.6" cy="33.4" r="1.1" fill="#fff"/><circle cx="37.6" cy="33.4" r="1.1" fill="#fff"/>
+      <path d="M29.5 43 Q32 45.5 34.5 43" fill="none" stroke="#b3223f" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M32 55 V60" stroke="#b3223f" stroke-width="2" stroke-linecap="round"/><circle cx="32" cy="60.5" r="2" fill="#b3223f"/>
+    </symbol>
+  </defs>
+</svg>
+
 <script src="reika-chat.js"></script>
 <script src="app.js"></script>
 <script src="update.js"></script>
-<script src="menu.js"></script>
+<script src="shell.js"></script>
+<script src="orb.js"></script>
 </body>
 </html>
