@@ -5,6 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
@@ -278,4 +279,28 @@ test('a stray file where the staging folder belongs heals itself; a file where .
     assert.equal(typeof u.status().error, 'string');
     assert.equal(u.isBusy(), false, 'the updater must be usable again');
   }, { root: blocked });
+});
+
+test('gzip answers: a tiny file whose COMPRESSED size is bigger than the file is accepted (found with the real GitHub)', () => {
+  const body = Buffer.from('{ "port": 8731 }\n'); // 17 bytes; gzip makes it 37
+  const gz = zlib.gzipSync(body);
+  assert.ok(gz.length > body.length);
+  const site = { files: { 'config.default.json': body }, raw: { 'config.default.json': (req, res) => { res.writeHead(200, { 'content-encoding': 'gzip', 'content-length': gz.length }); res.end(gz); } } };
+  return withSite(site, async (u, root) => {
+    await u.start();
+    assert.equal(u.status().phase, 'ready', u.status().error);
+    assert.deepEqual(fs.readFileSync(path.join(root, '.updates/staging/config.default.json')), body);
+  });
+});
+
+test('a gzip bomb (tiny on the wire, huge when decoded) is cut off at the declared size', () => {
+  const bomb = zlib.gzipSync(Buffer.alloc(200 * 1024 * 1024, 0)); // ~200 KB compressed, 200 MB decoded
+  const site = { files: { 'a.txt': 'x'.repeat(1000) }, raw: { 'a.txt': (req, res) => { res.writeHead(200, { 'content-encoding': 'gzip', 'content-length': bomb.length }); res.end(bomb); } } };
+  return withSite(site, async (u, root) => {
+    const before = process.memoryUsage().arrayBuffers;
+    await withinMs(15000, u.start(), 'gzip bomb');
+    assert.equal(u.status().phase, 'error');
+    assert.ok(process.memoryUsage().arrayBuffers - before < 60 * 1024 * 1024, 'the decoded bytes must not pile up in memory');
+    assert.ok(!fs.existsSync(readyFile(root)));
+  });
 });

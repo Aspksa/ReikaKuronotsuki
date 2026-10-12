@@ -224,7 +224,10 @@ class ProjectUpdater {
       arm();
       const discard = () => response.body?.cancel().catch(() => {});
       if (!response.ok) { await discard(); return { response, body: null }; }
-      const declared = Number(response.headers.get('content-length'));
+      // Content-Length of a compressed answer is the size of the COMPRESSED bytes (tiny files grow under gzip), so the early
+      // check applies only to plain answers; the byte counter below caps the decoded size either way (also against zip bombs).
+      const encoded = (response.headers.get('content-encoding') || 'identity').toLowerCase() !== 'identity';
+      const declared = encoded ? NaN : Number(response.headers.get('content-length'));
       if (maxBytes != null && Number.isFinite(declared) && declared > maxBytes) { await discard(); throw Object.assign(new Error(`Размер ответа (${declared} Б) больше ожидаемого (${maxBytes} Б)`), { fatal: true }); }
       const chunks = [];
       let size = 0;
