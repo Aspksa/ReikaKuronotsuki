@@ -28,7 +28,8 @@ class PipelineTests(unittest.TestCase):
                 manifest=json.loads(z.read("manifest.json"))
                 self.assertEqual(edge["status"],"MANUAL_REVIEW_REQUIRED")
                 self.assertEqual(edge["layers"]["tail_1"]["border_occupied_pixels"],124)
-                self.assertFalse(manifest["alpha_checks_pass"])\n                self.assertEqual(manifest["alpha_pixel_loss_by_layer"]["tail_1"],0)
+                self.assertFalse(manifest["alpha_checks_pass"])
+                self.assertEqual(manifest["alpha_pixel_loss_by_layer"]["tail_1"],0)
             with self.assertRaises(ValueError):build(inp,base/"another",require_complete=True)
     def test_reject_destructive_cleaning(self):
         with tempfile.TemporaryDirectory() as td:
