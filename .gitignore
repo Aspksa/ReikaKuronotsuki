@@ -4,3 +4,5 @@ node_modules/
 __pycache__/
 .updates/
 .reika-version
+# local settings: copy config.default.json to config.json to change them (never touched by updates)
+config.json

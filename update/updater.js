@@ -8,7 +8,7 @@ const fs = require('node:fs/promises');
 const { readFileSync, existsSync, statfsSync } = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { REPO, SHA, BLOCKED, safeUpdatePath, gitHash } = require('./shared');
+const { REPO, SHA, BLOCKED, pathKey, safeUpdatePath, gitHash } = require('./shared');
 
 const API = 'https://api.github.com/repos/' + REPO;
 const HEADERS = { 'user-agent': 'Reika-Updater', accept: 'application/vnd.github+json' };
@@ -19,6 +19,9 @@ const MAX_FILES = 2000;
 const MAX_FILE_BYTES = 10_000_000;
 const AUTO_CHECK_MIN_MS = 30 * 60_000;
 const TEST_TIMEOUT_MS = 300_000;
+const MAX_API_BYTES = 20_000_000;
+const MAX_LOCK_MS = 3_600_000; // whatever GitHub says, never stay silent for more than an hour
+const CI_VALUES = ['success', 'pending', 'failure', 'none', 'unknown'];
 const UNKNOWN_VERSION = 'не определена';
 const CHECK_TITLES = { verify: 'Проверка файлов', test: 'Тесты' };
 
@@ -74,6 +77,17 @@ function gitHead(root) {
   return null;
 }
 
+/** A cached "latest version" is trusted only if every field has the expected type: the page prints these values. */
+function cleanLatest(l) {
+  if (!l || typeof l !== 'object' || !SHA.test(l.sha) || typeof l.version !== 'string' || !CI_VALUES.includes(l.ci)) return null;
+  const changes = Array.isArray(l.changes) ? l.changes.filter((c) => c && typeof c.title === 'string' && typeof c.sha === 'string').slice(0, 30).map((c) => ({ sha: c.sha.slice(0, 8), title: c.title.slice(0, 140) })) : [];
+  return {
+    sha: l.sha, version: l.version.slice(0, 100), channel: l.channel === 'stable' ? 'stable' : 'fresh', ...(typeof l.tag === 'string' ? { tag: l.tag.slice(0, 100) } : {}),
+    description: typeof l.description === 'string' ? l.description.slice(0, 400) : '', date: typeof l.date === 'string' ? l.date.slice(0, 40) : '', ci: l.ci,
+    changes, changesTotal: Number.isSafeInteger(l.changesTotal) && l.changesTotal >= 0 ? l.changesTotal : changes.length,
+  };
+}
+
 class ProjectUpdater {
   constructor(root, opts = {}) {
     this.root = root;
@@ -81,6 +95,9 @@ class ProjectUpdater {
     this.runner = opts.runner;
     this.requireCi = opts.requireCi ?? process.env.REIKA_UPDATE_REQUIRE_CI !== '0';
     this.token = (opts.token ?? process.env.GITHUB_TOKEN ?? '').trim();
+    this.apiBase = opts.apiBase || API;
+    this.rawBase = opts.rawBase || `https://raw.githubusercontent.com/${REPO}`;
+    this.timeouts = { api: 20_000, file: 120_000, idle: 30_000, ...opts.timeouts };
     this.retryDelays = opts.retryDelaysMs ?? [1000, 3000];
     this.freeBytes = opts.freeBytes || (() => { const s = statfsSync(this.root); return Number(s.bavail) * Number(s.bsize); });
     this.state = blankState();
@@ -112,9 +129,12 @@ class ProjectUpdater {
     } catch { /* defaults */ }
     try {
       const c = JSON.parse(readFileSync(this.file('check-cache.json'), 'utf8'));
-      if (Number.isFinite(c.checkedAt)) this.checkedAt = c.checkedAt;
-      if (Number.isFinite(c.rateLimitUntil)) this.rateLimitUntil = c.rateLimitUntil;
-      if (c.latest && c.channel === this.config.channel) this.latest = c.latest; else this.checkedAt = 0;
+      const now = Date.now();
+      if (Number.isFinite(c.checkedAt)) this.checkedAt = Math.min(c.checkedAt, now);
+      // GitHub never asks for more than an hour: a larger saved value is corruption, not a real limit.
+      if (Number.isFinite(c.rateLimitUntil) && c.rateLimitUntil <= now + MAX_LOCK_MS) this.rateLimitUntil = c.rateLimitUntil;
+      const latest = cleanLatest(c.latest);
+      if (latest && c.channel === this.config.channel) this.latest = latest; else this.checkedAt = 0;
     } catch { /* first run */ }
     this.rollbackPending = existsSync(this.file('rollback-request.json'));
   }
@@ -185,13 +205,45 @@ class ProjectUpdater {
   }
 
   // ---------- GitHub ----------
-  async fetchTimed(url, init, ms, outer) {
+  /**
+   * One request whose WHOLE life is time-limited: an overall limit and an idle limit (no bytes for a while), both also
+   * covering the body. The body is read here, with a size cap, so a server that stalls or never stops cannot hang or
+   * exhaust memory. A cancel from the user aborts it at once.
+   */
+  async fetchBody(url, init, { overallMs, idleMs, maxBytes, signal, onChunk }) {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(new Error('Истекло время ожидания')), ms);
-    const onAbort = () => ctl.abort(outer?.reason);
-    if (outer) { if (outer.aborted) onAbort(); else outer.addEventListener('abort', onAbort, { once: true }); }
-    try { return await this.fetch(url, { ...init, signal: ctl.signal }); }
-    finally { clearTimeout(timer); outer?.removeEventListener('abort', onAbort); }
+    let idle, overall;
+    const stop = (message) => ctl.abort(new Error(message));
+    const arm = () => { clearTimeout(idle); idle = setTimeout(() => stop('Истекло время ожидания: сервер не присылает данные'), idleMs); };
+    const onAbort = () => ctl.abort(signal.reason ?? new Error('cancelled'));
+    if (signal) { if (signal.aborted) onAbort(); else signal.addEventListener('abort', onAbort, { once: true }); }
+    overall = setTimeout(() => stop('Истекло время ожидания'), overallMs);
+    arm();
+    try {
+      const response = await this.fetch(url, { ...init, signal: ctl.signal });
+      arm();
+      const discard = () => response.body?.cancel().catch(() => {});
+      if (!response.ok) { await discard(); return { response, body: null }; }
+      const declared = Number(response.headers.get('content-length'));
+      if (maxBytes != null && Number.isFinite(declared) && declared > maxBytes) { await discard(); throw Object.assign(new Error(`Размер ответа (${declared} Б) больше ожидаемого (${maxBytes} Б)`), { fatal: true }); }
+      const chunks = [];
+      let size = 0;
+      if (!response.body) { const all = Buffer.from(await response.arrayBuffer()); if (maxBytes != null && all.length > maxBytes) throw Object.assign(new Error('Размер ответа больше ожидаемого'), { fatal: true }); return { response, body: all }; }
+      const reader = response.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        arm();
+        size += value.byteLength;
+        if (maxBytes != null && size > maxBytes) { await reader.cancel().catch(() => {}); throw Object.assign(new Error(`Размер ответа больше ожидаемого (${maxBytes} Б)`), { fatal: true }); }
+        chunks.push(Buffer.from(value));
+        onChunk?.(value.byteLength);
+      }
+      return { response, body: Buffer.concat(chunks) };
+    } catch (error) {
+      if (ctl.signal.aborted) throw ctl.signal.reason instanceof Error ? ctl.signal.reason : new Error('Запрос прерван');
+      throw error;
+    } finally { clearTimeout(idle); clearTimeout(overall); signal?.removeEventListener('abort', onAbort); }
   }
 
   rateLimitMessage() {
@@ -203,29 +255,34 @@ class ProjectUpdater {
     if (Date.now() < this.rateLimitUntil) throw httpError(this.rateLimitMessage(), 429);
     const cached = this.etags.get(url);
     const headers = { ...HEADERS, ...(this.token ? { authorization: 'Bearer ' + this.token } : {}), ...(cached ? { 'if-none-match': cached.etag } : {}) };
-    const response = await this.fetchTimed(url, { headers }, 20_000, signal);
+    const { response, body } = await this.fetchBody(url, { headers }, { overallMs: this.timeouts.api, idleMs: this.timeouts.api, maxBytes: MAX_API_BYTES, signal });
     if (response.status === 304 && cached) return JSON.parse(cached.body);
     if (!response.ok) {
       const retryAfter = Number(response.headers.get('retry-after'));
       const remaining = response.headers.get('x-ratelimit-remaining');
       if ((response.status === 403 || response.status === 429) && (remaining === '0' || retryAfter > 0 || response.status === 429)) {
         const reset = Number(response.headers.get('x-ratelimit-reset'));
-        this.rateLimitUntil = retryAfter > 0 ? Date.now() + retryAfter * 1000 : reset > 0 ? reset * 1000 : Date.now() + 10 * 60_000;
+        const now = Date.now();
+        const wanted = retryAfter > 0 ? now + retryAfter * 1000 : reset > 0 ? reset * 1000 : now + 10 * 60_000;
+        // A silly header (year 3000, NaN, negative) must not lock updates out for good: between now and one hour.
+        this.rateLimitUntil = Number.isFinite(wanted) ? Math.min(Math.max(wanted, now), now + MAX_LOCK_MS) : now + 10 * 60_000;
         await this.saveCache();
         throw httpError(this.rateLimitMessage(), 429);
       }
       throw httpError('GitHub API: HTTP ' + response.status, response.status);
     }
-    const text = await response.text();
+    const text = body.toString('utf8');
+    let json;
+    try { json = JSON.parse(text); } catch { throw new Error('GitHub ответил не в том формате (не JSON). Возможно, мешает прокси или сеть — повторите позже.'); }
     const etag = response.headers.get('etag');
     if (etag && text.length < 200_000 && !url.includes('/git/trees/')) this.etags.set(url, { etag, body: text });
-    return JSON.parse(text);
+    return json;
   }
 
   /** CI verdict. Success needs the required job to have succeeded; any doubt is "unknown"/"none", never a silent pass. */
   async ciState(sha) {
     try {
-      const r = await this.getJson(`${API}/commits/${sha}/check-runs?per_page=100`);
+      const r = await this.getJson(`${this.apiBase}/commits/${sha}/check-runs?per_page=100`);
       const runs = Array.isArray(r.check_runs) ? r.check_runs : [];
       if (Number(r.total_count) > runs.length) return 'unknown'; // more than one page: not handled, so not trusted
       if (!runs.length) return 'none';
@@ -239,7 +296,7 @@ class ProjectUpdater {
     const local = this.localVersion();
     if (!SHA.test(local) || local === sha) return { items: [], total: 0 };
     try {
-      const r = await this.getJson(`${API}/compare/${local}...${sha}`);
+      const r = await this.getJson(`${this.apiBase}/compare/${local}...${sha}`);
       const commits = Array.isArray(r.commits) ? r.commits : [];
       const items = commits.slice(-30).reverse().map((c) => ({ sha: String(c.sha ?? '').slice(0, 8), title: String(c.commit?.message ?? '').split('\n')[0].trim().slice(0, 140).replace(/\s*\(#\d+\)\s*$/, '') || 'без описания' }));
       return { items, total: Number.isSafeInteger(r.total_commits) ? r.total_commits : commits.length };
@@ -251,14 +308,14 @@ class ProjectUpdater {
     let target;
     if (this.config.channel === 'stable') {
       let rel;
-      try { rel = await this.getJson(API + '/releases/latest'); }
+      try { rel = await this.getJson(this.apiBase + '/releases/latest'); }
       catch (e) { if (e.status === 404) throw httpError('В репозитории пока нет стабильных выпусков. Выберите канал «Свежий».', 409); throw e; }
       const tag = String(rel.tag_name ?? '');
       if (!/^[\w.\-+/]{1,100}$/.test(tag)) throw new Error('Неверное имя выпуска GitHub');
-      const c = await this.getJson(`${API}/commits/${encodeURIComponent(tag)}`);
+      const c = await this.getJson(`${this.apiBase}/commits/${encodeURIComponent(tag)}`);
       target = { sha: String(c.sha), message: String(c.commit?.message ?? ''), date: String(c.commit?.committer?.date ?? ''), tag };
     } else {
-      const c = await this.getJson(API + '/commits/main');
+      const c = await this.getJson(this.apiBase + '/commits/main');
       target = { sha: String(c.sha), message: String(c.commit?.message ?? ''), date: String(c.commit?.committer?.date ?? '') };
     }
     if (!SHA.test(target.sha)) throw new Error('Неверный идентификатор GitHub');
@@ -291,11 +348,16 @@ class ProjectUpdater {
       const why = this.blocked();
       if (why) throw new Error(why);
       const sha = this.latest.sha;
-      const tree = await this.getJson(`${API}/git/trees/${sha}?recursive=1`, signal);
+      const tree = await this.getJson(`${this.apiBase}/git/trees/${sha}?recursive=1`, signal);
       if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('Неполный список файлов GitHub');
+      for (const x of tree.tree) {
+        if (!x || typeof x !== 'object') throw new Error('Недопустимая запись в списке файлов GitHub');
+        if (x.type === 'commit') throw new Error('Подмодули в обновлении не поддерживаются: ' + String(x.path).slice(0, 100));
+        if (x.mode === '120000') throw new Error('Символические ссылки в обновлении не поддерживаются: ' + String(x.path).slice(0, 100));
+      }
       // Paths the update must never touch (data/, config.json …) are simply not part of an update.
       const entries = tree.tree.filter((x) => x.type === 'blob' && !isProtected(x.path));
-      if (entries.some((e) => !safeUpdatePath(e.path) || !SHA.test(e.sha)) || new Set(entries.map((e) => e.path.toLowerCase())).size !== entries.length) throw new Error('Недопустимый путь или повтор файла в манифесте');
+      if (entries.some((e) => !safeUpdatePath(e.path) || !SHA.test(e.sha)) || new Set(entries.map((e) => pathKey(e.path))).size !== entries.length) throw new Error('Недопустимый путь или повтор файла в манифесте');
       if (entries.length > MAX_FILES || entries.some((x) => !Number.isSafeInteger(x.size) || x.size < 0 || x.size > MAX_FILE_BYTES)) throw new Error('Превышены ограничения размера обновления');
       const changes = await Promise.all(entries.map(async (e) => {
         try { return { path: e.path, change_type: gitHash(await fs.readFile(path.join(this.root, e.path))) === e.sha ? 'unchanged' : 'modified', size: e.size }; }
@@ -386,19 +448,20 @@ class ProjectUpdater {
   }
 
   async download(sha, e, signal) {
-    const url = `https://raw.githubusercontent.com/${REPO}/${sha}/${e.path.split('/').map(encodeURIComponent).join('/')}`;
+    const url = `${this.rawBase}/${sha}/${e.path.split('/').map(encodeURIComponent).join('/')}`;
     for (let attempt = 1; ; attempt++) {
       const before = this.state.downloadedBytes;
       try {
-        const response = await this.fetchTimed(url, { headers: HEADERS }, 60_000, signal);
+        // maxBytes = the size GitHub's file list declared: an endless or oversized body is cut off, not stored.
+        const { response, body } = await this.fetchBody(url, { headers: HEADERS }, {
+          overallMs: this.timeouts.file, idleMs: this.timeouts.idle, maxBytes: e.size, signal,
+          onChunk: (n) => { this.state.downloadedBytes += n; if (this.state.totalBytes) this.state.percent = Math.min(100, Math.floor(100 * this.state.downloadedBytes / this.state.totalBytes)); },
+        });
         if (!response.ok) throw httpError(`Не удалось скачать ${e.path}: HTTP ${response.status}`, response.status);
-        const data = Buffer.from(await response.arrayBuffer());
-        if (data.length > e.size) throw new Error('Размер файла не совпадает: ' + e.path);
-        this.state.downloadedBytes += data.length;
-        return data;
+        return body;
       } catch (err) {
         this.state.downloadedBytes = before;
-        const fatal = signal.aborted || (err.status && err.status < 500 && err.status !== 429 && err.status !== 408);
+        const fatal = signal.aborted || err.fatal || (err.status && err.status < 500 && err.status !== 429 && err.status !== 408);
         if (fatal || attempt >= MAX_ATTEMPTS) throw err;
         this.state.message = `Повтор загрузки (${attempt + 1} из ${MAX_ATTEMPTS}): ${e.path}`;
         await sleep(this.retryDelays[attempt - 1] ?? 0);
@@ -411,10 +474,10 @@ class ProjectUpdater {
     let prev;
     try { prev = JSON.parse(await fs.readFile(this.file('installed.json'), 'utf8')); } catch { return []; }
     if (!prev || !Array.isArray(prev.paths)) return [];
-    const keep = new Set(entries.map((e) => e.path.toLowerCase()));
+    const keep = new Set(entries.map((e) => pathKey(e.path)));
     const out = [];
     for (const p of prev.paths) {
-      if (typeof p !== 'string' || !safeUpdatePath(p) || keep.has(p.toLowerCase())) continue;
+      if (typeof p !== 'string' || !safeUpdatePath(p) || keep.has(pathKey(p))) continue;
       if (await fs.stat(path.join(this.root, p)).then(() => true, () => false)) out.push(p);
     }
     return out.slice(0, 2500);

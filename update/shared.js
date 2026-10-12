@@ -18,6 +18,9 @@ function safeUpdatePath(p) {
     && p.split('/').every((s) => s && s !== '.' && s !== '..' && !BLOCKED.has(s) && !RESERVED_WINDOWS.test(s) && !/[. ]$/.test(s));
 }
 
+// Two paths that are the same file on Windows/macOS (case or Unicode normalisation differ) share one key.
+const pathKey = (p) => p.normalize('NFC').toLowerCase();
+
 // Same value as `git hash-object`: lets file bytes be checked against the GitHub tree listing.
 function gitHash(bytes) {
   return crypto.createHash('sha1').update('blob ' + bytes.length + '\0').update(bytes).digest('hex');
@@ -49,4 +52,4 @@ async function assertNoLinks(root, rel) {
   }
 }
 
-module.exports = { REPO, SHA, BACKUP_NAME, BLOCKED, safeUpdatePath, gitHash, readOrNull, atomicWrite, assertNoLinks };
+module.exports = { pathKey, REPO, SHA, BACKUP_NAME, BLOCKED, safeUpdatePath, gitHash, readOrNull, atomicWrite, assertNoLinks };

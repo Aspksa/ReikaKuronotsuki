@@ -10,8 +10,10 @@ const { ProjectUpdater } = require('../update/updater');
 
 const projectRoot = path.resolve(__dirname, '..');
 
+// config.default.json ships with the project (updated with it); config.json is the user's own copy and is never touched.
 function readConfig() {
-  try { return JSON.parse(fs.readFileSync(path.join(projectRoot, 'config.json'), 'utf8')); } catch { return {}; }
+  const read = (name) => { try { return JSON.parse(fs.readFileSync(path.join(projectRoot, name), 'utf8')); } catch { return {}; } };
+  return { ...read('config.default.json'), ...read('config.json') };
 }
 
 // If someone grabs the port between the check and the bind, fall back to any free port.

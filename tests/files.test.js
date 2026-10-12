@@ -28,6 +28,14 @@ test('all text sources are valid UTF-8 without replacement characters', () => {
   }
 });
 
+test('Windows scripts are stored with CRLF as they are (no git conversion), so a raw download or ZIP export is already correct', () => {
+  const attrs = fs.readFileSync(path.join(root, '.gitattributes'), 'utf8');
+  assert.match(attrs, /^\*\.bat -text$/m);
+  assert.match(attrs, /^\*\.ps1 -text$/m);
+  assert.ok(!/\*\.(bat|ps1)\s+text/.test(attrs), 'text/eol attributes make git store LF and convert only on checkout');
+  for (const f of [['Reika Kuronotsuki.bat'], ['launcher', 'start.ps1']]) assert.ok(/\r\n/.test(read(...f).toString('latin1')) && !/(^|[^\r])\n/.test(read(...f).toString('latin1')), `${f.join('/')} must be CRLF-only`);
+});
+
 test('launcher .bat exists, is ASCII-only, uses CRLF and switches to UTF-8', () => {
   const buf = read('Reika Kuronotsuki.bat');
   assert.ok(buf.every((b) => b < 128), 'non-ASCII byte in .bat');
@@ -63,8 +71,9 @@ test('web UI is a plain desktop-browser page', () => {
   assert.ok(!fs.existsSync(path.join(root, 'web', 'manifest.webmanifest')));
 });
 
-test('config.json is valid and has no network-exposure switch', () => {
-  const config = JSON.parse(read('config.json').toString('utf8'));
+test('config.default.json is valid and has no network-exposure switch; config.json is the user\'s local, untracked copy', () => {
+  const config = JSON.parse(read('config.default.json').toString('utf8'));
+  assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /^config\.json$/m);
   assert.equal(config.lan, undefined);
   assert.ok(Number.isInteger(config.port));
 });
