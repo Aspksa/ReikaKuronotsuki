@@ -29,14 +29,17 @@ def build(source, output, *, require_complete=False, threshold=10, median=3, fea
     if dimensions!=processed_dims or set(raw)!=set(checked):
         raise ValueError("Cleaned layer set differs from input")
     losses={}
+    erased={}
     for name, original in raw.items():
         with Image.open(original) as before, Image.open(checked[name]) as after:
             before_count=sum(before.convert('RGBA').getchannel('A').histogram()[1:])
             after_count=sum(after.convert('RGBA').getchannel('A').histogram()[1:])
+            removed=sum(a>0 and b==0 for a,b in zip(before.convert('RGBA').getchannel('A').getdata(),after.convert('RGBA').getchannel('A').getdata()))
         loss=round(max(0,before_count-after_count)/before_count,6) if before_count else 0.0
         losses[name]=loss
-        if before_count and loss > max_alpha_loss:
-            raise ValueError(f'{name}: cleanup removed {loss:.1%} of visible pixels (limit {max_alpha_loss:.1%})')
+        erased[name]=round(removed/before_count,6) if before_count else 0.0
+        if before_count and (loss > max_alpha_loss or erased[name] > max_alpha_loss):
+            raise ValueError(f'{name}: cleanup removed {max(loss,erased[name]):.1%} of visible pixels (limit {max_alpha_loss:.1%})')
     diagnostic=report(cleaned)
     edge_audit=audit(cleaned)
     manifest={"version":1,"status":"EXPERIMENTAL_REQUIRES_MANUAL_REVIEW",
@@ -45,6 +48,7 @@ def build(source, output, *, require_complete=False, threshold=10, median=3, fea
               "settings":{"threshold":threshold,"median":median,"feather":feather},
               "alpha_checks_pass":edge_audit["automated_checks_pass"],
               "alpha_pixel_loss_by_layer":losses,
+              "alpha_erased_pixel_fraction_by_layer":erased,
               "max_alpha_loss":max_alpha_loss,
               "warning":"No semantic segmentation or reconstruction of hidden pixels is performed."}
     output.mkdir(parents=True,exist_ok=True)
