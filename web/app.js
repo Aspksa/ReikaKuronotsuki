@@ -30,12 +30,64 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  async function api(path, options) {
+  // Two backends with the same shape: the local server (history on disk) or the browser itself
+  // (static hosting, file://, GitHub Pages): history in localStorage and the shared engine in reika-chat.js.
+  const LS_KEY = 'reika.history.v1';
+  const MAX_LOCAL = 500;
+  let memory = [];
+
+  function lsRead() {
+    try { const v = JSON.parse(localStorage.getItem(LS_KEY)); return Array.isArray(v) ? v : []; } catch { return memory; }
+  }
+  function lsWrite(list) {
+    memory = list;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch { /* private mode: keep in memory */ }
+  }
+  function localMessage(role, text, emotion, list) {
+    const m = { id: `${Date.now().toString(36)}-${list.length}`, role, text, emotion, at: new Date().toISOString() };
+    list.push(m);
+    return m;
+  }
+
+  const localApi = {
+    async history() { return { messages: lsRead() }; },
+    async chat(text) {
+      const clean = window.ReikaChat.normalizeText(text);
+      if (!clean) throw new Error('Пустое сообщение');
+      const answer = window.ReikaChat.reply(clean);
+      const list = lsRead();
+      const user = localMessage('user', clean, window.ReikaChat.detectEmotion(clean), list);
+      const reika = localMessage('reika', answer.text, answer.emotion, list);
+      lsWrite(list.slice(-MAX_LOCAL));
+      return { user, reika };
+    },
+    async clear() { lsWrite([]); },
+  };
+
+  async function serverJson(path, options) {
     const response = await fetch(path, options);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Ошибка');
     return data;
   }
+  const serverApi = {
+    history: () => serverJson('api/history'),
+    chat: (text) => serverJson('api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ text }) }),
+    clear: () => serverJson('api/history', { method: 'DELETE' }),
+  };
+
+  async function detectBackend() {
+    if (location.protocol === 'file:') return localApi;
+    try {
+      const response = await fetch('api/health', { cache: 'no-store' });
+      const data = await response.json();
+      if (data && data.ok === true) return serverApi;
+    } catch { /* not a Reika server */ }
+    return localApi;
+  }
+
+  let backend = localApi;
+  const ready = detectBackend().then((b) => { backend = b; if (b === localApi) document.getElementById('mode').hidden = false; return b; });
 
   function autosize() { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 140)}px`; }
 
@@ -45,7 +97,8 @@
     if (!text) return;
     send.disabled = true;
     try {
-      const { user, reika } = await api('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ text }) });
+      await ready;
+      const { user, reika } = await backend.chat(text);
       input.value = '';
       autosize();
       render(user);
@@ -67,12 +120,13 @@
 
   document.getElementById('clear').addEventListener('click', async () => {
     if (!confirm('Удалить всю историю переписки?')) return;
-    await api('/api/history', { method: 'DELETE' });
+    await ready;
+    await backend.clear();
     log.textContent = '';
     setMood('neutral');
   });
 
-  api('/api/history').then(({ messages }) => {
+  ready.then((b) => b.history()).then(({ messages }) => {
     if (!messages.length) render({ role: 'reika', text: 'Здравствуй. Я Рэйка. О чём поговорим?', at: new Date().toISOString() });
     for (const m of messages) render(m);
     const last = messages.filter((m) => m.role === 'reika').pop();

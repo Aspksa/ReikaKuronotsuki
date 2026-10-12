@@ -20,3 +20,4 @@ button[type=submit] { min-height: 44px; padding: 0 18px; border-radius: 12px; bo
 button:disabled { opacity: .5; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (prefers-reduced-motion: no-preference) { .msg { animation: pop .18s ease-out; } @keyframes pop { from { opacity: 0; transform: translateY(6px); } } }
+.mode { font-size: .72rem !important; color: var(--gold) !important; }
