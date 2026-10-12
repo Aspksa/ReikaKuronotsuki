@@ -141,6 +141,6 @@ try {
     Remove-Item -LiteralPath (Join-Path $env:TEMP 'reika-kuronotsuki.url') -ErrorAction SilentlyContinue
     $tray.Visible = $false
     $tray.Dispose()
-    if (-not $server.HasExited) { $server.Kill() }
+    if (-not $server.HasExited) { & taskkill.exe /PID $server.Id /T /F | Out-Null }
     $mutex.ReleaseMutex()
 }

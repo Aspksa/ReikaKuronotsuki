@@ -52,6 +52,7 @@ async function main() {
   console.log(`REIKA_READY ${JSON.stringify(runtime)}`);
   console.log(`Reika Kuronotsuki: ${runtime.url}`);
   scheduleUpdateChecks(updater);
+  if (process.env.REIKA_SUPERVISED === '1') { process.stdin.resume(); process.stdin.on('end', () => process.exit(0)); }
   process.on('SIGINT', () => process.exit(0));
   process.on('SIGTERM', () => process.exit(0));
 }

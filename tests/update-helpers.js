@@ -33,4 +33,13 @@ function prepareUpdate(root, files, { sha = SHA_B, removals = [], extra = {} } =
   return manifest;
 }
 
-module.exports = { SHA_A, SHA_B, tmpProject, write, read, readJsonl, prepareUpdate };
+// Plain recursive copy: fs.cpSync misbehaves with non-ASCII destination paths on some Windows setups.
+function copyTree(from, to) {
+  fs.mkdirSync(to, { recursive: true });
+  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    const a = path.join(from, entry.name), b = path.join(to, entry.name);
+    if (entry.isDirectory()) copyTree(a, b); else fs.copyFileSync(a, b);
+  }
+}
+
+module.exports = { copyTree, SHA_A, SHA_B, tmpProject, write, read, readJsonl, prepareUpdate };
