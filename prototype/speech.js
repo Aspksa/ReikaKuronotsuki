@@ -29,4 +29,4 @@ function mount(){
 }
 return {LIMIT,normalizeText,mouthPath,createController,mount};
 });
-(function(){const speech=window.ReikaSpeech;if(speech)window.ReikaSpeechController=speech.mount();})();
+if(typeof window!=='undefined'){const speech=window.ReikaSpeech;if(speech)window.ReikaSpeechController=speech.mount();}
