@@ -20,4 +20,4 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run browser smoke tests
-        run: npx playwright test tests/browser.spec.cjs tests/browser-pivots.spec.cjs tests/browser-physics.spec.cjs --reporter=line
+        run: npx playwright test tests/browser.spec.cjs tests/browser-pivots.spec.cjs tests/browser-physics.spec.cjs tests/browser-secondary.spec.cjs --reporter=line
