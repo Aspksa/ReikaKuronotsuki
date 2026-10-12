@@ -58,12 +58,12 @@ const readyFile = (root) => path.join(root, '.updates', 'ready.json');
 
 test('baseline: the fake GitHub works end to end (Cyrillic, spaces and URL-special characters in names; empty and binary files)', () => {
   const binary = crypto.randomBytes(300_000);
-  const site = { files: { 'документ Рэйки #1 ?x %y+z.txt': 'привет', 'пустой.txt': '', 'bin/data.bin': binary, 'a b/c.js': '1' } };
+  const site = { files: { 'документ Рэйки #1 %y+z&q=1.txt': 'привет', 'пустой.txt': '', 'bin/data.bin': binary, 'a b/c.js': '1' } };
   return withSite(site, async (u, root) => {
     await u.start();
     assert.equal(u.status().phase, 'ready', u.status().error);
     assert.deepEqual(fs.readFileSync(path.join(root, '.updates/staging/bin/data.bin')), binary);
-    assert.equal(fs.readFileSync(path.join(root, '.updates/staging/документ Рэйки #1 ?x %y+z.txt'), 'utf8'), 'привет');
+    assert.equal(fs.readFileSync(path.join(root, '.updates/staging/документ Рэйки #1 %y+z&q=1.txt'), 'utf8'), 'привет');
     assert.equal(fs.readFileSync(path.join(root, '.updates/staging/пустой.txt')).length, 0);
   });
 });
@@ -176,6 +176,7 @@ test('a truncated file list, symlinks, submodules and case/Unicode duplicates ar
     [{ truncated: false, tree: [entry('a.txt', { size: 'big' })] }, /размер/i],
     [{ truncated: false, tree: [entry('a.txt', { sha: 'zzz' })] }, /Недопустимый/],
     [{ truncated: false, tree: 'nope' }, /Неполный/],
+    ...['what?.txt', 'a*b.txt', 'a<b.txt', 'a|b.txt', 'a"b.txt', 'tab\there.txt'].map((p) => [{ truncated: false, tree: [entry(p)] }, /Недопустимый путь/]),
   ];
   for (const [tree, message] of cases) {
     await withSite({ files: { 'a.txt': 'x' }, tree }, async (u, root) => {

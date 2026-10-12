@@ -12,7 +12,7 @@ const history = (root) => readJsonl(path.join(root, '.updates', 'history.jsonl')
 const skipHealth = { healthCheck: async () => {} };
 
 test('safeUpdatePath rejects traversal, user data, Windows aliases', () => {
-  for (const bad of ['../x', 'a/../b', '/etc/passwd', 'a\\b', 'C:/x', 'data/history.json', 'config.json', '.env', '.updates/ready.json', 'node_modules/x', 'web/con.js', 'a/b.', '']) assert.equal(safeUpdatePath(bad), false, bad);
+  for (const bad of ['../x', 'a/../b', '/etc/passwd', 'a\\b', 'C:/x', 'data/history.json', 'config.json', '.env', '.updates/ready.json', 'node_modules/x', 'web/con.js', 'a/b.', 'a?b', 'a*b', 'a<b', 'a|b', 'a"b', 'a\tb', 'a/b\u0000', '']) assert.equal(safeUpdatePath(bad), false, bad);
   for (const ok of ['web/app.js', 'update/installer.js', 'README.md']) assert.equal(safeUpdatePath(ok), true, ok);
 });
 
