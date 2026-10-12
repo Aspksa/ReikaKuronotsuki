@@ -1,0 +1,5 @@
+# v33 — Experimental transparent tail studies
+
+Run `python tools/tail_matte_v33.py INPUT_V32_SWATCH_DIRECTORY OUTPUT_DIRECTORY` to remove dark, edge-connected backgrounds from all nine v32 swatches and produce `tail_matte_study_01.png` through `tail_matte_study_09.png`, plus `manifest.json`.
+
+The algorithm estimates a dark background using crop corners and flood-fills connected areas below `--tolerance`; `--feather` controls alpha transition. These are **experimental mattes**: they may retain background islands, produce halos or remove dark fur. The supplied pivot suggestions `[0.5, 0.9]` are placeholders, NOT artist-approved anatomical mounting points. These small PNGs are NOT the rig-compatible 17-layer character set, not full-resolution reconstructed anatomy, and have not been Live2D-rigged. Human cleanup is required. The generated image ZIP is available separately, rather than committed to GitHub.
