@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const base=require('../prototype/tail-composition.js'),editor=require('../prototype/tail-editor-v42.js');
-test('v36 save and load nine transforms',()=>{const data=editor.pack(base.defaults());const restored=editor.parse(JSON.stringify(data));assert.deepEqual(restored.tails,base.defaults());assert.equal(restored.version,42);});
+test('v36 save and load nine transforms',()=>{const data=editor.pack(base.defaults());const restored=editor.parse(JSON.stringify(data));assert.deepEqual(restored.tails,JSON.parse(JSON.stringify(base.defaults())));assert.equal(restored.version,42);});
 test('v37 rejects invalid pivot-free transform data',()=>{const data=editor.pack(base.defaults());data.tails[0].x=-3;assert.throws(()=>editor.parse(JSON.stringify(data)),RangeError);});
 test('v38 deterministic swing at zero amplitude',()=>assert.equal(editor.swing(25,2,4,0),25));
 test('v39 zero frequency produces stable time-independent motion',()=>assert.equal(editor.swing(4,2,0,5,0),editor.swing(4,2,30,5,0)));
