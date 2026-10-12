@@ -41,6 +41,8 @@ class PipelineTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"cleanup removed"):
                 build(src,base/"output",feather=0,max_alpha_loss=.25)
             self.assertEqual(Image.open(src/"reika_tail_1.png").getpixel((8,8))[3],255)
+            self.assertFalse((base/"output").exists())
+            self.assertFalse(list(base.glob(".reika-build-*")))
     def test_reject_bad_loss_limit(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
@@ -56,6 +58,15 @@ class PipelineTests(unittest.TestCase):
             image.save(src/"reika_tail_1.png")
             with self.assertRaisesRegex(ValueError,"cleanup removed"):
                 build(src,base/"out",median=3,feather=1,max_alpha_loss=.02)
+    def test_refuse_to_overwrite_existing_output(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td);inp=base/"input";inp.mkdir()
+            Image.new("RGBA",(8,8),(255,255,255,255)).save(inp/"reika_face.png")
+            output=base/"output";output.mkdir()
+            (output/"keep.txt").write_text("unchanged")
+            with self.assertRaisesRegex(ValueError,"Refusing to overwrite"):
+                build(inp,output)
+            self.assertEqual((output/"keep.txt").read_text(),"unchanged")
     def test_refuse_in_source_directory(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
