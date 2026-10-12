@@ -1,0 +1,5 @@
+# v71–v84 — Offline conversation history
+
+The experimental local Reika chat now supports 14 small, tested capabilities: v71 input trimming, v72 500-character limit, v73 bounded 40-message history, v74 defensive copies of messages, v75 case-insensitive Russian-language search, v76 full-history view with empty query, v77 JSON export/import, v78 strict roles, v79 import size cap, v80 versioned format, v81 malformed entry rejection, v82 message counts, v83 restoring the latest reply for read-aloud after import, and v84 clear/replace for the current tab.
+
+Use the chat's **Скачать историю JSON** to download messages and **Импорт истории JSON** to restore them. Files contain the messages and are **not encrypted**; users should treat exported conversations as private. The data is only held in tab memory unless exported or downloaded by the user; it is **not synchronized** to a server, not used for LLM responses, and not persistent automatically across reloads. No remote model or voice recognition has been added. Existing rule-based replies, the SVG animation and browser TTS remain available.
