@@ -14,5 +14,5 @@ test('secondary motion updates ears and breathing without page errors',async({pa
 test('zero motion produces no procedural breathing',async({page})=>{
  await page.goto(url);
  await page.locator('#motion').evaluate(el=>{el.value='0';el.dispatchEvent(new Event('input',{bubbles:true}));});
- await expect.poll(()=>page.locator('#body').getAttribute('transform')).toContain('scale(1)');
+ await expect.poll(()=>page.locator('#body').getAttribute('transform')).toContain('scale(1 1)');
 });
