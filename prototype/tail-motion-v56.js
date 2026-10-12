@@ -1,0 +1,24 @@
+'use strict';
+(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ReikaTailMotion=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
+const COUNT=9;
+function finite(n,min,max){if(typeof n!=='number'||!Number.isFinite(n)||n<min||n>max)throw new RangeError('Invalid motion value');return n;}
+function preset(name){if(!['calm','lively','still'].includes(name))throw new RangeError('Unknown preset');return {amplitude:name==='still'?0:name==='calm'?4:13,frequency:name==='still'?0:name==='calm'?.45:1.2,secondary:name==='lively'?.35:.18};}
+function validate(options){const o=options||{};return {amplitude:finite(o.amplitude??8,0,25),frequency:finite(o.frequency??1,0,3),secondary:finite(o.secondary??.2,0,.6)};}
+function angle(index,seconds,base,options){if(!Number.isInteger(index)||index<0||index>=COUNT)throw new RangeError('Invalid tail index');finite(seconds,0,1e9);finite(base,-180,180);const p=validate(options);const phase=seconds*p.frequency*2*Math.PI+index*.55;return base+p.amplitude*(Math.sin(phase)+p.secondary*Math.sin(phase*2+.4));}
+function sample(tails,seconds,options){if(!Array.isArray(tails)||tails.length!==COUNT)throw new RangeError('Nine tails required');return tails.map((tail,i)=>angle(i,seconds,tail.rotation,options));}
+function mount(){const host=document.querySelector('.tail-advanced'),stage=document.getElementById('tailCompositionStage'),editor=window.ReikaTailEditorController,base=window.ReikaTailCompositionController;if(!host||!stage||!editor||!base)return;
+const section=document.createElement('div');section.className='tail-motion-v56';section.innerHTML='<h3>Движение хвостов v50–v56</h3><label for="tailMotionPreset">Стиль движения</label><select id="tailMotionPreset"><option value="calm">Спокойный</option><option value="lively">Живой</option><option value="still">Неподвижный</option></select><label for="tailMotionSecondary">Вторичная волна (%)</label><input id="tailMotionSecondary" type="range" min="0" max="60" value="18"><label for="tailMotionTime">Время предпросмотра (с)</label><input id="tailMotionTime" type="range" min="0" max="100" value="0"><button type="button" id="tailMotionPlay" aria-pressed="false">Воспроизвести</button><button type="button" id="tailMotionStop">Остановить и сбросить</button><p id="tailMotionStatus" role="status">Предпросмотр с ручной временной шкалой; не Live2D.</p>';host.append(section);
+const $=id=>section.querySelector('#'+id),images=Array.from(stage.querySelectorAll('img')).slice(0,COUNT);let options=preset('calm'),seconds=0,playing=false,last=null,raf=0;const reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
+function paint(){const values=sample(base.state,seconds,options);images.forEach((img,i)=>{const t=base.state[i];img.style.transform='translate(-50%,-90%) rotate('+values[i]+'deg) scale('+t.scale+')';});$('tailMotionTime').value=String(Math.min(100,seconds*10));}
+function stop(){playing=false;last=null;$('tailMotionPlay').setAttribute('aria-pressed','false');$('tailMotionPlay').textContent='Воспроизвести';}
+$('tailMotionPreset').onchange=()=>{options=preset($('tailMotionPreset').value);$('tailMotionSecondary').value=options.secondary*100;paint();};
+$('tailMotionSecondary').oninput=()=>{options={...options,secondary:Number($('tailMotionSecondary').value)/100};paint();};
+$('tailMotionTime').oninput=()=>{seconds=Number($('tailMotionTime').value)/10;paint();};
+$('tailMotionPlay').onclick=()=>{if(reduce.matches){$('tailMotionStatus').textContent='Анимация отключена системной настройкой уменьшения движения.';return;}playing=!playing;last=null;$('tailMotionPlay').setAttribute('aria-pressed',String(playing));$('tailMotionPlay').textContent=playing?'Пауза':'Воспроизвести';};
+$('tailMotionStop').onclick=()=>{stop();seconds=0;options=preset('still');$('tailMotionPreset').value='still';$('tailMotionSecondary').value=options.secondary*100;paint();$('tailMotionStatus').textContent='Предпросмотр остановлен.';};
+function frame(ts){if(playing&&!document.hidden&&!reduce.matches){if(last!==null)seconds=(seconds+Math.min((ts-last)/1000,.05))%10;last=ts;paint();}else last=null;raf=requestAnimationFrame(frame);}
+if(reduce.addEventListener)reduce.addEventListener('change',e=>{if(e.matches){stop();options=preset('still');$('tailMotionPreset').value='still';paint();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',()=>cancelAnimationFrame(raf),{once:true});raf=requestAnimationFrame(frame);paint();return {get options(){return {...options};},get seconds(){return seconds;}};}
+return {COUNT,preset,validate,angle,sample,mount};
+});
+if(typeof window!=='undefined')window.ReikaTailMotionController=window.ReikaTailMotion.mount();
