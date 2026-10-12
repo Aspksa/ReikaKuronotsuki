@@ -2,7 +2,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ReikaVoicePersona=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
 const LIMIT=500;const MODES=['gentle','playful','composed'];const MOODS=['neutral','happy','thinking','magic','serious'];
 function clean(s){return String(s??'').trim().slice(0,LIMIT);}
-function profile(name){if(!MODES.includes(name))throw new RangeError('Unknown voice style');return {style:name,rate:name==='playful'?1.15:name==='composed'?.85:1,pitch:name==='playful'?1.15:name==='composed'?.9:1};}
+function profile(name){if(!MODES.includes(name))throw new RangeError('Unknown voice style');return {style:name,rate:name==='playful'?1.2:name==='composed'?.85:1,pitch:name==='playful'?1.2:name==='composed'?.9:1};}
 function normalize(value){if(!value||typeof value!=='object')throw new TypeError('Invalid voice config');const p=profile(value.style||'gentle');const rate=value.rate??p.rate,pitch=value.pitch??p.pitch;if(!Number.isFinite(rate)||rate<.7||rate>1.4||!Number.isFinite(pitch)||pitch<.7||pitch>1.3)throw new RangeError('Invalid voice parameters');return {style:p.style,rate,pitch};}
 function express(mood){if(!MOODS.includes(mood))mood='neutral';return {neutral:'gentle',happy:'playful',thinking:'composed',magic:'playful',serious:'composed'}[mood];}
 function sampleSpeech(text){const words=clean(text).split(/\s+/).filter(Boolean);return {characters:clean(text).length,words:words.length,estimatedSeconds:Math.round((words.length/2.6+0.5)*10)/10};}
