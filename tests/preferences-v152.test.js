@@ -17,3 +17,8 @@ test('v149 long text bounded',()=>assert.ok(p.pauseUnits('a'.repeat(1000)).map(x
 test('v150 mouth motion cue valid',()=>assert.ok(p.cue('Привет',0)>=0));
 test('v151 mouth cue pauses periodically',()=>assert.equal(p.cue('Привет',310),0));
 test('v152 invalid time produces neutral cue',()=>assert.equal(p.cue('Привет',NaN),0));
+
+const speech=require('../prototype/speech.js');
+test('voice selection prioritizes explicit browser voice',()=>{const voices=[{voiceURI:'ru',lang:'ru-RU'},{voiceURI:'en',lang:'en-US'}];assert.equal(speech.chooseVoice(voices,'en').voiceURI,'en');});
+test('voice selection prefers Russian automatically',()=>{assert.equal(speech.chooseVoice([{voiceURI:'en',lang:'en-US'},{voiceURI:'ru',lang:'ru-RU'}]).voiceURI,'ru');});
+test('voice selection handles missing Russian voice',()=>assert.equal(speech.chooseVoice([{voiceURI:'en',lang:'en-US'}]),null));
