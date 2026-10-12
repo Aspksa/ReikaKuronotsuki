@@ -30,6 +30,7 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual(edge["layers"]["tail_1"]["border_occupied_pixels"],124)
                 self.assertFalse(manifest["alpha_checks_pass"])
                 self.assertEqual(manifest["alpha_pixel_loss_by_layer"]["tail_1"],0)
+                self.assertEqual(manifest["alpha_erased_pixel_fraction_by_layer"]["tail_1"],0)
             with self.assertRaises(ValueError):build(inp,base/"another",require_complete=True)
     def test_reject_destructive_cleaning(self):
         with tempfile.TemporaryDirectory() as td:
@@ -45,6 +46,16 @@ class PipelineTests(unittest.TestCase):
             base=Path(td)
             with self.assertRaisesRegex(ValueError,"max_alpha_loss"):
                 build(base,base/"output",max_alpha_loss=1.5)
+    def test_removed_detail_not_hidden_by_feathered_new_pixels(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td);src=base/"source";src.mkdir()
+            image=Image.new("RGBA",(25,25),(255,255,255,0))
+            for y in range(9,14):
+                for x in range(9,14):image.putpixel((x,y),(255,255,255,255))
+            image.putpixel((23,23),(255,255,255,255))
+            image.save(src/"reika_tail_1.png")
+            with self.assertRaisesRegex(ValueError,"cleanup removed"):
+                build(src,base/"out",median=3,feather=1,max_alpha_loss=.02)
     def test_refuse_in_source_directory(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
