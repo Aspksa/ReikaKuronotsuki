@@ -41,7 +41,18 @@ function readBody(req) {
   });
 }
 
-function createApp({ webRoot, dataDir }) {
+// The server is for this computer only. Host/Origin checks stop other web pages in the user's browser from
+// driving it (CSRF) and DNS-rebinding tricks: an update can be installed through this API.
+function requestAllowed(req) {
+  const host = req.headers.host || '';
+  if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)) return false;
+  if (req.method === 'GET' || req.method === 'HEAD') return true;
+  const origin = req.headers.origin;
+  if (!origin) return true; // not a browser cross-site request (curl, tests, same-origin without header)
+  try { return new URL(origin).host === host; } catch { return false; }
+}
+
+function createApp({ webRoot, dataDir, updater = null, restart = () => false }) {
   const store = core.createStore(dataDir);
   const root = path.resolve(webRoot);
 
@@ -59,10 +70,46 @@ function createApp({ webRoot, dataDir }) {
     });
   }
 
+  async function handleUpdate(req, res, url) {
+    if (!updater) return sendJson(res, 503, { error: 'Модуль обновления недоступен' });
+    const route = url.pathname.slice('/api/update/'.length);
+    const fail = (error) => sendJson(res, error.status || 409, { error: error.message });
+    const body = async () => { try { return JSON.parse((await readBody(req)) || '{}'); } catch (e) { throw Object.assign(new Error(e.status === 413 ? 'Слишком большой запрос' : 'Некорректный JSON'), { status: e.status || 400 }); } };
+    try {
+      if (req.method === 'GET') {
+        if (route === 'status') return sendJson(res, 200, updater.status());
+        if (route === 'events') return sendJson(res, 200, await updater.events());
+        if (route === 'history') return sendJson(res, 200, await updater.history());
+        return sendJson(res, 404, { error: 'Не найдено' });
+      }
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' });
+      if (route === 'check') return sendJson(res, 200, await updater.check());
+      if (route === 'download') {
+        if (updater.isBusy()) return sendJson(res, 409, { error: 'Обновление уже выполняется' });
+        updater.start().catch(() => {});
+        return sendJson(res, 202, updater.status());
+      }
+      if (route === 'cancel') return sendJson(res, 200, updater.cancel());
+      if (route === 'settings') { await updater.setConfig(await body()); return sendJson(res, 200, updater.status()); }
+      if (route === 'confirm-removals') return sendJson(res, 200, await updater.confirmRemovals());
+      if (route === 'rollback') { const b = await body(); return sendJson(res, 200, b.cancel === true ? await updater.cancelRollback() : await updater.requestRollback()); }
+      if (route === 'install-now') {
+        const st = updater.status();
+        if (updater.isBusy()) return sendJson(res, 409, { error: 'Подготовка обновления ещё идёт' });
+        if (st.phase !== 'ready' && !st.rollbackPending) return sendJson(res, 409, { error: 'Нет подготовленного обновления или отката' });
+        if (!restart()) return sendJson(res, 409, { error: 'Рэйка запущена без лаунчера: закройте и откройте её снова вручную' });
+        return sendJson(res, 202, { restarting: true });
+      }
+      return sendJson(res, 404, { error: 'Не найдено' });
+    } catch (error) { return fail(error); }
+  }
+
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    if (!requestAllowed(req)) return sendJson(res, 403, { error: 'Запрос отклонён' });
     try {
-      if (url.pathname === '/api/health' && req.method === 'GET') return sendJson(res, 200, { ok: true, name: 'Reika Kuronotsuki' });
+      if (url.pathname === '/api/health' && req.method === 'GET') return sendJson(res, 200, { ok: true, name: 'Reika Kuronotsuki', version: updater ? updater.localVersion() : null });
+      if (url.pathname.startsWith('/api/update/')) return handleUpdate(req, res, url);
       if (url.pathname === '/api/history') {
         if (req.method === 'GET') return sendJson(res, 200, { messages: store.all() });
         if (req.method === 'DELETE') { store.clear(); return sendJson(res, 200, { ok: true }); }

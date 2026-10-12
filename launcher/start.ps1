@@ -75,7 +75,7 @@ if (-not $created) {
 $node = Get-NodeOrInstall
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $node
-$psi.Arguments = '"' + (Join-Path $root 'server\main.js') + '"'
+$psi.Arguments = '"' + (Join-Path $root 'launcher\boot.js') + '"'
 $psi.WorkingDirectory = $root
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true

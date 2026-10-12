@@ -15,6 +15,7 @@
       <h1>Рэйка Куроноцуки</h1>
       <p id="mood">Спокойствие</p><p id="mode" class="mode" hidden>Работает в браузере: история хранится на этом устройстве</p>
     </div>
+    <button id="open-update" class="ghost" type="button" hidden>Обновление</button>
     <button id="clear" class="ghost" type="button" aria-label="Очистить историю">Очистить</button>
   </header>
   <main id="log" class="log" aria-live="polite"></main>
@@ -24,7 +25,33 @@
     <button id="send" type="submit">Отправить</button>
   </form>
 </div>
+<dialog id="update-dialog" class="update">
+  <form method="dialog" class="update-head"><h2>Обновление проекта</h2><button class="ghost" aria-label="Закрыть">✕</button></form>
+  <p class="muted">Источник: github.com/Aspksa/ReikaKuronotsuki · установлено: <b id="up-local">…</b> · доступно: <b id="up-latest">—</b></p>
+  <p id="up-blocked" class="warn" hidden></p>
+  <ol class="route" aria-label="Маршрут обновления">
+    <li id="node-github">GitHub</li><li class="lane"><span id="fly" class="fly" hidden></span></li>
+    <li id="node-check">Проверка</li><li class="lane"></li><li id="node-project">Проект</li>
+  </ol>
+  <div class="bar"><div id="up-bar"></div></div>
+  <p id="up-message" class="muted">Ожидание</p>
+  <p id="up-error" class="warn" hidden></p>
+  <ul id="up-checks" class="checks"></ul>
+  <div id="up-removals" class="removals" hidden>
+    <p>Новая версия удаляет файлы. Они будут удалены только после вашего подтверждения:</p>
+    <ul id="up-removals-list"></ul><button id="up-confirm" type="button">Подтвердить удаление</button>
+  </div>
+  <div class="actions">
+    <button id="up-check" type="button">Проверить</button><button id="up-download" type="button">Скачать и проверить</button>
+    <button id="up-cancel" type="button" hidden>Отмена</button><button id="up-install" type="button" hidden>Установить и перезапустить</button>
+  </div>
+  <label class="row">Канал <select id="up-channel"><option value="fresh">Свежий (последние изменения)</option><option value="stable">Стабильный (последний выпуск)</option></select></label>
+  <label class="row">Автопроверка <select id="up-auto"><option value="hourly">Раз в час</option><option value="daily">Раз в сутки</option><option value="off">Отключена</option></select></label>
+  <h3>История</h3><ul id="up-history" class="history"></ul>
+  <button id="up-rollback" type="button" class="ghost" hidden>Откатить последнюю установку</button>
+</dialog>
 <script src="reika-chat.js"></script>
 <script src="app.js"></script>
+<script src="update.js"></script>
 </body>
 </html>

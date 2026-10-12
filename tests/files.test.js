@@ -46,6 +46,7 @@ test('PowerShell launcher has a UTF-8 BOM (Windows PowerShell 5.1 reads Cyrillic
   assert.match(text, /[А-Яа-я]/);
   assert.match(text, /NotifyIcon/);
   assert.match(text, /tests\\run\.js/);
+  assert.match(text, /launcher\\boot\.js/, 'the tray starts the supervisor, which installs prepared updates');
 });
 
 test('launcher never uses absolute drive paths (portable on any medium)', () => {

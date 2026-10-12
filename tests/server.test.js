@@ -80,3 +80,19 @@ test('only expected methods are allowed', () => withServer(async (base) => {
   assert.equal((await fetch(`${base}/api/chat`)).status, 405);
   assert.equal((await fetch(`${base}/`, { method: 'POST' })).status, 405);
 }));
+
+test('rejects foreign Host and cross-site Origin (CSRF / DNS rebinding) but allows same-origin', () => withServer(async (base) => {
+  const { port } = new URL(base);
+  const send = (method, headers) => new Promise((resolve) => {
+    const req = http.request({ host: '127.0.0.1', port, path: '/api/history', method, headers }, (r) => { r.resume(); resolve(r.statusCode); });
+    req.end();
+  });
+  assert.equal(await send('DELETE', { Host: `evil.example:${port}` }), 403, 'rebinding host');
+  assert.equal(await send('DELETE', { Host: `127.0.0.1:${port}`, Origin: 'https://evil.example' }), 403, 'cross-site origin');
+  assert.equal(await send('DELETE', { Host: `127.0.0.1:${port}`, Origin: `http://127.0.0.1:${port}` }), 200, 'same origin');
+  assert.equal(await send('DELETE', { Host: `localhost:${port}` }), 200, 'no Origin (curl)');
+}));
+
+test('update API answers 503 when no updater is attached', () => withServer(async (base) => {
+  assert.equal((await fetch(`${base}/api/update/status`)).status, 503);
+}));
