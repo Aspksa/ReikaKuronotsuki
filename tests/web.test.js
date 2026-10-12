@@ -43,3 +43,23 @@ test('every file the page references exists', () => {
   const html = read('index.html');
   for (const [, ref] of html.matchAll(/(?:src|href)="([^"#:]+)"/g)) assert.ok(fs.existsSync(path.join(web, ref)), `${ref} is missing`);
 });
+
+test('every element id used by the page scripts exists in index.html (menu, update dialog, chat)', () => {
+  const html = read('index.html');
+  const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
+  for (const file of ['app.js', 'update.js', 'menu.js']) {
+    const code = read(file);
+    const used = [...code.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]).concat([...code.matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]));
+    for (const id of used) assert.ok(ids.has(id), `${file} uses #${id} but index.html has no such element`);
+  }
+});
+
+test('the menu holds the update entry and the history clearing; the old header buttons are gone', () => {
+  const html = read('index.html');
+  const menu = html.slice(html.indexOf('id="menu"'), html.indexOf('</div>', html.indexOf('id="menu"')));
+  assert.match(menu, /id="menu-update"/);
+  assert.match(menu, /id="menu-clear"/);
+  assert.ok(!/id="open-update"|id="clear"/.test(html));
+  assert.ok(html.indexOf('menu.js') > 0 && html.indexOf('menu.js') > html.indexOf('update.js'));
+  assert.match(html, /id="menu-update"[^>]*hidden/, 'the update entry stays hidden until a server answers');
+});

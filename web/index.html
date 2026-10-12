@@ -15,8 +15,14 @@
       <h1>Рэйка Куроноцуки</h1>
       <p id="mood">Спокойствие</p><p id="mode" class="mode" hidden>Работает в браузере: история хранится на этом устройстве</p>
     </div>
-    <button id="open-update" class="ghost" type="button" hidden>Обновление</button>
-    <button id="clear" class="ghost" type="button" aria-label="Очистить историю">Очистить</button>
+    <div class="menu-wrap">
+      <button id="menu-btn" class="ghost" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="menu" aria-label="Меню">☰ Меню</button>
+      <div id="menu" class="menu" role="menu" hidden>
+        <p id="menu-mode" class="menu-note"></p>
+        <button id="menu-update" role="menuitem" type="button" hidden>⟳ Обновление проекта</button>
+        <button id="menu-clear" role="menuitem" type="button">🗑 Очистить историю чата</button>
+      </div>
+    </div>
   </header>
   <main id="log" class="log" aria-live="polite"></main>
   <form id="form" class="composer" autocomplete="off">
@@ -53,5 +59,6 @@
 <script src="reika-chat.js"></script>
 <script src="app.js"></script>
 <script src="update.js"></script>
+<script src="menu.js"></script>
 </body>
 </html>

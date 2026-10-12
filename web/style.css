@@ -45,3 +45,11 @@ button:disabled { opacity: .5; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0; font-size: .9rem; }
 .row select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
 .history li { padding: 4px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+
+.menu-wrap { position: relative; }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 250px; z-index: 5; background: var(--panel); border: 1px solid var(--gold); border-radius: 12px; padding: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+.menu[hidden] { display: none; }
+.menu button { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--text); padding: 10px 12px; border-radius: 8px; font: inherit; cursor: pointer; }
+.menu button:hover, .menu button:focus-visible { background: var(--user); outline: none; }
+.menu button[hidden] { display: none; }
+.menu-note { margin: 4px 12px 6px; font-size: .75rem; color: var(--muted); }

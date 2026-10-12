@@ -81,8 +81,8 @@
     const wait = setInterval(async () => { try { const r = await fetch('api/health', { cache: 'no-store' }); if (r.ok) { clearInterval(wait); location.reload(); } } catch { /* restarting */ } }, 1000);
   }
 
-  $('open-update').addEventListener('click', () => { dialog.showModal(); refresh(); refreshHistory(); });
+  $('menu-update').addEventListener('click', () => { dialog.showModal(); refresh(); refreshHistory(); });
   dialog.addEventListener('close', () => clearTimeout(timer));
   // The button appears only when the updater is reachable (local server mode).
-  fetch('api/update/status').then((r) => { if (r.ok) $('open-update').hidden = false; }).catch(() => {});
+  fetch('api/update/status').then((r) => { if (r.ok) $('menu-update').hidden = false; }).catch(() => {});
 })();
