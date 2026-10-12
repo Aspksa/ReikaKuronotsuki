@@ -1,0 +1,17 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const m=require('../prototype/interaction-v70.js');
+test('v57 Russian greetings produce happy emotion',()=>assert.equal(m.classify('Привет, Рэйка!'),'happy'));
+test('v58 question maps to thinking',()=>assert.equal(m.classify('Что ты умеешь?'),'thinking'));
+test('v59 magic and tails map to magic',()=>assert.equal(m.classify('Девять хвостов'),'magic'));
+test('v60 concern gets serious priority',()=>assert.equal(m.classify('Помоги, мне страшно'),'serious'));
+test('v61 unmatched and empty stay neutral',()=>{assert.equal(m.classify(''), 'neutral');assert.equal(m.classify('карамель'),'neutral');});
+test('v62 temporary reaction expires',()=>{const c=m.createController();c.onReply('Привет',100);assert.equal(c.getMood('neutral',200),'happy');assert.equal(c.getMood('neutral',5601),'neutral');});
+test('v63 manual mood auto opt out',()=>{const c=m.createController();c.setAuto(false);c.onReply('Привет',100);assert.equal(c.getMood('serious',200),'serious');});
+test('v64 clear reaction',()=>{const c=m.createController();c.onReply('Привет',100);c.clear();assert.equal(c.getMood('neutral',200),'neutral');});
+test('v65 mouth rhythm remains closed without speech',()=>assert.equal(m.speakingOpen(100,false),false));
+test('v66 speaking mouth has varied rhythm',()=>{assert.equal(m.speakingOpen(0,true),true);assert.equal(m.speakingOpen(310,true),false);});
+test('v67 disabled lip animation',()=>assert.equal(m.speakingOpen(0,true,false),false));
+test('v68 negative and invalid times handled',()=>{assert.equal(m.speakingOpen(NaN,true),false);assert.equal(m.speakingOpen(-99,true),true);});
+test('v69 invalid manual mood falls back to neutral',()=>assert.equal(m.validateMood('alien'),'neutral'));
+test('v70 emotion controller isolates instances',()=>{const a=m.createController(),b=m.createController();a.onReply('Привет',1);assert.equal(b.getMood('neutral',2),'neutral');});
