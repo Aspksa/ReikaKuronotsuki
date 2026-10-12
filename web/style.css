@@ -21,3 +21,27 @@ button:disabled { opacity: .5; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (prefers-reduced-motion: no-preference) { .msg { animation: pop .18s ease-out; } @keyframes pop { from { opacity: 0; transform: translateY(6px); } } }
 .mode { font-size: .72rem !important; color: var(--gold) !important; }
+
+.update { width: min(560px, 94vw); max-height: 90vh; overflow: auto; background: var(--panel); color: var(--text); border: 1px solid var(--gold); border-radius: 14px; padding: 16px; }
+.update::backdrop { background: rgba(0, 0, 0, .6); }
+.update-head { display: flex; justify-content: space-between; align-items: center; margin: 0; }
+.update h2, .update h3 { margin: 0 0 8px; color: var(--gold); font-size: 1.05rem; }
+.muted { color: var(--muted); font-size: .85rem; margin: 6px 0; }
+.warn { color: #f2a28b; font-size: .9rem; margin: 6px 0; }
+.route { list-style: none; display: flex; align-items: center; padding: 0; margin: 14px 0 8px; }
+.route li:not(.lane) { padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: .85rem; }
+.route li.on { border-color: var(--gold); color: var(--gold); }
+.route .lane { flex: 1; height: 2px; background: var(--line); position: relative; }
+.fly { position: absolute; top: -9px; left: 0; width: 20px; height: 20px; border-radius: 4px; background: var(--gold); animation: fly 1.2s linear infinite; }
+@keyframes fly { to { left: calc(100% - 20px); } }
+@media (prefers-reduced-motion: reduce) { .fly { animation: none; left: 40%; } }
+.bar { height: 8px; background: var(--bg); border-radius: 8px; overflow: hidden; }
+#up-bar { height: 100%; width: 0; background: var(--gold); transition: width .2s; }
+.checks, .history, .removals ul { list-style: none; padding: 0; margin: 8px 0; font-size: .85rem; }
+.checks li::before { content: '○ '; } .checks li.active::before { content: '◔ '; color: var(--gold); } .checks li.done::before { content: '✔ '; color: #8fd3a0; } .checks li.error::before { content: '✖ '; color: #f2a28b; }
+.removals li { color: #f2a28b; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.actions button, .removals button { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--gold); color: #1b1620; font-weight: 600; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0; font-size: .9rem; }
+.row select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.history li { padding: 4px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
