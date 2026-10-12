@@ -75,6 +75,20 @@ class PipelineTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'max_alpha_loss'):
                     build(base,base/'output',max_alpha_loss=value)
             self.assertFalse((base/'output').exists())
+    def test_precision_guard_uses_unrounded_fraction(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td);src=base/"source";src.mkdir()
+            image=Image.new("RGBA",(24,24),(255,255,255,0))
+            for y in range(5,13):
+                for x in range(5,12):
+                    image.putpixel((x,y),(255,255,255,255))
+            image.putpixel((20,20),(255,255,255,255))
+            image.save(src/"reika_tail_1.png")
+            # Median filtering removes four rectangular corners and one
+            # isolated pixel: 5/57, which rounds down at six decimals.
+            with self.assertRaisesRegex(ValueError,"cleanup removed"):
+                build(src,base/"output",median=3,feather=0,max_alpha_loss=.0877191)
+            self.assertFalse((base/"output").exists())
     def test_refuse_in_source_directory(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
