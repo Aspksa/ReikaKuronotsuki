@@ -18,7 +18,7 @@ $('tailMotionPlay').onclick=()=>{if(reduce.matches){$('tailMotionStatus').textCo
 $('tailMotionStop').onclick=()=>{stop();seconds=0;options=preset('still');$('tailMotionPreset').value='still';$('tailMotionSecondary').value=options.secondary*100;paint();$('tailMotionStatus').textContent='Предпросмотр остановлен.';};
 function frame(ts){if(playing&&!document.hidden&&!reduce.matches){if(last!==null)seconds=(seconds+Math.min((ts-last)/1000,.05))%10;last=ts;paint();}else last=null;raf=requestAnimationFrame(frame);}
 if(reduce.addEventListener)reduce.addEventListener('change',e=>{if(e.matches){stop();options=preset('still');$('tailMotionPreset').value='still';paint();}});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',()=>cancelAnimationFrame(raf),{once:true});raf=requestAnimationFrame(frame);paint();return {get options(){return {...options};},get seconds(){return seconds;}};}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',()=>cancelAnimationFrame(raf),{once:true});raf=requestAnimationFrame(frame);paint();return {active:true,get options(){return {...options};},get seconds(){return seconds;}};}
 return {COUNT,preset,validate,angle,sample,mount};
 });
 if(typeof window!=='undefined')window.ReikaTailMotionController=window.ReikaTailMotion.mount();
