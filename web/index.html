@@ -36,26 +36,19 @@
   </aside>
 
   <main class="content" id="content">
-    <section class="page" id="page-home" data-page="home" aria-labelledby="home-title">
-      <div class="hero">
-        <div class="hero-text">
-          <p class="eyebrow">REIKA KURONOTSUKI · 黒ノ月 麗華</p>
-          <h1 id="home-title">Рэйка<br>Куроноцуки</h1>
-          <p class="lead">Твоя виртуальная спутница — девятихвостая кицунэ. Серебряные волосы, лунный дворец и тихий голос, который всегда рядом.</p>
-          <div class="hero-actions">
-            <button id="hero-chat" class="primary" type="button">Открыть чат</button>
-            <a class="secondary" href="#/update" id="hero-update" hidden>Обновление проекта</a>
-          </div>
-          <p class="hint">Круглый логотип в углу — это чат. Его можно перетащить в любое место, он будет на всех страницах.</p>
-          <ul class="cards">
-            <li><span class="card-k">Режим</span><b id="card-mode">—</b></li>
-            <li><span class="card-k">Версия</span><b id="card-version">—</b></li>
-            <li><span class="card-k">Обновления</span><b id="card-update">—</b></li>
-          </ul>
+    <section class="page" id="page-home" data-page="home" aria-label="Главная">
+      <h1 class="sr">Главная</h1>
+      <div class="home">
+        <div class="hero-actions">
+          <button id="hero-chat" class="primary" type="button">Открыть чат</button>
+          <a class="secondary" href="#/update" id="hero-update" hidden>Обновление проекта</a>
         </div>
-        <figure class="art">
-          <div class="art-frame"><img src="assets/reika.jpg" alt="Рэйка Куроноцуки: девятихвостая кицунэ с серебряными волосами и голубыми глазами в чёрно-белом наряде с красными кистями" width="1086" height="1448"></div>
-        </figure>
+        <p class="hint">Круглый логотип в углу — это чат. Его можно перетащить в любое место, он будет на всех страницах.</p>
+        <ul class="cards">
+          <li><span class="card-k">Режим</span><b id="card-mode">—</b></li>
+          <li><span class="card-k">Версия</span><b id="card-version">—</b></li>
+          <li><span class="card-k">Обновления</span><b id="card-update">—</b></li>
+        </ul>
       </div>
     </section>
 
@@ -118,20 +111,25 @@
 </button>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-  <defs>
-    <radialGradient id="g-moon" cx="38%" cy="32%" r="80%"><stop offset="0" stop-color="#fffdf8"/><stop offset="1" stop-color="#d4d7e6"/></radialGradient>
-    <symbol id="reika-logo" viewBox="0 0 64 64">
-      <circle cx="32" cy="32" r="30" fill="#0f1020" stroke="#d8b46a" stroke-width="2"/>
-      <path d="M14 30 L17 8 L31 19Z" fill="#fdf7f4" stroke="#d8b46a" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M50 30 L47 8 L33 19Z" fill="#fdf7f4" stroke="#d8b46a" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M19 24 L20 14 L27 20Z M45 24 L44 14 L37 20Z" fill="#e5a9b5"/>
-      <circle cx="32" cy="36" r="19" fill="url(#g-moon)"/>
-      <ellipse cx="25.5" cy="35" rx="3" ry="4.2" fill="#6fb7ff"/><ellipse cx="38.5" cy="35" rx="3" ry="4.2" fill="#6fb7ff"/>
-      <circle cx="24.6" cy="33.4" r="1.1" fill="#fff"/><circle cx="37.6" cy="33.4" r="1.1" fill="#fff"/>
-      <path d="M29.5 43 Q32 45.5 34.5 43" fill="none" stroke="#b3223f" stroke-width="1.6" stroke-linecap="round"/>
-      <path d="M32 55 V60" stroke="#b3223f" stroke-width="2" stroke-linecap="round"/><circle cx="32" cy="60.5" r="2" fill="#b3223f"/>
-    </symbol>
-  </defs>
+  <symbol id="reika-logo" viewBox="0 0 64 64" data-logo="black-moon-v2">
+<defs>
+<radialGradient id="rl-bg" cx="50%" cy="38%" r="70%"><stop offset="0" stop-color="#262245"/><stop offset="1" stop-color="#0b0b17"/></radialGradient>
+<linearGradient id="rl-fur" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#c9ccdc"/><stop offset=".55" stop-color="#f4f2f6"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+<radialGradient id="rl-corona" cx="50%" cy="50%" r="50%"><stop offset=".78" stop-color="#fffdf8" stop-opacity=".0"/><stop offset=".9" stop-color="#fffdf8" stop-opacity=".55"/><stop offset="1" stop-color="#fffdf8" stop-opacity="0"/></radialGradient>
+<clipPath id="rl-clip"><circle cx="32" cy="32" r="28.6"/></clipPath>
+</defs>
+<circle cx="32" cy="32" r="30" fill="url(#rl-bg)" stroke="#d8b46a" stroke-width="1.6"/>
+<g clip-path="url(#rl-clip)"><path d="M32 50 C27.4 41.45 29.47 34.42 32 31 C34.53 34.42 36.6 41.45 32 50Z" transform="rotate(-80 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C26.8 38.75 29.14 29.5 32 25 C34.86 29.5 37.2 38.75 32 50Z" transform="rotate(-60 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C26.2 36.5 28.81 25.4 32 20 C35.19 25.4 37.8 36.5 32 50Z" transform="rotate(-40 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C25.8 34.25 28.59 21.3 32 15 C35.410000000000004 21.3 38.2 34.25 32 50Z" transform="rotate(-20 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C25.4 32.0 28.37 17.2 32 10 C35.63 17.2 38.6 32.0 32 50Z" transform="rotate(0 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C25.8 34.25 28.59 21.3 32 15 C35.410000000000004 21.3 38.2 34.25 32 50Z" transform="rotate(20 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C26.2 36.5 28.81 25.4 32 20 C35.19 25.4 37.8 36.5 32 50Z" transform="rotate(40 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C26.8 38.75 29.14 29.5 32 25 C34.86 29.5 37.2 38.75 32 50Z" transform="rotate(60 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C27.4 41.45 29.47 34.42 32 31 C34.53 34.42 36.6 41.45 32 50Z" transform="rotate(80 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/></g>
+<circle cx="32" cy="35" r="19" fill="url(#rl-corona)"/>
+<circle cx="32" cy="35" r="13.2" fill="#06060d" stroke="#fffdf8" stroke-width="1.1"/>
+<path d="M17.8 30 L19.2 10 L29.6 21.2Z" fill="#f7f4f8" stroke="#d8b46a" stroke-width="1.1" stroke-linejoin="round"/>
+<path d="M46.2 30 L44.8 10 L34.4 21.2Z" fill="#f7f4f8" stroke="#d8b46a" stroke-width="1.1" stroke-linejoin="round"/>
+<path d="M21.2 26 L21.5 15 L27.8 21.6Z M42.8 26 L42.5 15 L36.2 21.6Z" fill="#c8203a"/>
+<ellipse cx="27.3" cy="35.5" rx="2" ry="3" fill="#7cc2ff"/><ellipse cx="36.7" cy="35.5" rx="2" ry="3" fill="#7cc2ff"/>
+<circle cx="26.6" cy="34.2" r=".8" fill="#fff"/><circle cx="36" cy="34.2" r=".8" fill="#fff"/>
+<g transform="translate(47.6 17.6) scale(.92)"><circle r="3.6" fill="#fffdf8"/><circle cx="0" cy="-2.4" r="1.7" fill="#c8203a"/><circle cx="2.3" cy="-.7" r="1.7" fill="#c8203a"/><circle cx="1.4" cy="2" r="1.7" fill="#c8203a"/><circle cx="-1.4" cy="2" r="1.7" fill="#c8203a"/><circle cx="-2.3" cy="-.7" r="1.7" fill="#c8203a"/><circle r="1" fill="#d8b46a"/></g>
+<path d="M32 48.2 V53.5" stroke="#c8203a" stroke-width="1.5" stroke-linecap="round"/><path d="M30.1 53.5 H33.9 L34.5 58.6 H29.5Z" fill="#c8203a"/><circle cx="32" cy="51.6" r="1.2" fill="#d8b46a"/>
+  </symbol>
 </svg>
 
 <script src="reika-chat.js"></script>
