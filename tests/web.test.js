@@ -77,12 +77,32 @@ test('the chat opens from the floating logo: hidden panel, draggable orb with ke
   assert.ok(html.indexOf('orb.js') > html.indexOf('app.js'));
 });
 
-test('the artwork used by the home page and the chat avatar exists and is a reasonable size', () => {
+test('the home page has no names/titles and no picture; the artwork is only the chat avatar', () => {
+  const html = read('index.html');
+  const home = html.slice(html.indexOf('id="page-home"'), html.indexOf('id="page-update"'));
+  assert.ok(!/<img\b/.test(home), 'no picture on the home page');
+  assert.ok(!/eyebrow|class="lead"|class="art/.test(home), 'no visible names or taglines on the home page');
+  assert.match(home, /<h1 class="sr">/, 'the page keeps a heading for screen readers only');
+  assert.ok(!/assets\/reika\.jpg/.test(html), 'index.html no longer shows the artwork');
   const file = path.join(web, 'assets', 'reika.jpg');
-  assert.ok(fs.existsSync(file));
-  assert.ok(fs.statSync(file).size < 1_500_000, 'keep the repository light');
-  assert.match(read('index.html'), /assets\/reika\.jpg/);
+  assert.ok(fs.existsSync(file) && fs.statSync(file).size < 1_500_000, 'the avatar image exists and stays light');
   assert.match(read('style.css'), /assets\/reika\.jpg/);
+});
+
+test('one logo ("Black Moon": eclipse, fox ears, nine tails, red tassel) is used everywhere and the favicon is the same drawing', () => {
+  const html = read('index.html');
+  const symbol = html.slice(html.indexOf('<symbol id="reika-logo"'), html.indexOf('</symbol>'));
+  assert.match(symbol, /data-logo="black-moon-v2"/);
+  assert.equal((symbol.match(/transform="rotate\(/g) || []).length, 9, 'nine tails');
+  assert.ok(html.includes('class="logo"') && html.includes('<use href="#reika-logo"/>'));
+  assert.match(html.slice(html.indexOf('<button id="orb"'), html.indexOf('</button>', html.indexOf('<button id="orb"'))), /#reika-logo/, 'the floating logo uses it');
+  assert.match(html.slice(html.indexOf('class="brand"'), html.indexOf('</nav>')), /#reika-logo/, 'the menu brand uses it');
+  assert.ok(!/g-moon/.test(html), 'no leftovers of the previous logo');
+  const icon = read('icon.svg');
+  assert.match(icon, /data-logo="black-moon-v2"/);
+  const shapes = (text) => [...text.matchAll(/\sd="([^"]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(shapes(icon), shapes(symbol), 'icon.svg must be the same drawing as the inline logo');
+  assert.match(html, /rel="icon" href="icon\.svg"/);
 });
 
 test('motion is optional: petals and glow respect prefers-reduced-motion', () => {

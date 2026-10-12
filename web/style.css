@@ -25,7 +25,7 @@ a { color: inherit; }
     radial-gradient(1.3px 1.3px at 78% 22%, #fff8 99%, transparent), radial-gradient(1px 1px at 90% 70%, #fff5 99%, transparent),
     radial-gradient(1px 1px at 36% 86%, #fff5 99%, transparent), radial-gradient(1.2px 1.2px at 8% 74%, #fff7 99%, transparent),
     linear-gradient(180deg, #0a0b18 0%, #12122a 55%, #1c1226 100%); }
-.moon { position: absolute; width: 46vmin; height: 46vmin; right: 12vw; top: -8vmin; border-radius: 50%;
+.moon { position: absolute; width: 44vmin; height: 44vmin; right: 10vw; top: -26vmin; border-radius: 50%;
   background: radial-gradient(circle at 38% 36%, #fffdf6 0%, #f1ecf2 45%, #cfcfe3 100%);
   box-shadow: 0 0 80px 30px rgba(236, 226, 255, .22), 0 0 220px 90px rgba(150, 140, 220, .12); opacity: .78; }
 .petal { position: absolute; top: -20px; width: var(--size, 10px); height: var(--size, 10px); background: linear-gradient(135deg, var(--sakura), #f7d9e2);
@@ -65,25 +65,17 @@ a { color: inherit; }
 .collapsed .brand { justify-content: center; padding-inline: 0; }
 
 /* ---- home ---- */
-.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(280px, .85fr); gap: clamp(24px, 4vw, 64px); align-items: center; max-width: 1180px; margin: 0 auto; min-height: calc(100vh - 160px); }
-.eyebrow { margin: 0 0 10px; color: var(--gold); letter-spacing: .28em; font-size: .78rem; }
-h1 { margin: 0 0 16px; font: 600 clamp(2.4rem, 5vw, 4.2rem)/1.05 var(--serif); letter-spacing: .01em;
-  background: linear-gradient(180deg, #fffdf9 30%, #e5c6c3); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.lead { margin: 0 0 24px; color: #e3dcea; font-size: 1.08rem; max-width: 34em; }
-.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.home { max-width: 760px; margin: 0 auto; min-height: calc(100vh - 160px); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 18px; }
+.hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .primary, .secondary { display: inline-flex; align-items: center; min-height: 46px; padding: 0 24px; border-radius: 999px; font-weight: 600; text-decoration: none; }
 .primary { border: 0; background: linear-gradient(135deg, #c9304f, #8f1a33); color: var(--pearl); box-shadow: 0 6px 24px rgba(179, 34, 63, .4); }
 .primary:hover { filter: brightness(1.1); }
 .secondary { border: 1px solid var(--gold); color: var(--gold); background: rgba(216, 180, 106, .06); }
-.hint { margin: 0 0 22px; font-size: .85rem; color: var(--muted); }
-.cards { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0; margin: 0; }
+.hint { margin: 0; font-size: .88rem; color: var(--muted); max-width: 34em; }
+.cards { list-style: none; width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0; margin: 6px 0 0; text-align: left; }
 .cards li { padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); backdrop-filter: blur(8px); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .card-k { font-size: .7rem; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); }
 .cards b { font-weight: 600; font-size: .92rem; overflow-wrap: anywhere; }
-.art { margin: 0; justify-self: center; width: 100%; max-width: 440px; }
-.art-frame { position: relative; border-radius: 220px 220px 22px 22px; padding: 7px; background: linear-gradient(180deg, var(--gold), rgba(216, 180, 106, .15) 60%, var(--crimson-deep));
-  box-shadow: 0 0 60px rgba(216, 190, 255, .22), 0 20px 60px rgba(0, 0, 0, .55); }
-.art-frame img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 4; object-fit: cover; object-position: 50% 12%; border-radius: 214px 214px 16px 16px; }
 
 /* ---- update page ---- */
 .page-head { max-width: 760px; margin: 0 auto 14px; }
@@ -147,7 +139,5 @@ button:disabled { opacity: .5; }
 @media (prefers-reduced-motion: no-preference) { .msg { animation: pop .18s ease-out; } @keyframes pop { from { opacity: 0; transform: translateY(6px); } } }
 @media (prefers-reduced-motion: reduce) { .fly { animation: none; left: 40%; } .orb { animation: none; } .shell { transition: none; } }
 @media (max-width: 860px) {
-  .hero { grid-template-columns: 1fr; }
-  .art { order: -1; max-width: 300px; }
   .cards { grid-template-columns: 1fr; }
 }
