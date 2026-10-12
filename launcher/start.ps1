@@ -60,8 +60,10 @@ Add-Type -AssemblyName System.Drawing
 $created = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Local\ReikaKuronotsuki', [ref]$created)
 if (-not $created) {
-    # Already running: just open the chat again.
-    foreach ($port in 8731..8750) {
+    # Already running: just open the chat again (the running copy leaves its address in %TEMP%).
+    $urlFile = Join-Path $env:TEMP 'reika-kuronotsuki.url'
+    if (Test-Path -LiteralPath $urlFile) { Start-Process (Get-Content -LiteralPath $urlFile -Raw).Trim(); exit 0 }
+    foreach ($port in 8731..8780) {
         try {
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/health" -UseBasicParsing -TimeoutSec 1
             if ($r.StatusCode -eq 200) { Start-Process "http://127.0.0.1:$port/"; break }
@@ -94,6 +96,7 @@ if (-not $url) {
     [System.Windows.Forms.MessageBox]::Show('Сервер Рэйки не запустился.', 'Reika Kuronotsuki') | Out-Null
     exit 1
 }
+Set-Content -LiteralPath (Join-Path $env:TEMP 'reika-kuronotsuki.url') -Value $url -Encoding ASCII
 # The server prints only a couple of lines at start-up, so the unread pipe can never fill up.
 
 function New-TrayIcon {
@@ -135,6 +138,7 @@ $tray.ShowBalloonTip(3000)
 try {
     [System.Windows.Forms.Application]::Run($context)
 } finally {
+    Remove-Item -LiteralPath (Join-Path $env:TEMP 'reika-kuronotsuki.url') -ErrorAction SilentlyContinue
     $tray.Visible = $false
     $tray.Dispose()
     if (-not $server.HasExited) { $server.Kill() }
