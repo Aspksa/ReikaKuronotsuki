@@ -10,8 +10,7 @@ test('SVG render, nine tails and controls',async({page})=>{
  await page.locator('#mood').selectOption('magic');
  await expect(page.locator('#status')).toContainText('Магия');
  await page.locator('#tailIndex').selectOption('8');
- await page.locator('#tailOffset').fill('17');
- await page.locator('#tailOffset').dispatchEvent('input');
+ await page.locator('#tailOffset').evaluate(el=>{el.value='17';el.dispatchEvent(new Event('input',{bubbles:true}));});
  await expect.poll(()=>page.locator('#tails > g').nth(8).getAttribute('transform')).toContain('rotate(');
  await page.locator('#toggle').click();
  await expect(page.locator('#toggle')).toHaveAttribute('aria-pressed','true');
