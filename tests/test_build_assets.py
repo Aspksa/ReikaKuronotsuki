@@ -1,4 +1,5 @@
 import json
+import math
 import importlib.util
 import sys
 import tempfile
@@ -67,6 +68,13 @@ class PipelineTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"Refusing to overwrite"):
                 build(inp,output)
             self.assertEqual((output/"keep.txt").read_text(),"unchanged")
+    def test_nonfinite_loss_limit_is_rejected_without_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            for value in (math.nan,math.inf,-math.inf):
+                with self.assertRaisesRegex(ValueError,'max_alpha_loss'):
+                    build(base,base/'output',max_alpha_loss=value)
+            self.assertFalse((base/'output').exists())
     def test_refuse_in_source_directory(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
