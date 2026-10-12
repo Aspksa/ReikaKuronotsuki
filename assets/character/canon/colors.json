@@ -1,0 +1,19 @@
+{
+  "character": "Reika Kuronotsuki",
+  "version": "1.0",
+  "palette": {
+    "hair_base": "#F1EBE1",
+    "hair_pearl": "#E8E8EE",
+    "tail_base": "#F6F7FA",
+    "tail_shadow": "#D9DDE7",
+    "eye_blue": "#67C9FA",
+    "eye_deep_blue": "#3D7EDB",
+    "skin_base": "#F7E9E2",
+    "fabric_white": "#F7F2E9",
+    "fabric_black": "#19171E",
+    "gold_main": "#C8A35D",
+    "gold_light": "#E7C978",
+    "moonlight": "#C9DFFF",
+    "warm_lantern_reflection": "#F3D8A2"
+  }
+}
