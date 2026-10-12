@@ -15,7 +15,7 @@ section.querySelector('#tailCompFront').onclick=()=>{const i=Number(select.value
 section.querySelector('#tailCompReset').onclick=()=>{state=defaults();paint();sync();status.textContent='Параметры сброшены.';};
 section.querySelector('#tailCompExport').onclick=()=>{const serialized=JSON.stringify({version:35,status:'EXPERIMENTAL_REFERENCE_PLACEMENT',tails:validate(state)},null,2);if(navigator.clipboard?.writeText){navigator.clipboard.writeText(serialized).then(()=>{status.textContent='Параметры скопированы.';},()=>{status.textContent='Не удалось скопировать; используйте защищённый контекст.';});}else status.textContent='Буфер обмена недоступен.';};
 input.addEventListener('change',()=>{urls.forEach(url=>URL.revokeObjectURL(url));urls=[];for(const image of images){image.hidden=true;image.removeAttribute('src');}const files=Array.from(input.files||[]);if(files.length!==COUNT||files.some(file=>file.type!=='image/png'||file.size>20*1024*1024)){status.textContent='Выберите ровно 9 PNG (до 20 МБ каждый).';return;}files.forEach((file,i)=>{const url=URL.createObjectURL(file);urls.push(url);images[i].src=url;images[i].hidden=false;});status.textContent='Загружено 9 PNG для тестовой композиции.';});
-window.addEventListener('pagehide',()=>urls.forEach(url=>URL.revokeObjectURL(url)),{once:true});paint();sync();return {get state(){return validate(state);}};}
+window.addEventListener('pagehide',()=>urls.forEach(url=>URL.revokeObjectURL(url)),{once:true});paint();sync();return {get state(){return validate(state);},setState(next){state=validate(next);paint();sync();}};}
 return {COUNT,defaults,validate,mount};
 });
 if(typeof window!=='undefined')window.ReikaTailCompositionController=window.ReikaTailComposition.mount();

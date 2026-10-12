@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const base=require('../prototype/tail-composition.js'),editor=require('../prototype/tail-editor-v42.js');
+test('v36 save and load nine transforms',()=>{const data=editor.pack(base.defaults());const restored=editor.parse(JSON.stringify(data));assert.deepEqual(restored.tails,JSON.parse(JSON.stringify(base.defaults())));assert.equal(restored.version,42);});
+test('v37 rejects invalid pivot-free transform data',()=>{const data=editor.pack(base.defaults());data.tails[0].x=-3;assert.throws(()=>editor.parse(JSON.stringify(data)),RangeError);});
+test('v38 deterministic swing at zero amplitude',()=>assert.equal(editor.swing(25,2,4,0),25));
+test('v39 zero frequency produces stable time-independent motion',()=>assert.equal(editor.swing(4,2,0,5,0),editor.swing(4,2,30,5,0)));
+test('v40 defaults keep unique order',()=>assert.deepEqual(base.defaults().map(t=>t.z),[1,2,3,4,5,6,7,8,9]));
+test('v41 rejects unsupported and oversized JSON',()=>{assert.throws(()=>editor.parse('{"version":99,"tails":[]}'),RangeError);assert.throws(()=>editor.parse('x'.repeat(20001)),RangeError);});
+test('v42 checks animation settings',()=>{assert.throws(()=>editor.pack(base.defaults(),{amplitude:35}),RangeError);assert.throws(()=>editor.pack(base.defaults(),{frequency:Infinity}),RangeError);});
