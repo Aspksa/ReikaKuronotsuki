@@ -10,9 +10,9 @@
   --crimson: #b3223f; --crimson-hi: #c9304f; --crimson-lo: #8f1a33; --crimson-deep: #5b282e;
   --gold: #d8b46a; --gold-hi: #e3c27c; --gold-lo: #c39a4a; --gold-ink: #20150f;
   --eye: #6fb7ff; --sakura: #f3b8c8; --ok: #8fd3a0; --warn: #f2a28b;
-  --sky-top: #070813; --sky-mid: #10122a; --sky-low: #1b1428; --petal: #f7d9e2;
+  --sky-top: #080a26; --sky-mid: #221650; --sky-low: #4a2262; --sky-horizon: #8a3f7a; --sea-deep: #0c0a28; --petal: #f7d9e2;
   --gold-rgb: 216 180 106; --crimson-rgb: 179 34 63; --pearl-rgb: 253 247 244; --blush-rgb: 229 198 195;
-  --night-rgb: 11 12 22; --moon-rgb: 214 224 255; --black-rgb: 0 0 0;
+  --night-rgb: 11 12 22; --moon-rgb: 255 236 178; --black-rgb: 0 0 0;
 
   /* semantic */
   --bg: var(--night-900);

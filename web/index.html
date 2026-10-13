@@ -3,19 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="color-scheme" content="dark">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/logo/favicon.ico" sizes="any">
 <link rel="stylesheet" href="style.css">
 <title>Reika Kuronotsuki</title>
 </head>
 <body>
 <div class="sky" aria-hidden="true">
   <div class="sky-stars" id="stars"></div>
+  <div class="horizon-glow"></div>
   <div class="moon-stage">
-    <div class="moon-glow"></div><div class="moon-rays"></div><div class="moon-halo"></div>
-    <div class="moon-disc"></div><div class="moon-bloom"></div>
+    <div class="moon-glow"></div><div class="moon-rays"></div><div class="moon-ring moon-ring--a"></div><div class="moon-ring moon-ring--b"></div>
+    <div class="moon-disc"></div><div class="moon-bloom"></div><div class="moon-flare"></div>
   </div>
   <div class="cloud cloud--a"></div><div class="cloud cloud--b"></div>
-  <div class="sky-water"><div class="moon-path"></div></div>
+  <div class="sky-water" id="water">
+    <div class="moon-path"></div>
+    <div class="wave wave--1"></div><div class="wave wave--2"></div><div class="wave wave--3"></div>
+  </div>
   <div class="mist"></div>
   <div id="petals"></div>
   <div class="sky-vignette"></div>
@@ -24,7 +28,7 @@
 <div class="shell" id="shell">
   <aside class="sidebar" id="sidebar" aria-label="Главное меню">
     <div class="brand">
-      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><use href="#reika-logo"/></svg>
+      <img class="logo" src="assets/logo/brand.webp" width="44" height="44" alt="" draggable="false">
       <div class="brand-text"><b>Рэйка</b><small>Куроноцуки</small></div>
     </div>
     <nav class="nav">
@@ -118,31 +122,8 @@
 </section>
 
 <button id="orb" class="orb" type="button" aria-label="Чат с Рэйкой: открыть. Перетащите, чтобы переместить; стрелки двигают" aria-controls="chat-panel" aria-expanded="false" title="Чат с Рэйкой (перетащите, чтобы переместить)">
-  <svg viewBox="0 0 64 64" aria-hidden="true"><use href="#reika-logo"/></svg>
+  <img src="assets/logo/orb.webp" width="64" height="64" alt="" draggable="false">
 </button>
-
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-  <symbol id="reika-logo" viewBox="0 0 64 64" data-logo="black-moon-v2">
-<defs>
-<radialGradient id="rl-bg" cx="50%" cy="38%" r="70%"><stop offset="0" stop-color="#262245"/><stop offset="1" stop-color="#0b0b17"/></radialGradient>
-<linearGradient id="rl-fur" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#c9ccdc"/><stop offset=".55" stop-color="#f4f2f6"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
-<radialGradient id="rl-corona" cx="50%" cy="50%" r="50%"><stop offset=".78" stop-color="#fffdf8" stop-opacity=".0"/><stop offset=".9" stop-color="#fffdf8" stop-opacity=".55"/><stop offset="1" stop-color="#fffdf8" stop-opacity="0"/></radialGradient>
-<clipPath id="rl-clip"><circle cx="32" cy="32" r="28.6"/></clipPath>
-</defs>
-<circle cx="32" cy="32" r="30" fill="url(#rl-bg)" stroke="#d8b46a" stroke-width="1.6"/>
-<g clip-path="url(#rl-clip)"><path d="M32 50 C27.4 41.45 29.47 34.42 32 31 C34.53 34.42 36.6 41.45 32 50Z" transform="rotate(-80 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C26.8 38.75 29.14 29.5 32 25 C34.86 29.5 37.2 38.75 32 50Z" transform="rotate(-60 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C26.2 36.5 28.81 25.4 32 20 C35.19 25.4 37.8 36.5 32 50Z" transform="rotate(-40 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C25.8 34.25 28.59 21.3 32 15 C35.410000000000004 21.3 38.2 34.25 32 50Z" transform="rotate(-20 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C25.4 32.0 28.37 17.2 32 10 C35.63 17.2 38.6 32.0 32 50Z" transform="rotate(0 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C25.8 34.25 28.59 21.3 32 15 C35.410000000000004 21.3 38.2 34.25 32 50Z" transform="rotate(20 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C26.2 36.5 28.81 25.4 32 20 C35.19 25.4 37.8 36.5 32 50Z" transform="rotate(40 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C26.8 38.75 29.14 29.5 32 25 C34.86 29.5 37.2 38.75 32 50Z" transform="rotate(60 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/><path d="M32 50 C27.4 41.45 29.47 34.42 32 31 C34.53 34.42 36.6 41.45 32 50Z" transform="rotate(80 32 50)" fill="url(#rl-fur)" stroke="#d8b46a" stroke-width=".55" stroke-linejoin="round"/></g>
-<circle cx="32" cy="35" r="19" fill="url(#rl-corona)"/>
-<circle cx="32" cy="35" r="13.2" fill="#06060d" stroke="#fffdf8" stroke-width="1.1"/>
-<path d="M17.8 30 L19.2 10 L29.6 21.2Z" fill="#f7f4f8" stroke="#d8b46a" stroke-width="1.1" stroke-linejoin="round"/>
-<path d="M46.2 30 L44.8 10 L34.4 21.2Z" fill="#f7f4f8" stroke="#d8b46a" stroke-width="1.1" stroke-linejoin="round"/>
-<path d="M21.2 26 L21.5 15 L27.8 21.6Z M42.8 26 L42.5 15 L36.2 21.6Z" fill="#c8203a"/>
-<ellipse cx="27.3" cy="35.5" rx="2" ry="3" fill="#7cc2ff"/><ellipse cx="36.7" cy="35.5" rx="2" ry="3" fill="#7cc2ff"/>
-<circle cx="26.6" cy="34.2" r=".8" fill="#fff"/><circle cx="36" cy="34.2" r=".8" fill="#fff"/>
-<g transform="translate(47.6 17.6) scale(.92)"><circle r="3.6" fill="#fffdf8"/><circle cx="0" cy="-2.4" r="1.7" fill="#c8203a"/><circle cx="2.3" cy="-.7" r="1.7" fill="#c8203a"/><circle cx="1.4" cy="2" r="1.7" fill="#c8203a"/><circle cx="-1.4" cy="2" r="1.7" fill="#c8203a"/><circle cx="-2.3" cy="-.7" r="1.7" fill="#c8203a"/><circle r="1" fill="#d8b46a"/></g>
-<path d="M32 48.2 V53.5" stroke="#c8203a" stroke-width="1.5" stroke-linecap="round"/><path d="M30.1 53.5 H33.9 L34.5 58.6 H29.5Z" fill="#c8203a"/><circle cx="32" cy="51.6" r="1.2" fill="#d8b46a"/>
-  </symbol>
-</svg>
-
 <script src="reika-chat.js"></script>
 <script src="app.js"></script>
 <script src="update.js"></script>

@@ -55,19 +55,23 @@
     $('card-version').textContent = v || 'не определена';
   }).catch(() => {});
 
-  window.addEventListener('reika:updater-present', () => {
+  function onUpdaterPresent() {
     updaterPresent = true;
     navUpdate.hidden = false;
     $('hero-update').hidden = false;
     $('card-update').textContent = 'Проверяется…';
     route(); // a direct link to #/update works once the updater is known to exist
-  });
-  window.addEventListener('reika:update-summary', (event) => {
-    const d = event.detail;
+  }
+  function onUpdateSummary(d) {
     $('update-dot').hidden = !d.available;
     $('card-update').textContent = d.available ? (d.phase === 'ready' ? 'Готово к установке' : 'Доступна новая версия') : 'Установлена последняя';
     if (d.version && /^[0-9a-f]{40}$/.test(d.version)) $('card-version').textContent = d.version.slice(0, 8);
-  });
+  }
+  window.addEventListener('reika:updater-present', onUpdaterPresent);
+  window.addEventListener('reika:update-summary', (event) => onUpdateSummary(event.detail));
+  // update.js may have heard from the server before this file loaded: take what it already knows.
+  if (window.ReikaUpdaterPresent) onUpdaterPresent();
+  if (window.ReikaUpdateSummary) onUpdateSummary(window.ReikaUpdateSummary);
 
   route();
 })();

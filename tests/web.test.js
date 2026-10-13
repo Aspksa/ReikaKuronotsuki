@@ -91,20 +91,28 @@ test('the home page has no names/titles and no picture; the artwork is only the 
   assert.match(allCss(), /assets\/reika\.jpg/);
 });
 
-test('one logo ("Black Moon": eclipse, fox ears, nine tails, red tassel) is used everywhere and the favicon is the same drawing', () => {
+test('the supplied logo set is used everywhere: menu, floating logo, favicon and the Windows tray', () => {
   const html = read('index.html');
-  const symbol = html.slice(html.indexOf('<symbol id="reika-logo"'), html.indexOf('</symbol>'));
-  assert.match(symbol, /data-logo="black-moon-v2"/);
-  assert.equal((symbol.match(/transform="rotate\(/g) || []).length, 9, 'nine tails');
-  assert.ok(html.includes('class="logo"') && html.includes('<use href="#reika-logo"/>'));
-  assert.match(html.slice(html.indexOf('<button id="orb"'), html.indexOf('</button>', html.indexOf('<button id="orb"'))), /#reika-logo/, 'the floating logo uses it');
-  assert.match(html.slice(html.indexOf('class="brand"'), html.indexOf('</nav>')), /#reika-logo/, 'the menu brand uses it');
-  assert.ok(!/g-moon/.test(html), 'no leftovers of the previous logo');
-  const icon = read('icon.svg');
-  assert.match(icon, /data-logo="black-moon-v2"/);
-  const shapes = (text) => [...text.matchAll(/\sd="([^"]+)"/g)].map((m) => m[1]).sort();
-  assert.deepEqual(shapes(icon), shapes(symbol), 'icon.svg must be the same drawing as the inline logo');
-  assert.match(html, /rel="icon" href="icon\.svg"/);
+  const logo = (f) => path.join(web, 'assets', 'logo', f);
+  for (const f of ['brand.webp', 'orb.webp', 'logo-256.webp', 'favicon.ico', 'windows.ico']) assert.ok(fs.existsSync(logo(f)), `${f} is missing`);
+  for (const f of ['brand.webp', 'orb.webp', 'logo-256.webp', 'favicon.ico']) assert.ok(fs.statSync(logo(f)).size < 60_000, `${f} should stay small`);
+  // the images are drawn at 2x their CSS size, so they stay sharp on high-density screens
+  assert.match(html, /<img class="logo" src="assets\/logo\/brand\.webp" width="44" height="44"/);
+  assert.match(html, /<button id="orb"[^>]*>\s*<img src="assets\/logo\/orb\.webp" width="64" height="64"/);
+  assert.match(html, /<link rel="icon" href="assets\/logo\/favicon\.ico" sizes="any">/);
+  assert.ok(!/reika-logo|<symbol/.test(html), 'no leftovers of the previous (drawn) logo');
+  assert.ok(!fs.existsSync(path.join(web, 'icon.svg')), 'the old drawn icon is gone');
+  // windows.ico holds several sizes (an ICO header: reserved=0, type=1, then the image count)
+  const ico = fs.readFileSync(logo('windows.ico'));
+  assert.equal(ico.readUInt16LE(0), 0); assert.equal(ico.readUInt16LE(2), 1); assert.ok(ico.readUInt16LE(4) >= 4, 'several icon sizes');
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'launcher', 'start.ps1'), 'utf8'), /assets\\logo\\windows\.ico/, 'the tray uses the icon');
+});
+
+test('shell.js does not depend on script load order for the update menu item (a lost event used to hide it)', () => {
+  assert.match(read('update.js'), /window\.ReikaUpdaterPresent = true/);
+  assert.match(read('update.js'), /window\.ReikaUpdateSummary = /);
+  assert.match(read('shell.js'), /if \(window\.ReikaUpdaterPresent\) onUpdaterPresent\(\)/);
+  assert.match(read('shell.js'), /if \(window\.ReikaUpdateSummary\) onUpdateSummary\(window\.ReikaUpdateSummary\)/);
 });
 
 test('motion is optional: petals and glow respect prefers-reduced-motion', () => {

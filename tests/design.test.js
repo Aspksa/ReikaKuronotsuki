@@ -34,7 +34,7 @@ test('raw colours live in tokens.css only (no #hex elsewhere; rgb() literals onl
 test('every var(--token) used is defined in CSS or set by a script', () => {
   const defined = new Set();
   for (const css of Object.values(files)) for (const m of css.matchAll(/(--[\w-]+)\s*:/g)) defined.add(m[1]);
-  const setByScripts = new Set(['--px', '--py', '--lx', '--ly', '--lit', '--s', '--c', '--d', '--delay', '--size', '--sway']);
+  const setByScripts = new Set(['--px', '--py', '--lx', '--ly', '--lit', '--s', '--c', '--h', '--d', '--delay', '--size', '--sway', '--w']);
   for (const [file, css] of Object.entries(files)) {
     for (const m of css.matchAll(/var\((--[\w-]+)/g)) assert.ok(defined.has(m[1]) || setByScripts.has(m[1]), `${file} uses ${m[1]} which nothing defines`);
   }
@@ -71,15 +71,32 @@ test('text stays readable: contrast of the main pairs is at least 4.5:1', () => 
   for (const [fg, bg] of pairs) assert.ok(contrast(fg, bg) >= 4.5, `${fg} on ${bg}: ${contrast(fg, bg).toFixed(2)}:1`);
 });
 
-test('the night scene has all its layers, the moon asset is light, and the pointer light is wired', () => {
+test('the anime night scene has all its layers and assets, and the pointer light is wired', () => {
   const html = read('index.html');
-  for (const cls of ['sky-stars', 'moon-stage', 'moon-glow', 'moon-rays', 'moon-halo', 'moon-disc', 'moon-bloom', 'cloud cloud--a', 'sky-water', 'moon-path', 'mist', 'sky-vignette']) assert.ok(html.includes(`class="${cls}"`), `layer ${cls}`);
-  const moon = path.join(web, 'assets', 'moon.webp');
-  assert.ok(fs.existsSync(moon) && fs.statSync(moon).size < 400_000);
-  assert.match(files['css/sky.css'], /assets\/moon\.webp/);
+  for (const cls of ['sky-stars', 'horizon-glow', 'moon-stage', 'moon-glow', 'moon-rays', 'moon-ring moon-ring--a', 'moon-ring moon-ring--b', 'moon-disc', 'moon-bloom', 'moon-flare',
+    'cloud cloud--a', 'cloud cloud--b', 'sky-water', 'moon-path', 'wave wave--1', 'wave wave--2', 'wave wave--3', 'mist', 'sky-vignette']) assert.ok(html.includes(`class="${cls}"`), `layer ${cls}`);
+  for (const f of ['moon.svg', 'cloud.svg', 'waves.svg', 'moon-path.svg', 'sparkle.svg']) {
+    const file = path.join(web, 'assets', 'scene', f);
+    assert.ok(fs.existsSync(file) && fs.statSync(file).size < 20_000, `${f} exists and is small`);
+    assert.match(files['css/sky.css'], new RegExp(`assets/scene/${f.replace('.', '\\.')}`), `sky.css uses ${f}`);
+  }
+  assert.ok(!fs.existsSync(path.join(web, 'assets', 'moon.webp')), 'the realistic moon texture is gone');
   assert.ok((html.match(/\blit\b/g) || []).length >= 6, 'cards, panel, chat and menu items use the "lit" light');
   assert.match(read('sky.js'), /--lx/);
+  assert.match(read('sky.js'), /className = 'ripple'/);
+  assert.match(read('sky.js'), /className = 'sparkle'/);
   assert.match(files['css/components.css'], /\.lit::before/);
+});
+
+test('the scene markup is identical on the main page and in the style guide (no drift)', () => {
+  const scene = (f) => { const h = read(f); const a = h.indexOf('<div class="sky"'); return h.slice(a, h.indexOf('</div>', h.indexOf('class="sky-vignette"')) + 6).replace(/\s+/g, ' '); };
+  assert.equal(scene('styleguide.html'), scene('index.html'));
+});
+
+test('the sea waves tile seamlessly: the tile width is a whole number of wave periods', () => {
+  const svg = fs.readFileSync(path.join(web, 'assets', 'scene', 'waves.svg'), 'utf8');
+  const width = Number(/width="(\d+)"/.exec(svg)[1]);
+  assert.equal(width % 80, 0, 'the wave period is 80 px');
 });
 
 test('the style guide uses the same stylesheet and shows every component', () => {

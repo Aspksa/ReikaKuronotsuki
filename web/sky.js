@@ -1,5 +1,5 @@
 'use strict';
-// The night scene's life: stars, petals, shooting stars, pointer parallax and the moonlight that follows the pointer.
+// The night scene's life: stars and sparkles, ripples on the sea, petals, shooting stars, pointer parallax and the moonlight that follows the pointer.
 // With "reduced motion" nothing moves: stars are drawn once, no petals, no shooting stars, no parallax.
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -8,20 +8,63 @@
   const rand = (min, max) => min + Math.random() * (max - min);
   const px = (n) => `${n.toFixed(2)}px`;
 
-  // ---- stars: three tints, different sizes, each twinkling at its own pace ----
+  // ---- stars: round dots plus four-point sparkles (anime style), each twinkling at its own pace ----
   const stars = $('stars');
   if (stars) {
-    const tints = ['#ffffff', '#cfdcff', '#ffe9c7'];
-    for (let i = 0; i < 110; i++) {
+    const tints = ['#ffffff', '#cfdcff', '#ffe9c7', '#ffd6e8'];
+    for (let i = 0; i < 90; i++) {
       const s = document.createElement('span');
       s.className = 'star';
       const size = Math.random() < 0.12 ? rand(2, 3) : rand(0.8, 1.7);
-      s.style.cssText = `left:${rand(0, 100).toFixed(2)}%;top:${rand(0, 74).toFixed(2)}%;`;
+      s.style.cssText = `left:${rand(0, 100).toFixed(2)}%;top:${rand(0, 70).toFixed(2)}%;`;
       s.style.setProperty('--s', px(size));
       s.style.setProperty('--c', tints[Math.floor(Math.random() * tints.length)]);
       s.style.setProperty('--d', `${rand(2.5, 7).toFixed(2)}s`);
       s.style.setProperty('--delay', `${(-rand(0, 7)).toFixed(2)}s`);
       stars.appendChild(s);
+    }
+    for (let i = 0; i < 22; i++) {
+      const s = document.createElement('span');
+      s.className = 'sparkle';
+      s.style.cssText = `left:${rand(0, 98).toFixed(2)}%;top:${rand(0, 66).toFixed(2)}%;`;
+      s.style.setProperty('--s', px(Math.random() < 0.25 ? rand(22, 34) : rand(9, 18)));
+      s.style.setProperty('--h', `${Math.round(rand(-25, 25))}deg`);
+      s.style.setProperty('--d', `${rand(3, 7).toFixed(2)}s`);
+      s.style.setProperty('--delay', `${(-rand(0, 7)).toFixed(2)}s`);
+      stars.appendChild(s);
+    }
+  }
+
+  // ---- the sea: ripples spreading around the moon's reflection, glints on the water ----
+  const water = $('water');
+  function waterBox() { const r = water.getBoundingClientRect(); const path = water.querySelector('.moon-path').getBoundingClientRect(); return { r, cx: path.left + path.width / 2 - r.left, pw: path.width }; }
+  function ripple() {
+    if (!water || document.hidden) return;
+    const { r, cx, pw } = waterBox();
+    const near = Math.random() < 0.7;                                  // most ripples gather under the moon
+    const x = near ? cx + rand(-pw * 0.55, pw * 0.55) : rand(0, r.width);
+    const y = rand(r.height * 0.18, r.height * 0.92);
+    const el = document.createElement('span');
+    el.className = 'ripple';
+    el.style.left = px(x); el.style.top = px(y);
+    el.style.setProperty('--w', px(rand(70, 200) * (0.6 + y / r.height)));  // nearer (lower) ripples are bigger
+    water.appendChild(el);
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+  }
+  if (water && !reduce) {
+    const loop = () => { ripple(); setTimeout(loop, rand(700, 1900)); };
+    setTimeout(loop, 500);
+  }
+  if (water) {
+    const { r, cx, pw } = waterBox();
+    for (let i = 0; i < 12; i++) {                                     // glints: small sparkles on the water near the reflection
+      const g = document.createElement('span');
+      g.className = 'sparkle';
+      g.style.left = px(cx + rand(-pw * 0.6, pw * 0.6)); g.style.top = px(rand(r.height * 0.12, r.height * 0.9));
+      g.style.setProperty('--s', px(rand(7, 15)));
+      g.style.setProperty('--d', `${rand(2, 5).toFixed(2)}s`);
+      g.style.setProperty('--delay', `${(-rand(0, 5)).toFixed(2)}s`);
+      water.appendChild(g);
     }
   }
 

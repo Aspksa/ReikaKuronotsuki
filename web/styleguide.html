@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="color-scheme" content="dark">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/logo/favicon.ico" sizes="any">
 <link rel="stylesheet" href="style.css">
 <title>Стиль · Reika Kuronotsuki</title>
 <style>
@@ -22,10 +22,19 @@
 <body>
 <div class="sky" aria-hidden="true">
   <div class="sky-stars" id="stars"></div>
-  <div class="moon-stage"><div class="moon-glow"></div><div class="moon-rays"></div><div class="moon-halo"></div><div class="moon-disc"></div><div class="moon-bloom"></div></div>
+  <div class="horizon-glow"></div>
+  <div class="moon-stage">
+    <div class="moon-glow"></div><div class="moon-rays"></div><div class="moon-ring moon-ring--a"></div><div class="moon-ring moon-ring--b"></div>
+    <div class="moon-disc"></div><div class="moon-bloom"></div><div class="moon-flare"></div>
+  </div>
   <div class="cloud cloud--a"></div><div class="cloud cloud--b"></div>
-  <div class="sky-water"><div class="moon-path"></div></div>
-  <div class="mist"></div><div id="petals"></div><div class="sky-vignette"></div>
+  <div class="sky-water" id="water">
+    <div class="moon-path"></div>
+    <div class="wave wave--1"></div><div class="wave wave--2"></div><div class="wave wave--3"></div>
+  </div>
+  <div class="mist"></div>
+  <div id="petals"></div>
+  <div class="sky-vignette"></div>
 </div>
 
 <div class="shell shell--single">
@@ -102,10 +111,11 @@
   </section>
 
   <section>
-    <h2>Логотип «Чёрная луна»</h2>
+    <h2>Логотип</h2>
+    <p class="text-muted">Файлы лежат в <code>web/assets/logo/</code>: <code>brand.webp</code> (меню, 44 px ×2), <code>orb.webp</code> (плавающий значок, 64 px ×2), <code>logo-256.webp</code>, <code>favicon.ico</code> и <code>windows.ico</code> (трей).</p>
     <div class="sg-row" style="align-items: flex-end">
-      <img src="icon.svg" width="16" height="16" alt="16 px"><img src="icon.svg" width="32" height="32" alt="32 px"><img src="icon.svg" width="44" height="44" alt="44 px">
-      <img src="icon.svg" width="64" height="64" alt="64 px"><img src="icon.svg" width="128" height="128" alt="128 px"><img src="icon.svg" width="256" height="256" alt="256 px">
+      <img src="assets/logo/brand.webp" width="44" height="44" alt="44 px"><img src="assets/logo/orb.webp" width="64" height="64" alt="64 px">
+      <img src="assets/logo/logo-256.webp" width="128" height="128" alt="128 px"><img src="assets/logo/logo-256.webp" width="256" height="256" alt="256 px">
     </div>
   </section>
 </div>
