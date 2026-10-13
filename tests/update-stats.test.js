@@ -24,15 +24,15 @@ test('statistics scan excludes user data and maintains project growth baseline',
     assert.equal(second.events.downloadedFiles, 0);
   } finally { await fs.rm(root, { recursive:true, force:true }); }
 });
-test('100 named statistics are present in the browser catalog', async () => {
+test('150 named statistics are present in the browser catalog', async () => {
   const source = await fs.readFile(path.join(__dirname, '..', 'web', 'update-stats.js'), 'utf8');
   const start = source.indexOf('const groups = ');
   assert.ok(start !== -1);
   const end = source.indexOf(';', start);
   const catalog = JSON.parse(source.slice(start + 'const groups = '.length, end));
-  assert.equal(catalog.length, 10);
-  assert.equal(catalog.reduce((n,g)=>n+g[1].length,0),100);
-  assert.equal(new Set(catalog.flatMap(g=>g[1].map(x=>x[0]))).size, 100);
+  assert.equal(catalog.length, 15);
+  assert.equal(catalog.reduce((n,g)=>n+g[1].length,0),150);
+  assert.equal(new Set(catalog.flatMap(g=>g[1].map(x=>x[0]))).size, 150);
 });
 
 test('statistics live in a separate right column with accessible icon decorations', async () => {
@@ -55,4 +55,20 @@ test('statistics live in a separate right column with accessible icon decoration
   assert.doesNotMatch(html, /100 фактов/);
   assert.match(js, /function activate\(/);
   assert.match(css, /prefers-reduced-motion/);
+});
+
+test('new file curiosities reflect actual files, not mock counters', async () => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'reika-curiosities-'));
+  try {
+    await fs.writeFile(path.join(root,'nothing.txt'),'');
+    await fs.writeFile(path.join(root,'SHOUTING_AND_LONG_FILENAME_123456789.js'),'// TODO: fix this\nconsole.log("hello");\n');
+    const result=await inspect(root);
+    assert.equal(result.emptyFiles,1);
+    assert.equal(result.longNames,1);
+    assert.equal(result.underscoreNames,1);
+    assert.equal(result.uppercaseNames,1);
+    assert.equal(result.todoLines,1);
+    assert.equal(result.consoleLines,1);
+    assert.equal(result.trailingNewlineFiles,1);
+  } finally { await fs.rm(root,{recursive:true,force:true}); }
 });

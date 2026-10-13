@@ -18,7 +18,7 @@ const optional = (arr, f) => arr.length ? f(arr) : null;
 async function inspect(root) {
   const result = { files: 0, bytes: 0, js: 0, css: 0, html: 0, json: 0, images: 0, text: 0,
     lines: 0, blank: 0, comments: 0, largest: 0, smallest: null, deepest: 0, directories: 0,
-    newest: null, oldest: null, names: 0, filenameBytes: 0, extensions: {} };
+    newest: null, oldest: null, names: 0, filenameBytes: 0, extensions: {}, emptyFiles: 0, largeFiles: 0, tinyFiles: 0, longNames: 0, underscoreNames: 0, uppercaseNames: 0, zeroByteDirs: 0, maxNameBytes: 0, minNameBytes: null, largestExt: null, newlineFiles: 0, trailingNewlineFiles: 0, todoLines: 0, consoleLines: 0, functionLines: 0, importLines: 0 };
   const visit = async (folder, depth) => {
     if (depth > 18 || result.files > 10000) return;
     let entries; try { entries = await fs.readdir(folder, { withFileTypes: true }); } catch { return; }
@@ -30,6 +30,15 @@ async function inspect(root) {
       const st = await fs.stat(full).catch(() => null);
       if (!st) continue;
       result.files++; result.bytes += st.size;
+      if (st.size === 0) result.emptyFiles++;
+      if (st.size >= 1048576) result.largeFiles++;
+      if (st.size > 0 && st.size < 1024) result.tinyFiles++;
+      if (e.name.length > 30) result.longNames++;
+      if (e.name.includes('_')) result.underscoreNames++;
+      if (/[A-Z]/.test(e.name)) result.uppercaseNames++;
+      const nameBytes=Buffer.byteLength(e.name);
+      result.maxNameBytes=Math.max(result.maxNameBytes,nameBytes);
+      result.minNameBytes=Math.min(result.minNameBytes ?? nameBytes,nameBytes);
       result.largest = Math.max(result.largest, st.size);
       result.smallest = Math.min(result.smallest ?? st.size, st.size);
       result.deepest = Math.max(result.deepest, depth);
@@ -46,6 +55,12 @@ async function inspect(root) {
           result.text++; result.lines += lines.length;
           result.blank += lines.filter(l => !l.trim()).length;
           result.comments += lines.filter(l => /^\s*(\/\/|#|\/\*|\*|<!--)/.test(l)).length;
+          result.todoLines += lines.filter(l => /\b(?:TODO|FIXME)\b/.test(l)).length;
+          result.consoleLines += lines.filter(l => /\bconsole\.(?:log|warn|error)\s*\(/.test(l)).length;
+          result.functionLines += lines.filter(l => /\b(?:function|=>)\b/.test(l)).length;
+          result.importLines += lines.filter(l => /\b(?:require\s*\(|import\s+)/.test(l)).length;
+          if (data.includes('\n')) result.newlineFiles++;
+          if (data.endsWith('\n')) result.trailingNewlineFiles++;
         } catch { /* unreadable */ }
       }
       result.newest = Math.max(result.newest ?? 0, st.mtimeMs);
