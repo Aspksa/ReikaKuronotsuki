@@ -60,7 +60,6 @@
 .update-card .nav-item[aria-current="page"] { background: none; }
 .update-card .nav-item:hover { transform: none; }
 .update-entry .badge-dot { margin-left: auto; }
-.update-status { margin: 0 var(--space-2) var(--space-1) 36px; font-size: var(--text-xs); color: var(--text-muted); text-overflow: ellipsis; }
 .mini-bar { height: 3px; margin: 0 var(--space-3) var(--space-2) 36px; border-radius: var(--radius-sm); background: rgb(var(--pearl-rgb) / .1); overflow: hidden; }
 .mini-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--crimson), var(--gold)); transition: width var(--dur); }
 .update-card .update-quick { width: auto; margin: 0 var(--space-2) var(--space-2) 36px; min-height: 28px; padding: 0 var(--space-4); font-size: var(--text-xs); }
@@ -75,7 +74,7 @@
 /* collapsed: icons only, with a tooltip on hover/focus */
 .collapsed .sidebar { align-items: center; padding-inline: var(--space-2); }
 .collapsed .brand { padding: var(--space-2); background: none; border-color: transparent; box-shadow: none; }
-.collapsed .brand-text, .collapsed .label, .collapsed .side-title, .collapsed .update-status, .collapsed .mini-bar, .collapsed .update-quick, .collapsed .kbd { display: none; }
+.collapsed .brand-text, .collapsed .label, .collapsed .side-title, .collapsed .mini-bar, .collapsed .update-quick, .collapsed .kbd { display: none; }
 .collapsed .nav, .collapsed .side-bottom, .collapsed .update-card { width: 100%; align-items: center; }
 .collapsed .nav-item { justify-content: center; width: auto; padding: 7px; }
 .collapsed .side-search { width: 40px; justify-content: center; padding: 0; }

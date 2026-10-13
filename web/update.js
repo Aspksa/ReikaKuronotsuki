@@ -64,9 +64,6 @@
     const state = S.cardState(st);
     card.dataset.state = state;
     $('update-ico-path').setAttribute('d', S.ICONS[state]);
-    const status = S.statusText(st, state);
-    $('update-status').textContent = status;
-    show($('update-status'), !!status);
     show($('update-dot'), state === 'available' || state === 'ready');
     const bar = $('update-mini');
     show(bar, state === 'busy' && st.phase === 'downloading');
