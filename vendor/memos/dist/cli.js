@@ -2,7 +2,7 @@
 /**
  * MemOS CLI — command-line interface for the MemOS memory layer.
  *
- * Usage:
+ * Использование:
  *   memos store "User prefers dark mode" --type preference
  *   memos search "dark mode"
  *   memos history <id>
@@ -191,7 +191,7 @@ function resolveCliEmbeddingsConfig() {
         ...(e.documentPrefix ? { documentPrefix: e.documentPrefix } : {}),
     };
 }
-/** Database path: --db wins, then the config file, then the SDK default. */
+/** Путь к базе данных: --db wins, then the config file, then the SDK default. */
 function resolveDbPath(cliDbPath) {
     if (cliDbPath)
         return cliDbPath;
@@ -285,31 +285,31 @@ async function runInitWizard(cliArgs) {
     try {
         const existing = loadFileConfig();
         if (existing && !nonInteractive) {
-            console.log(`Existing config found at ${configFilePath()}.`);
-            const again = await promptChoice(rl, "Re-run the wizard and overwrite it?", [
-                { key: "yes", label: "Yes, overwrite" },
-                { key: "no", label: "No, keep existing" },
+            console.log(`Настройки уже найдены: ${configFilePath()}.`);
+            const again = await promptChoice(rl, "Повторить настройку и перезаписать конфигурацию?", [
+                { key: "yes", label: "Да, перезаписать" },
+                { key: "no", label: "Нет, оставить текущую" },
             ], "no");
             if (again === "no") {
-                console.log("Keeping existing config. Nothing changed.");
+                console.log("Существующие настройки сохранены без изменений.");
                 return;
             }
         }
         const defaultDb = join(os.homedir(), ".memos", "memos.db");
         const dbPath = nonInteractive
             ? (existing?.dbPath ?? defaultDb)
-            : await promptText(rl, "Database path", existing?.dbPath ?? defaultDb);
+            : await promptText(rl, "Путь к базе данных", existing?.dbPath ?? defaultDb);
         const providerChoice = nonInteractive
             ? (existing?.embeddings?.provider ?? "fastembed")
-            : await promptChoice(rl, "Embedding provider (semantic search):", [
+            : await promptChoice(rl, "Модель векторизации (семантический поиск):", [
                 {
                     key: "fastembed",
-                    label: "Local (fastembed)",
+                    label: "Локально (fastembed)",
                     hint: "free, on-device; needs `npm i @huggingface/transformers` for real vectors",
                 },
                 {
                     key: "openai-compatible",
-                    label: "OpenAI-compatible server",
+                    label: "Совместимый с OpenAI сервер",
                     hint: "e.g. scripts/embed-server.py on a GPU box",
                 },
                 {
@@ -360,7 +360,7 @@ async function runInitWizard(cliArgs) {
             }
         }
         // Smoke test: open the store with this exact config, round-trip a probe.
-        console.log("\nSmoke-testing the setup…");
+        console.log("\nПроверяю настройки…");
         const memos = new MemOS({
             dbPath,
             ...(Object.keys(embeddings).length > 0 ? { embeddings } : {}),
@@ -379,7 +379,7 @@ async function runInitWizard(cliArgs) {
                 }
             }
             else {
-                console.log("  embeddings: disabled (keyword search only)");
+                console.log("  векторизация отключена (только поиск по словам)");
             }
             const hits = await memos.search({
                 query: "memos init smoke test",
@@ -389,10 +389,10 @@ async function runInitWizard(cliArgs) {
             console.log(`  store → search round-trip: ${found ? "ok" : "PROBE NOT FOUND"}`);
             await memos.forget(node.id);
             if (!found) {
-                console.error("Smoke test failed: probe memory was not retrievable.");
+                console.error("Проверка не пройдена: тестовое воспоминание не удалось найти.");
                 process.exit(1);
             }
-            console.log("  probe memory cleaned up.");
+            console.log("  Тестовое воспоминание удалено.");
         }
         finally {
             await memos.close();
@@ -593,25 +593,25 @@ function writeFileSafe(path, contents) {
 }
 function printHelp() {
     console.log(`
-MemOS — Universal memory layer for AI agents.
+MemOS — универсальная долговременная память для ИИ-агентов.
 
-Usage:
+Использование:
   memos <command> [options]
 
-Commands:
-  init                  Interactive setup wizard: database path, embedding
+Команды:
+  init                  Мастер настройки: путь к базе, векторная модель
                           provider, smoke test — saves ~/.memos/config.json
                           (--yes accepts all defaults)
-  store <content>         Store a new memory (--pool, --context,
+  store <content>         Сохранить новое воспоминание (--pool, --context,
                           --scope user:alice[,agent:coder][,run:r1])
-  retrieve <id>           Retrieve a memory by ID
-  search <query>          Search memories by text (--pool event|note|procedure,
+  retrieve <id>           Получить воспоминание по ID
+  search <query>          Поиск воспоминаний по тексту (--pool event|note|procedure,
                           --scope user:alice[,...])
-  forget <id>             Delete a memory by ID
-  summarize               Summarize all memories
-  graph                   Print the full memory graph (--mermaid for a
+  forget <id>             Удалить воспоминание по ID
+  summarize               Создать сводку всех воспоминаний
+  graph                   Показать граф всех воспоминаний (--mermaid for a
                           GitHub-renderable Mermaid diagram)
-  browse                  Interactive terminal browser (search, inspect,
+  browse                  Интерактивный просмотр воспоминаний (search, inspect,
                           forget memories)
   image <add|list|search|show|purge>
                           Image memories (needs --vision, or
@@ -619,7 +619,7 @@ Commands:
                           <path|url> [--caption <text>] [--kind <kind>]
                           [--tags a,b]; list; search <query>;
                           show <ref|id> [--out <path>]; purge
-  link <src> <dst>        Link two memories
+  link <src> <dst>        Связать два воспоминания
   count                   Show memory count
   tag <id> <tag> [...]    Add tags to a memory
   untag <id> <tag> [...]  Remove tags from a memory
@@ -693,7 +693,7 @@ Commands:
   help                    Show this help message
 
 Options:
-  --db <path>             Database path (default: ~/.memos/memos.db)
+  --db <path>             Путь к базе данных (default: ~/.memos/memos.db)
   --type <type>           Memory type (store command)
   --ttl <seconds>         TTL in seconds (store command)
   --limit <n>             Result limit (search command)
@@ -787,8 +787,8 @@ async function main() {
         const shell = args[1];
         const script = shell ? getCompletionScript(shell) : null;
         if (!script) {
-            console.error(`Usage: memos completion <${COMPLETION_SHELLS.join("|")}>\n` +
-                `Unknown shell: ${shell ?? "(none given)"}`);
+            console.error(`Использование: memos completion <${COMPLETION_SHELLS.join("|")}>\n` +
+                `Неизвестная оболочка: ${shell ?? "(none given)"}`);
             process.exit(1);
         }
         console.log(script);
@@ -810,7 +810,7 @@ async function main() {
         const cfgPath = configFilePath();
         if (!sub || sub === "status") {
             const state = readBetaState(cfgPath);
-            console.log(`Beta channel: ${state.beta ? "enabled" : "disabled"}`);
+            console.log(`Бета-канал: ${state.beta ? "enabled" : "disabled"}`);
             if (!state.beta) {
                 console.log("Run `memos beta enable` to be prompted on every fully-successful main commit.");
             }
@@ -818,17 +818,17 @@ async function main() {
         }
         if (sub === "enable" || sub === "on") {
             writeBetaState(cfgPath, { beta: true });
-            console.log("Beta channel enabled.");
+            console.log("Бета-канал включён.");
             console.log("You'll be prompted to update whenever a new fully-successful main commit lands (CI, Prebuilds, and CodeQL all green).");
             console.log("Run `memos update --check` to check right now.");
             return;
         }
         if (sub === "disable" || sub === "off") {
             writeBetaState(cfgPath, { beta: false });
-            console.log("Beta channel disabled.");
+            console.log("Бета-канал отключён.");
             return;
         }
-        console.error("Usage: memos beta [enable|disable|status]");
+        console.error("Использование: memos beta [enable|disable|status]");
         process.exit(1);
     }
     if (command === "update") {
@@ -861,7 +861,7 @@ async function main() {
         console.log(`Newest fully-successful main commit: ${short} — ${firstLine}`);
         console.log(`Installed: ${installed ?? "unknown"}`);
         if (installed === green.sha) {
-            console.log("Already up to date.");
+            console.log("Установлена актуальная версия.");
             return;
         }
         if (checkOnly)
@@ -875,7 +875,7 @@ async function main() {
             proceed = await askYesNo("Install this beta build from source now? [y/N] ");
         }
         if (!proceed) {
-            console.log("Not installing.");
+            console.log("Установка отменена.");
             return;
         }
         console.log(`Installing ${short} from source (download + pnpm install + build)...`);
@@ -893,11 +893,11 @@ async function main() {
                 const { createWriteStream } = await import("node:fs");
                 const res = await fetch(url);
                 if (!res.ok || !res.body)
-                    throw new Error(`download failed: ${res.status}`);
+                    throw new Error(`Ошибка загрузки: ${res.status}`);
                 await pipeline(res.body, createWriteStream(dest));
             },
         });
-        console.log(`Updated to ${short}. Installed at ${installDir}`);
+        console.log(`Обновлено до ${short}. Установлено в ${installDir}`);
         console.log("Restart your shell (or rehash) so the new memos is picked up.");
         return;
     }
@@ -971,7 +971,7 @@ async function main() {
             case "store": {
                 const content = args[1];
                 if (!content) {
-                    console.error("Error: content is required.\n  Usage: memos store <content>");
+                    console.error("Ошибка: укажите текст для сохранения.\n  Использование: memos store <content>");
                     process.exit(1);
                 }
                 const typeIdx = args.indexOf("--type");
@@ -1057,14 +1057,14 @@ async function main() {
                     console.log(JSON.stringify(result, null, 2));
                 }
                 else {
-                    console.log(`Stored memory: ${result.node.id}`);
-                    console.log(`  Summary: ${result.node.summary}`);
+                    console.log(`Воспоминание сохранено: ${result.node.id}`);
+                    console.log(`  Сводка: ${result.node.summary}`);
                     if (result.node.expiresAt) {
                         const expDate = new Date(result.node.expiresAt * 1000).toISOString();
-                        console.log(`  Expires: ${expDate}`);
+                        console.log(`  Истекает: ${expDate}`);
                     }
                     if (result.node.tags.length > 0) {
-                        console.log(`  Tags: ${result.node.tags.join(", ")}`);
+                        console.log(`  Метки: ${result.node.tags.join(", ")}`);
                     }
                     if (result.links.length > 0) {
                         console.log(`  Auto-linked to ${result.links.length} existing memories`);
@@ -1075,12 +1075,12 @@ async function main() {
             case "retrieve": {
                 const id = args[1];
                 if (!id) {
-                    console.error("Error: ID is required.\n  Usage: memos retrieve <id>");
+                    console.error("Ошибка: укажите ID.\n  Использование: memos retrieve <id>");
                     process.exit(1);
                 }
                 const node = await memos.retrieve(id);
                 if (!node) {
-                    console.error(`Memory not found: ${id}`);
+                    console.error(`Воспоминание не найдено: ${id}`);
                     process.exit(1);
                 }
                 if (jsonFlag) {
@@ -1089,14 +1089,14 @@ async function main() {
                 else {
                     console.log(`[${node.type}] ${node.content}`);
                     console.log(`  ID: ${node.id}`);
-                    console.log(`  Importance: ${node.importance}`);
-                    console.log(`  Access count: ${node.accessCount}`);
-                    console.log(`  Created: ${new Date(node.createdAt).toISOString()}`);
+                    console.log(`  Важность: ${node.importance}`);
+                    console.log(`  Количество обращений: ${node.accessCount}`);
+                    console.log(`  Создано: ${new Date(node.createdAt).toISOString()}`);
                     if (node.tags.length > 0) {
-                        console.log(`  Tags: ${node.tags.join(", ")}`);
+                        console.log(`  Метки: ${node.tags.join(", ")}`);
                     }
                     if (node.expiresAt) {
-                        console.log(`  Expires: ${new Date(node.expiresAt * 1000).toISOString()}`);
+                        console.log(`  Истекает: ${new Date(node.expiresAt * 1000).toISOString()}`);
                     }
                 }
                 break;
@@ -1104,7 +1104,7 @@ async function main() {
             case "search": {
                 const query = args[1];
                 if (!query) {
-                    console.error("Error: query is required.\n  Usage: memos search <query>");
+                    console.error("Ошибка: укажите поисковый запрос.\n  Использование: memos search <query>");
                     process.exit(1);
                 }
                 const limitIdx = args.indexOf("--limit");
@@ -1164,7 +1164,7 @@ async function main() {
                             console.log(`  [${r.node.type}] ${r.node.content}`);
                             console.log(`    ID: ${r.node.id}  Score: ${r.score.toFixed(3)}`);
                             if (r.node.tags.length > 0) {
-                                console.log(`    Tags: ${r.node.tags.join(", ")}`);
+                                console.log(`    Метки: ${r.node.tags.join(", ")}`);
                             }
                         }
                     }
@@ -1174,7 +1174,7 @@ async function main() {
             case "forget": {
                 const id = args[1];
                 if (!id) {
-                    console.error("Error: ID is required.\n  Usage: memos forget <id>");
+                    console.error("Ошибка: укажите ID.\n  Использование: memos forget <id>");
                     process.exit(1);
                 }
                 const deleted = await memos.forget(id);
@@ -1182,7 +1182,7 @@ async function main() {
                     console.log(JSON.stringify({ deleted, id }));
                 }
                 else {
-                    console.log(deleted ? `Forgot memory: ${id}` : `Memory not found: ${id}`);
+                    console.log(deleted ? `Forgot memory: ${id}` : `Воспоминание не найдено: ${id}`);
                 }
                 break;
             }
@@ -1231,7 +1231,7 @@ async function main() {
                 const target = args[2];
                 if (!sub || !["add", "list", "search", "show", "purge"].includes(sub)) {
                     console.error("Error: image subcommand is required.\n" +
-                        "  Usage: memos image add <path|url> [--caption <text>] [--kind <kind>] [--tags a,b]\n" +
+                        "  Использование: memos image add <path|url> [--caption <text>] [--kind <kind>] [--tags a,b]\n" +
                         "         memos image list [--limit <n>]\n" +
                         "         memos image search <query> [--limit <n>]\n" +
                         "         memos image show <ref|id>\n" +
@@ -1263,7 +1263,7 @@ async function main() {
                 }
                 if (sub === "add") {
                     if (!target) {
-                        console.error("Error: image path or URL is required.\n  Usage: memos image add <path|url> [--caption <text>]");
+                        console.error("Error: image path or URL is required.\n  Использование: memos image add <path|url> [--caption <text>]");
                         process.exit(1);
                     }
                     const captionIdx = args.indexOf("--caption");
@@ -1326,7 +1326,7 @@ async function main() {
                 }
                 if (sub === "search") {
                     if (!target) {
-                        console.error("Error: query is required.\n  Usage: memos image search <query> [--limit <n>]");
+                        console.error("Ошибка: укажите поисковый запрос.\n  Использование: memos image search <query> [--limit <n>]");
                         process.exit(1);
                     }
                     const searchLimitIdx = args.indexOf("--limit");
@@ -1357,7 +1357,7 @@ async function main() {
                 }
                 if (sub === "show") {
                     if (!target) {
-                        console.error("Error: image ref or node id is required.\n  Usage: memos image show <ref|id>");
+                        console.error("Error: image ref or node id is required.\n  Использование: memos image show <ref|id>");
                         process.exit(1);
                     }
                     const resolved = await memos.imageMemory(target);
@@ -1402,7 +1402,7 @@ async function main() {
             case "import-external": {
                 const file = args[1];
                 if (!file) {
-                    console.error("Error: export file is required.\n  Usage: memos import-external <file> [--source auto|chatgpt|claude|generic] [--dry-run]");
+                    console.error("Error: export file is required.\n  Использование: memos import-external <file> [--source auto|chatgpt|claude|generic] [--dry-run]");
                     process.exit(1);
                 }
                 const sourceIdx = args.indexOf("--source");
@@ -1434,7 +1434,7 @@ async function main() {
                 const fromIdx = args.indexOf("--from");
                 const from = fromIdx !== -1 ? args[fromIdx + 1] : undefined;
                 if (from !== "chatgpt" && from !== "claude" && from !== "slack") {
-                    console.error("Error: --from is required.\\n  Usage: memos import --from chatgpt|claude|slack (--file <path> | --dir <path>) [--synthesize] [--dry-run] [--max-items <n>] [--namespace <ns>] [--tags a,b]");
+                    console.error("Error: --from is required.\\n  Использование: memos import --from chatgpt|claude|slack (--file <path> | --dir <path>) [--synthesize] [--dry-run] [--max-items <n>] [--namespace <ns>] [--tags a,b]");
                     process.exit(1);
                 }
                 const fileIdx = args.indexOf("--file");
@@ -1442,7 +1442,7 @@ async function main() {
                 const dirIdx = args.indexOf("--dir");
                 const dir = dirIdx !== -1 ? args[dirIdx + 1] : undefined;
                 if (!file && !dir) {
-                    console.error("Error: --file or --dir is required.\\n  Usage: memos import --from chatgpt|claude|slack (--file <path> | --dir <path>)");
+                    console.error("Error: --file or --dir is required.\\n  Использование: memos import --from chatgpt|claude|slack (--file <path> | --dir <path>)");
                     process.exit(1);
                 }
                 if (from === "slack" && !dir) {
@@ -1487,7 +1487,7 @@ async function main() {
             case "learn": {
                 const lesson = args[1];
                 if (!lesson) {
-                    console.error('Error: lesson text is required.\\n  Usage: memos learn "<lesson>" [--context <ctx>] [--tags a,b] [--namespace <ns>]');
+                    console.error('Error: lesson text is required.\\n  Использование: memos learn "<lesson>" [--context <ctx>] [--tags a,b] [--namespace <ns>]');
                     process.exit(1);
                 }
                 const contextIdx = args.indexOf("--context");
@@ -1519,7 +1519,7 @@ async function main() {
                 const outcomeIdx = args.indexOf("--outcome");
                 const outcome = outcomeIdx !== -1 ? args[outcomeIdx + 1] : undefined;
                 if (!id || (outcome !== "success" && outcome !== "failure")) {
-                    console.error("Error: lesson ID and --outcome are required.\\n  Usage: memos lesson <id> --outcome success|failure");
+                    console.error("Error: lesson ID and --outcome are required.\\n  Использование: memos lesson <id> --outcome success|failure");
                     process.exit(1);
                 }
                 try {
@@ -1566,7 +1566,7 @@ async function main() {
             case "cite": {
                 const id = args[1];
                 if (!id) {
-                    console.error("Error: citation ID is required.\\n  Usage: memos cite <id>  (accepts [mem:a3f9], a3f9, or a full ID)");
+                    console.error("Error: citation ID is required.\\n  Использование: memos cite <id>  (accepts [mem:a3f9], a3f9, or a full ID)");
                     process.exit(1);
                 }
                 const resolution = await memos.resolveCitation(id);
@@ -1588,7 +1588,7 @@ async function main() {
                 if (sub === "release") {
                     const id = args[2];
                     if (!id) {
-                        console.error("Error: memory ID is required.\n  Usage: memos quarantine release <id>");
+                        console.error("Error: memory ID is required.\n  Использование: memos quarantine release <id>");
                         process.exit(1);
                     }
                     try {
@@ -1600,7 +1600,7 @@ async function main() {
                     }
                     break;
                 }
-                console.error("Error: subcommand is required.\n  Usage: memos quarantine <list|release>  (list [--limit <n>] [--json], release <id> [--json])");
+                console.error("Error: subcommand is required.\n  Использование: memos quarantine <list|release>  (list [--limit <n>] [--json], release <id> [--json])");
                 process.exit(1);
             }
             case "harness": {
@@ -1626,7 +1626,7 @@ async function main() {
                     const fromIdx = args.indexOf("--from");
                     const from = fromIdx !== -1 ? args[fromIdx + 1] : undefined;
                     if (!from) {
-                        console.error("Error: --from <db-path> is required.\n  Usage: memos harness merge --from <db-path> [--dry-run] [--json]");
+                        console.error("Error: --from <db-path> is required.\n  Использование: memos harness merge --from <db-path> [--dry-run] [--json]");
                         process.exit(1);
                     }
                     const dryRun = args.includes("--dry-run");
@@ -1650,7 +1650,7 @@ async function main() {
                     }
                     break;
                 }
-                console.error("Error: subcommand is required.\n  Usage: memos harness <list|merge>  (list [--json], merge --from <db-path> [--dry-run] [--json])");
+                console.error("Error: subcommand is required.\n  Использование: memos harness <list|merge>  (list [--json], merge --from <db-path> [--dry-run] [--json])");
                 process.exit(1);
             }
             case "scope": {
@@ -1673,7 +1673,7 @@ async function main() {
                     }
                     break;
                 }
-                console.error("Error: subcommand is required.\n  Usage: memos scope list [--json]\n" +
+                console.error("Error: subcommand is required.\n  Использование: memos scope list [--json]\n" +
                     "  Free-form scope names follow the convention project:<name> / harness:<name>.");
                 process.exit(1);
             }
@@ -1842,7 +1842,7 @@ async function main() {
             case "history": {
                 const id = args[1];
                 if (!id) {
-                    console.error("Error: memory ID is required.\n  Usage: memos history <id>");
+                    console.error("Error: memory ID is required.\n  Использование: memos history <id>");
                     process.exit(1);
                 }
                 const timeline = await memos.history(id);
@@ -1969,7 +1969,7 @@ async function main() {
                 const input = remindArgs.join(" ");
                 const split = splitRemindText(input);
                 if (!split) {
-                    console.error('Error: could not find a temporal expression.\n  Usage: memos remind "<text>" at <when>\n  Example: memos remind "call mom" at tomorrow 9am');
+                    console.error('Error: could not find a temporal expression.\n  Использование: memos remind "<text>" at <when>\n  Example: memos remind "call mom" at tomorrow 9am');
                     process.exit(1);
                 }
                 const parsed = parseTemporal(split.temporal, new Date());
@@ -2006,7 +2006,7 @@ async function main() {
                 const sourceId = args[1];
                 const targetId = args[2];
                 if (!sourceId || !targetId) {
-                    console.error("Error: source and target IDs are required.\n  Usage: memos link <source-id> <target-id>");
+                    console.error("Error: source and target IDs are required.\n  Использование: memos link <source-id> <target-id>");
                     process.exit(1);
                 }
                 const edge = await memos.link(sourceId, targetId);
@@ -2031,7 +2031,7 @@ async function main() {
                 const id = args[1];
                 const tags = nonFlagArgs(args, 2);
                 if (!id || tags.length === 0) {
-                    console.error("Error: ID and at least one tag are required.\n  Usage: memos tag <id> <tag1> [tag2...]");
+                    console.error("Error: ID and at least one tag are required.\n  Использование: memos tag <id> <tag1> [tag2...]");
                     process.exit(1);
                 }
                 await memos.tag(id, tags);
@@ -2047,7 +2047,7 @@ async function main() {
                 const id = args[1];
                 const tags = nonFlagArgs(args, 2);
                 if (!id || tags.length === 0) {
-                    console.error("Error: ID and at least one tag are required.\n  Usage: memos untag <id> <tag1> [tag2...]");
+                    console.error("Error: ID and at least one tag are required.\n  Использование: memos untag <id> <tag1> [tag2...]");
                     process.exit(1);
                 }
                 await memos.untag(id, tags);
@@ -2062,7 +2062,7 @@ async function main() {
             case "list": {
                 const tagIdx = args.indexOf("--tag");
                 if (tagIdx === -1 || !args[tagIdx + 1]) {
-                    console.error("Error: --tag is required.\n  Usage: memos list --tag <tag>");
+                    console.error("Error: --tag is required.\n  Использование: memos list --tag <tag>");
                     process.exit(1);
                 }
                 const tag = args[tagIdx + 1];
@@ -2166,7 +2166,7 @@ async function main() {
             case "restore": {
                 const path = args[1];
                 if (!path) {
-                    console.error("Error: backup path is required.\n  Usage: memos restore <path>");
+                    console.error("Error: backup path is required.\n  Использование: memos restore <path>");
                     process.exit(1);
                 }
                 const resolvedBackup = resolve(path);
@@ -2439,7 +2439,7 @@ async function main() {
                 const dryRun = args.includes("--dry-run");
                 if (!transcriptPath) {
                     console.error("Error: --transcript <path> is required.\n" +
-                        "  Usage: memos extract-facts --transcript <path> [--namespace <ns>] [--min-confidence <n>] [--dry-run]");
+                        "  Использование: memos extract-facts --transcript <path> [--namespace <ns>] [--min-confidence <n>] [--dry-run]");
                     process.exit(1);
                 }
                 const { parseTranscriptFile } = await import("./session-hooks.js");
@@ -2659,7 +2659,7 @@ async function main() {
                     console.log("Later: `memos log verify --expect <hash>` proves the chain still ends here.");
                     break;
                 }
-                console.error("Error: unknown log subcommand.\n  Usage: memos log <verify [--expect <hash>]|show [--limit N]|checkpoint>");
+                console.error("Error: unknown log subcommand.\n  Использование: memos log <verify [--expect <hash>]|show [--limit N]|checkpoint>");
                 process.exit(1);
             }
             case "sync": {
@@ -2673,7 +2673,7 @@ async function main() {
                 if (subcommand === "export") {
                     const output = getFlag("--output");
                     if (!output) {
-                        console.error("Error: --output <file> is required.\n  Usage: memos sync export --output <file> [--passphrase <passphrase>|--passphrase-file <path>]");
+                        console.error("Error: --output <file> is required.\n  Использование: memos sync export --output <file> [--passphrase <passphrase>|--passphrase-file <path>]");
                         process.exit(1);
                     }
                     const key = await resolveSyncKeyInteractive({
@@ -2710,7 +2710,7 @@ async function main() {
                 if (subcommand === "import") {
                     const input = getFlag("--input");
                     if (!input) {
-                        console.error("Error: --input <file> is required.\n  Usage: memos sync import --input <file> [--strategy skip-existing|last-write-wins]");
+                        console.error("Error: --input <file> is required.\n  Использование: memos sync import --input <file> [--strategy skip-existing|last-write-wins]");
                         process.exit(1);
                     }
                     const strategy = (getFlag("--strategy") ?? "skip-existing");
@@ -2747,7 +2747,7 @@ async function main() {
                 if (subcommand === "status") {
                     const input = getFlag("--input");
                     if (!input) {
-                        console.error("Error: --input <file> is required.\n  Usage: memos sync status --input <file>");
+                        console.error("Error: --input <file> is required.\n  Использование: memos sync status --input <file>");
                         process.exit(1);
                     }
                     const bundle = readBundle(input);
@@ -2757,7 +2757,7 @@ async function main() {
                     break;
                 }
                 console.error("Error: subcommand required.\n" +
-                    "  Usage: memos sync <export|import|status> [options]\n" +
+                    "  Использование: memos sync <export|import|status> [options]\n" +
                     "  See: memos sync --help");
                 process.exit(1);
                 break;

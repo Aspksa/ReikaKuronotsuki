@@ -1351,7 +1351,7 @@ export class MemOS {
    * Retrieve a single memory by ID.
    *
    * @param id — Memory node ID.
-   * @returns The node, or `null` if not found.
+   * @returns The node, or `null` if не найдено.
    */
   async retrieve(id: string): Promise<MemoryNode | null> {
     this.assertInit();
@@ -2644,8 +2644,8 @@ export class MemOS {
 
     const source = this.graph.getNode(sourceId);
     const target = this.graph.getNode(targetId);
-    if (!source) throw new Error(`Node not found: ${sourceId}`);
-    if (!target) throw new Error(`Node not found: ${targetId}`);
+    if (!source) throw new Error(`Узел памяти не найден: ${sourceId}`);
+    if (!target) throw new Error(`Узел памяти не найден: ${targetId}`);
 
     const edge = this.graph.addEdge({ sourceId, targetId, relation, weight });
     try {
@@ -2674,7 +2674,7 @@ export class MemOS {
     // Use the side-effect-free read — TTL changes must not bump
     // access_count, which would otherwise distort LRU eviction.
     const updated = await this.storage.peekNode!(id);
-    if (!updated) throw new Error(`Node not found: ${id}`);
+    if (!updated) throw new Error(`Узел памяти не найден: ${id}`);
     this.graph.updateNode(updated);
     await this.logMutation("update", updated);
   }
@@ -2688,7 +2688,7 @@ export class MemOS {
     this.assertInit();
     await this.storage.clearTTL(id);
     const updated = await this.storage.peekNode!(id);
-    if (!updated) throw new Error(`Node not found: ${id}`);
+    if (!updated) throw new Error(`Узел памяти не найден: ${id}`);
     this.graph.updateNode(updated);
     await this.logMutation("update", updated);
   }
@@ -2707,7 +2707,7 @@ export class MemOS {
     this.assertInit();
     // Side-effect-free read — tag updates are not retrievals.
     const node = await this.storage.peekNode!(id);
-    if (!node) throw new Error(`Node not found: ${id}`);
+    if (!node) throw new Error(`Узел памяти не найден: ${id}`);
 
     const merged = [...new Set([...node.tags, ...tags])];
     await this.updateNodeLogged(id, { tags: merged });
@@ -2725,7 +2725,7 @@ export class MemOS {
   async untag(id: string, tags: string[]): Promise<void> {
     this.assertInit();
     const node = await this.storage.peekNode!(id);
-    if (!node) throw new Error(`Node not found: ${id}`);
+    if (!node) throw new Error(`Узел памяти не найден: ${id}`);
 
     const tagSet = new Set(tags);
     const filtered = node.tags.filter((t) => !tagSet.has(t));
@@ -2866,7 +2866,7 @@ export class MemOS {
         payload = await readFile(opts.file, "utf8");
       }
       if (payload === undefined) {
-        throw new Error("importExternal requires `file`, `data`, or `dir`.");
+        throw new Error("Для импорта укажите `file`, `data` или `dir`.");
       }
       parsed = parseExternalMemoryExport(payload, source, maxItems);
     }
@@ -2999,7 +2999,7 @@ export class MemOS {
   ): Promise<ProceduralLesson> {
     this.assertInit();
     if (!lesson || lesson.trim().length === 0) {
-      throw new Error("memorizeProcedural requires a non-empty lesson.");
+      throw new Error("Для сохранения процедуры необходим непустой текст.");
     }
     const storage = this.lessonStorage();
     const namespace = opts.scope
@@ -3037,11 +3037,11 @@ export class MemOS {
     const storage = this.lessonStorage();
     const current = await storage.getProceduralLesson!(id);
     if (!current) {
-      throw new Error(`No procedural lesson found for id: ${id}`);
+      throw new Error(`Процедурное знание не найдено для ID: ${id}`);
     }
     const updated = applyLessonOutcome(current, outcome);
     const saved = await storage.updateProceduralLesson!(id, updated);
-    if (!saved) throw new Error(`No procedural lesson found for id: ${id}`);
+    if (!saved) throw new Error(`Процедурное знание не найдено для ID: ${id}`);
     return saved;
   }
 
@@ -3271,7 +3271,7 @@ export class MemOS {
     const node = this.storage.peekNode
       ? await this.storage.peekNode(id)
       : await this.storage.getNode(id);
-    if (!node) throw new Error(`Node not found: ${id}`);
+    if (!node) throw new Error(`Узел памяти не найден: ${id}`);
     if (!node.quarantined) return node;
     const updated = await this.updateNodeLogged(id, {
       quarantined: false,
@@ -3281,7 +3281,7 @@ export class MemOS {
         quarantineReleasedAt: Date.now(),
       },
     });
-    if (!updated) throw new Error(`Node not found: ${id}`);
+    if (!updated) throw new Error(`Узел памяти не найден: ${id}`);
     this.graph.updateNode(updated);
     this.invalidateSearchCache();
     return updated;
@@ -3295,10 +3295,10 @@ export class MemOS {
   async setProvenance(id: string, tier: ProvenanceTier): Promise<MemoryNode> {
     this.assertInit();
     if (!isProvenanceTier(tier)) {
-      throw new Error(`Unknown provenance tier: ${String(tier)}`);
+      throw new Error(`Неизвестный уровень происхождения данных: ${String(tier)}`);
     }
     const updated = await this.updateNodeLogged(id, { provenance: tier });
-    if (!updated) throw new Error(`Node not found: ${id}`);
+    if (!updated) throw new Error(`Узел памяти не найден: ${id}`);
     this.graph.updateNode(updated);
     this.invalidateSearchCache();
     return updated;
@@ -3372,7 +3372,7 @@ export class MemOS {
     const start = Date.now();
     const dryRun = opts.dryRun ?? false;
     if (!existsSync(fromPath)) {
-      throw new Error(`Merge source not found: ${fromPath}`);
+      throw new Error(`Источник объединения не найден: ${fromPath}`);
     }
 
     // Open the source as a plain SQLiteStorage. We never write through
@@ -3502,7 +3502,7 @@ export class MemOS {
 
     const source = opts.source;
     if (!existsSync(source)) {
-      throw new Error(`Import source not found: ${source}`);
+      throw new Error(`Источник импорта не найден: ${source}`);
     }
 
     // Auto-detect format from path
@@ -3521,7 +3521,7 @@ export class MemOS {
 
     // markdown or obsidian — read all .md files from directory
     if (!existsSync(source)) {
-      throw new Error(`Import directory not found: ${source}`);
+      throw new Error(`Папка импорта не найдена: ${source}`);
     }
 
     const files = readdirSync(source).filter((f: string) => f.endsWith(".md"));
@@ -4754,7 +4754,7 @@ export class MemOS {
     const limit = opts.limit ?? 10;
 
     const node = await this.retrieve(id);
-    if (!node) throw new Error(`Memory ${id} not found.`);
+    if (!node) throw new Error(`Memory ${id} не найдено.`);
 
     const edges = this.graph.getEdgesForNode(id);
 
@@ -5168,7 +5168,7 @@ export class MemOS {
    * @param id — Memory node ID.
    * @param validFrom — Validity start (Unix ms), or null to clear.
    * @param validTo — Validity end (Unix ms), or null to clear.
-   * @returns The updated node, or null if not found.
+   * @returns The updated node, or null if не найдено.
    */
   async setValidity(
     id: string,
@@ -5234,7 +5234,7 @@ export class MemOS {
    *   machine has already computed the crushed score, pass it here so
    *   the old version stops outranking its replacement. Omit to leave
    *   confidence untouched (pure temporal supersession).
-   * @returns The superseded (updated) node, or null if not found.
+   * @returns The superseded (updated) node, or null if не найдено.
    */
   async supersede(
     id: string,
@@ -5407,7 +5407,7 @@ export class MemOS {
         const node =
           (await this.storage.peekNode?.(input.id)) ??
           (await this.storage.getNode(input.id));
-        if (!node) throw new Error(`Memory ${input.id} not found.`);
+        if (!node) throw new Error(`Memory ${input.id} не найдено.`);
         return { target: node, scope: input, alternatives: [] };
       }
       case "last": {
@@ -5574,7 +5574,7 @@ export class MemOS {
    *
    * @param id — Memory node ID.
    * @param score — Trust score in [0, 1].
-   * @returns The updated node, or null if not found.
+   * @returns The updated node, or null if не найдено.
    */
   async setTrust(id: string, score: number): Promise<MemoryNode | null> {
     this.assertInit();
@@ -5592,7 +5592,7 @@ export class MemOS {
    *
    * @param id — Memory node ID.
    * @param delta — Amount to add (positive) or subtract (negative).
-   * @returns The updated node, or null if not found.
+   * @returns The updated node, or null if не найдено.
    */
   async adjustTrust(id: string, delta: number): Promise<MemoryNode | null> {
     this.assertInit();
@@ -6949,7 +6949,7 @@ export class MemOS {
         signal: AbortSignal.timeout(cfg.timeoutMs ?? 5_000),
       });
       if (!response.ok) {
-        throw new Error(`rerank endpoint returned ${response.status}`);
+        throw new Error(`Сервис переранжирования вернул ошибку ${response.status}`);
       }
       payload = (await response.json()) as typeof payload;
     } catch (err) {
