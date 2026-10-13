@@ -59,7 +59,7 @@
   --dur-fast: .15s; --dur: .2s; --dur-slow: .6s;
 
   /* stacking */
-  --z-below: -1; --z-sky: 0; --z-shell: 1; --z-sidebar: 5; --z-chat: 55; --z-orb: 60; --z-overlay: 80; --z-toast: 90;
+  --z-below: -1; --z-sky: 0; --z-shell: 1; --z-sticky: 3; --z-sidebar: 5; --z-chat: 55; --z-orb: 60; --z-overlay: 80; --z-toast: 90;
 
   /* layout */
   --sidebar-w: 264px; --sidebar-w-collapsed: 76px; --orb-size: 64px; --content-max: 760px;
