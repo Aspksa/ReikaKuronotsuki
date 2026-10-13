@@ -225,3 +225,12 @@ test('updater installs dependencies in isolated staging before running MemOS int
   assert.equal(calls[1].args[0], 'tests/run.js');
   assert.equal(calls[1].cwd, path.join(root, '.updates', 'staging'));
 });
+
+test('update paths protect nested user directories except exact MemOS dataset', () => {
+  const { safeUpdatePath } = require('../update/shared');
+  for (const item of ['data/history.json','nested/data/user.json','nested/node_modules/x.js','nested/.env','vendor/memos/node_modules/package.json','nested/config.json','nested/.git/config','runtime/node.exe']) {
+    assert.equal(safeUpdatePath(item), false, item);
+  }
+  assert.equal(safeUpdatePath('vendor/memos/scripts/dataset/beam/data/beam_100k.json'), true);
+  assert.equal(safeUpdatePath('other/vendor/memos/scripts/dataset/beam/data/x'), false);
+});

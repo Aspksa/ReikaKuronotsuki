@@ -83,18 +83,49 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
     }).catch(error => { console.warn('MemOS недоступен:', error.message); return null; });
     return memoryPromise;
   }
+  // Persist only explicit, meaningful first-person statements; questions and commands
+  // stay in chat history, not in the long-term fact graph.
+  function memoryCandidate(text) {
+    const value = String(text || '').trim();
+    if (value.length < 12 || value.length > 350 || /[?？]/.test(value)) return null;
+    if (/^запомни\s*[:：,]?\s+/i.test(value)) return value.replace(/^запомни\s*[:：,]?\s*/i, '').trim() || null;
+    if (/^(?:привет|пока|спасибо|окей|хорошо|да|нет|сделай|покажи|найди|объясни|расскажи|помоги|проверь|переведи|напиши|запусти|открой|удали|поставь|установи)(?:\s|$|[,.!:])/i.test(value)) return null;
+    if (!/(?:^|\s)(?:я\s+(?:люблю|предпочитаю|хочу|живу|работаю|учусь|ненавижу|использую|увлекаюсь|не люблю)|мне\s+(?:нравится|не нравится|важно|нужно)|мой\s+(?:любимый|адрес|город|проект|питомец)|моя\s+(?:любимая|работа|цель)|меня зовут|запомни\s*[:：,]?\s+)(?:\s|$|[,.!:]|\S)/i.test(value)) return null;
+    return value.replace(/^запомни\s*[:：,]?\s*/i, '').trim() || null;
+  }
   async function remember(text) {
+    const content = memoryCandidate(text);
+    if (!content) return { skipped: true };
     const mem = await memory();
-    if (!mem) return false;
-    try { await mem.store(text, { type: 'fact', tags: ['reika-chat'], source: 'user_input' }); return true; }
-    catch (error) { console.warn('MemOS store:', error.message); return false; }
+    if (!mem) return { unavailable: true };
+    try {
+      const hits = await mem.search({ query: content, limit: 5 });
+      if (hits.some(hit => String(hit.node?.content || '').trim().toLocaleLowerCase('ru') === content.toLocaleLowerCase('ru'))) return { duplicate: true };
+      await mem.store(content, { type: /(?:люблю|предпочитаю|нравится|любим)/i.test(content) ? 'preference' : 'fact', tags: ['reika-chat'], source: 'user_input' });
+      return { saved: true };
+    } catch (error) { console.warn('MemOS store:', error.message); return { unavailable: true }; }
   }
   async function recall(text) {
     const mem = await memory();
     if (!mem) return [];
     try {
       const hits = await mem.search({ query: text, limit: 4 });
-      return hits.map(hit => hit.node?.content).filter(x => typeof x === 'string').slice(0,4);
+      const found = hits.map(hit => hit.node?.content).filter(x => typeof x === 'string').slice(0, 4);
+      if (found.length) return found;
+      // Without a vector embedding model MemOS search may miss obvious lexical
+      // matches. For offline memory questions, fall back to bounded word overlap.
+      const words = String(text).toLocaleLowerCase('ru').match(/[а-яёa-z0-9]{3,}/g) || [];
+      const stop = new Set(['что', 'как', 'это', 'тебе', 'меня', 'обо', 'про', 'мои', 'мой', 'моя', 'помнишь', 'запомнила', 'вспомни', 'знаешь']);
+      const terms = [...new Set(words.filter(w => !stop.has(w)))];
+      if (!terms.length) return [];
+      const exported = await mem.export({ format: 'json' });
+      const nodes = JSON.parse(exported.data);
+      if (!Array.isArray(nodes)) return [];
+      return nodes.slice(0, 5000)
+        .map(n => ({ text: typeof n.content === 'string' ? n.content : '', score: terms.filter(t => String(n.content || '').toLocaleLowerCase('ru').includes(t)).length }))
+        .filter(n => n.text && n.score >= Math.min(2, terms.length))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 4).map(n => n.text);
     } catch (error) { console.warn('MemOS search:', error.message); return []; }
   }
   const root = path.resolve(webRoot);
@@ -299,9 +330,9 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         const provider = stored.aiProvider;
         const key = ai.providerInfo(provider) ? secrets.get(dataDir, 'cloudru') : null;
         let answer = null, warning = null, source = 'reika';
+        const memories = await recall(text);
         if (ai.providerInfo(provider) && key) {
           try {
-            const memories = await recall(text);
             const result = await aiClient.reply({ provider, key, model: stored.aiModel, text, history: store.all(), memories });
             answer = { text: result.text, emotion: core.detectEmotion(result.text) };
             source = provider;
@@ -310,11 +341,17 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
             warning = error.message;
           }
         }
-        if (!answer) answer = core.reply(text);
+        if (!answer) {
+          // Rules-based offline Reika has no LLM: expose relevant memories
+          // transparently rather than pretending to perform semantic reasoning.
+          if (/(?:помнишь|запомнила|вспомни|что ты знаешь обо мне|мои предпочтения)/i.test(text)) {
+            answer = { text: memories.length ? 'Вот что я нашла в своей памяти:\n' + memories.map(x => '• ' + x).join('\n') : 'Пока не нашла подходящих воспоминаний. Можешь сказать «Запомни: …».', emotion: 'neutral' };
+          } else answer = core.reply(text);
+        }
         const user = store.add('user', text, core.detectEmotion(text));
         const reika = store.add('reika', answer.text, answer.emotion);
         const remembered = await remember(text);
-        if (!remembered) warning = [warning, 'Долговременная память MemOS недоступна: сообщение сохранено только в истории чата'].filter(Boolean).join('. ');
+        if (remembered.unavailable) warning = [warning, 'Долговременная память MemOS недоступна: сообщение сохранено только в истории чата'].filter(Boolean).join('. ');
         return sendJson(res, 200, { user, reika, source, ...(warning ? { warning } : {}) });
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
