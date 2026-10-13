@@ -88,6 +88,7 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
   function memoryCandidate(text) {
     const value = String(text || '').trim();
     if (value.length < 12 || value.length > 350 || /[?？]/.test(value)) return null;
+    if (/^запомни\\s*[:：,]?\\s+/i.test(value)) return value.replace(/^запомни\\s*[:：,]?\\s*/i, '').trim() || null;
     if (/^(?:привет|пока|спасибо|окей|хорошо|да|нет|сделай|покажи|найди|объясни|расскажи|помоги|проверь|переведи|напиши|запусти|открой|удали|поставь|установи)(?:\\s|$|[,.!:])/i.test(value)) return null;
     if (!/(?:^|\\s)(?:я\\s+(?:люблю|предпочитаю|хочу|живу|работаю|учусь|ненавижу|использую|увлекаюсь|не люблю)|мне\\s+(?:нравится|не нравится|важно|нужно)|мой\\s+(?:любимый|адрес|город|проект|питомец)|моя\\s+(?:любимая|работа|цель)|меня зовут|запомни\\s*[:：,]?\\s+)(?:\\s|$|[,.!:]|\\S)/i.test(value)) return null;
     return value.replace(/^запомни\\s*[:：,]?\\s*/i, '').trim() || null;
