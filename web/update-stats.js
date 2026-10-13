@@ -289,7 +289,10 @@
     if(baseline){
       const when=new Date(baseline.from).toLocaleDateString('ru-RU');
       const signed=n=>(n>0?'+':'')+num(n);
-      comparison.textContent=(baseline.baseline==='previous-recorded-version'?'С прошлой записанной версии, ': 'С первой записи, ')+when+': '+signed(baseline.files)+' файлов · '+signed(baseline.lines)+' строк · '+signed(baseline.bytes)+' байт. Сравнение с первой сохранённой точкой, не с первой версией.';
+      const currentSize=data.scan?.bytes;
+      const previousSize=Number.isFinite(currentSize)?currentSize-baseline.bytes:null;
+      const percent=previousSize>0?100*baseline.bytes/previousSize:null;
+      comparison.textContent='Размер проекта: '+format(currentSize,'bytes')+' · изменение '+signed(baseline.bytes)+' Б'+(percent===null?'':' ('+(percent>0?'+':'')+num(percent)+'%)')+'. Файлы: '+signed(baseline.files)+' · строки: '+signed(baseline.lines)+'. Сравнение с измерением от '+when+'.';
     }else comparison.textContent='Сравнение появится после первого сохранённого измерения.';
     const git=$('up-stats-gitdiff');
     const d=data.gitDiff;
