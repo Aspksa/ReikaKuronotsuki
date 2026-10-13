@@ -1,11 +1,26 @@
 'use strict';
-// "Обновление проекта" window. Shown only when the local server (with the updater) answers; the static web build has none.
+// "Обновление проекта": the page, the entry in the side panel (status line, progress, quick install, "what's new"),
+// notifications and installing from a ZIP file. Active only when the local server (with the updater) answers; the static build has none.
 (function () {
   const $ = (id) => document.getElementById(id);
   const page = $('page-update');
-  if (!page || location.protocol === 'file:') return;
+  const S = window.ReikaUpdateState;
+  if (!page || !S || location.protocol === 'file:') return;
   const onPage = () => !page.hidden;
+  const SEEN_KEY = 'reika.notified.v1';
+  const MAX_ARCHIVE = 60_000_000;
   let timer = null;
+  let last = null;       // last status from the server
+  let prevPhase = null;  // phase at the previous poll (for "ready"/"error" notices)
+  let started = false;
+
+  const store = {
+    get() { try { return localStorage.getItem(SEEN_KEY); } catch { return null; } },
+    set(v) { try { localStorage.setItem(SEEN_KEY, v); } catch { /* private mode */ } },
+  };
+  const toast = (o) => { if (window.ReikaToast) window.ReikaToast.show(o); };
+  const show = (el, on) => { el.hidden = !on; };
+  const fail = (e) => { $('up-error').hidden = false; $('up-error').textContent = e.message || String(e); };
 
   async function call(path, method = 'GET', body) {
     const response = await fetch(`api/update/${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -13,11 +28,11 @@
     if (!response.ok) throw new Error(data.error || `Ошибка ${response.status}`);
     return data;
   }
-  const show = (el, on) => { el.hidden = !on; };
   const label = { todo: '', active: 'active', done: 'done', error: 'error' };
 
-  function render(st) {
-    $('up-local').textContent = /^[0-9a-f]{40}$/.test(st.localVersion || '') ? st.localVersion.slice(0, 8) : (st.localVersion || 'не определена');
+  // ---------- the update page ----------
+  function renderPage(st) {
+    $('up-local').textContent = S.shortVersion(st.localVersion);
     $('up-latest').textContent = st.latest ? st.latest.version : '—';
     $('up-message').textContent = st.message || '';
     $('up-bar').style.width = `${st.percent || 0}%`;
@@ -33,6 +48,7 @@
     show($('up-cancel'), working);
     show($('up-check'), !working); show($('up-download'), !working && st.phase !== 'ready');
     $('up-download').disabled = !!st.blocked || !st.latest;
+    $('up-file').disabled = working || st.phase === 'ready';
     show($('up-install'), st.phase === 'ready' || st.rollbackPending);
     const needConfirm = st.phase === 'ready' && st.pendingRemovals.length > 0 && !st.removalsConfirmed;
     show($('up-removals'), st.pendingRemovals.length > 0 && st.phase === 'ready');
@@ -40,30 +56,124 @@
     for (const p of st.pendingRemovals) { const li = document.createElement('li'); li.textContent = p; $('up-removals-list').appendChild(li); }
     show($('up-confirm'), needConfirm);
     $('up-channel').value = st.config.channel; $('up-auto').value = st.config.autoCheck;
-    return working;
   }
 
-  async function refresh() {
-    try {
-      const working = render(await call('status'));
-      clearTimeout(timer);
-      if (onPage()) timer = setTimeout(refresh, working ? 700 : 5000);
-    } catch (e) { $('up-error').hidden = false; $('up-error').textContent = e.message; }
+  // ---------- the entry in the side panel ----------
+  function renderCard(st) {
+    const card = $('update-card');
+    const state = S.cardState(st);
+    card.dataset.state = state;
+    $('update-ico-path').setAttribute('d', S.ICONS[state]);
+    $('update-status').textContent = S.statusText(st, state);
+    show($('update-dot'), state === 'available' || state === 'ready');
+    const bar = $('update-mini');
+    show(bar, state === 'busy' && st.phase === 'downloading');
+    const pct = Math.max(0, Math.min(100, Math.round(st.percent || 0)));
+    bar.setAttribute('aria-valuenow', String(pct));
+    $('update-mini-fill').style.width = `${pct}%`;
+    const needConfirm = st.pendingRemovals && st.pendingRemovals.length > 0 && !st.removalsConfirmed;
+    show($('update-install-quick'), state === 'ready' && !st.rollbackPending && !needConfirm);
+    const n = S.news(st);
+    const pop = $('update-news');
+    pop.textContent = '';
+    if (n) {
+      const h = document.createElement('b'); h.textContent = `Что нового · ${n.version}`; pop.appendChild(h);
+      if (n.items.length) {
+        const ul = document.createElement('ul');
+        for (const t of n.items) { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); }
+        pop.appendChild(ul);
+        if (n.more) { const m = document.createElement('p'); m.textContent = `…и ещё ${n.more}`; pop.appendChild(m); }
+      } else { const p = document.createElement('p'); p.textContent = n.text; pop.appendChild(p); }
+    }
+    show(pop, !!n);
   }
+
+  // ---------- announcements to the shell (events and globals: the shell may load later than this answer) ----------
+  function announce(st) {
+    const state = S.cardState(st);
+    window.ReikaUpdateSummary = { available: state === 'available' || state === 'ready', version: st.localVersion, phase: st.phase, latest: st.latest ? st.latest.version : null, state, text: S.statusText(st, state) };
+    window.dispatchEvent(new CustomEvent('reika:update-summary', { detail: window.ReikaUpdateSummary }));
+  }
+
+  function notify(st) {
+    const notice = S.phaseNotice(prevPhase, st);
+    prevPhase = st.phase;
+    if (notice === 'ready') {
+      toast({ key: 'update-ready', title: 'Обновление готово к установке', text: 'Файлы проверены, тесты прошли.', tone: 'ok', actions: [{ label: 'Установить', run: install }] });
+    } else if (notice === 'error') {
+      toast({ key: 'update-error', title: 'Обновление не удалось', text: S.statusText(st, 'error'), tone: 'warn', actions: [{ label: 'Подробнее', run: () => { location.hash = '#/update'; } }] });
+    }
+    if (S.shouldNotifyNew(st, store.get())) {
+      store.set(st.latest.sha);
+      toast({ key: 'update-new', title: 'Доступна новая версия', text: `Версия ${st.latest.version}. Её можно скачать и проверить, пока вы работаете.`, actions: [
+        { label: 'Скачать', run: () => call('download', 'POST', {}).then(poll).catch(() => { location.hash = '#/update'; }) },
+        { label: 'Подробнее', run: () => { location.hash = '#/update'; } },
+      ] });
+    }
+  }
+
+  // ---------- one polling loop: quick while working, slow otherwise ----------
+  async function poll() {
+    clearTimeout(timer);
+    let delay = 20000;
+    try {
+      const st = await call('status');
+      last = st;
+      window.ReikaUpdateStatus = st;
+      if (!started) { started = true; window.ReikaUpdaterPresent = true; window.dispatchEvent(new CustomEvent('reika:updater-present')); }
+      notify(st);
+      renderCard(st);
+      announce(st);
+      if (onPage()) renderPage(st);
+      delay = S.cardState(st) === 'busy' ? 700 : (onPage() ? 5000 : 20000);
+    } catch (e) {
+      if (!started) return; // no updater here at all: stop asking
+      if (onPage()) fail(e);
+      delay = 8000;
+    }
+    timer = setTimeout(poll, delay);
+  }
+
   async function refreshHistory() {
     try {
       const h = await call('history');
       $('up-history').innerHTML = '';
+      const kinds = { install: 'Установка', rollback: 'Откат', failed: 'Неудачная установка', startup_failed: 'Не запустилась, возвращена прежняя' };
       for (const item of h.items) {
         const li = document.createElement('li');
-        const kinds = { install: 'Установка', rollback: 'Откат', failed: 'Неудачная установка', startup_failed: 'Не запустилась, возвращена прежняя' };
         li.textContent = `${new Date(item.at).toLocaleString('ru-RU')} · ${kinds[item.kind] || item.kind}${item.to ? ' · ' + item.to.slice(0, 8) : ''}${item.message ? ' · ' + item.message : ''}`;
         $('up-history').appendChild(li);
       }
       show($('up-rollback'), !!h.canRollback && !h.rollbackPending);
     } catch { /* history is informative */ }
   }
-  const act = (id, fn) => $(id).addEventListener('click', async () => { try { await fn(); } catch (e) { $('up-error').hidden = false; $('up-error').textContent = e.message; } refresh(); refreshHistory(); });
+  const act = (id, fn) => $(id).addEventListener('click', async () => { try { await fn(); } catch (e) { fail(e); } poll(); refreshHistory(); });
+
+  async function install() {
+    const st = await call('status');
+    if (st.pendingRemovals.length && !st.removalsConfirmed && !confirm('Файлы из списка удаления не подтверждены и останутся на месте. Продолжить установку?')) return;
+    await call('install-now', 'POST', {});
+    $('up-message').textContent = 'Перезапуск… страница обновится сама.';
+    toast({ key: 'update-restart', title: 'Рэйка перезапускается', text: 'Страница обновится сама.', timeout: 60000 });
+    const wait = setInterval(async () => { try { const r = await fetch('api/health', { cache: 'no-store' }); if (r.ok) { clearInterval(wait); location.reload(); } } catch { /* restarting */ } }, 1000);
+  }
+
+  // ---------- update from a ZIP file ----------
+  async function fromFile(file) {
+    if (!file) return;
+    if (file.size > MAX_ARCHIVE) throw new Error('Файл больше 60 МБ: это не архив проекта.');
+    if (!confirm(`Подготовить обновление из файла «${file.name}»?\n\nАрхив не сверяется с GitHub, поэтому используйте только тот, которому доверяете. Данные и настройки не затрагиваются, перед установкой запустятся тесты.`)) return;
+    const response = await fetch('api/update/from-archive', { method: 'POST', headers: { 'Content-Type': 'application/zip', 'X-File-Name': encodeURIComponent(file.name) }, body: file });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Ошибка ${response.status}`);
+  }
+  $('up-file').addEventListener('change', async (event) => {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    input.value = '';
+    try { await fromFile(file); } catch (e) { fail(e); }
+    poll();
+  });
 
   act('up-check', () => call('check', 'POST', {}));
   act('up-download', () => call('download', 'POST', {}));
@@ -71,33 +181,18 @@
   act('up-confirm', () => call('confirm-removals', 'POST', {}));
   act('up-rollback', async () => { if (confirm('Откатить последнюю установку? Данные чата не изменятся. Рэйка перезапустится.')) { await call('rollback', 'POST', {}); await install(); } });
   act('up-install', install);
-  $('up-channel').addEventListener('change', () => call('settings', 'POST', { channel: $('up-channel').value }).then(refresh).catch((e) => alert(e.message)));
-  $('up-auto').addEventListener('change', () => call('settings', 'POST', { autoCheck: $('up-auto').value }).then(refresh).catch((e) => alert(e.message)));
+  $('update-install-quick').addEventListener('click', () => install().catch(fail));
+  $('up-channel').addEventListener('change', () => call('settings', 'POST', { channel: $('up-channel').value }).then(poll).catch((e) => alert(e.message)));
+  $('up-auto').addEventListener('change', () => call('settings', 'POST', { autoCheck: $('up-auto').value }).then(poll).catch((e) => alert(e.message)));
 
-  async function install() {
-    const st = await call('status');
-    if (st.pendingRemovals.length && !st.removalsConfirmed && !confirm('Файлы из списка удаления не подтверждены и останутся на месте. Продолжить установку?')) return;
-    await call('install-now', 'POST', {});
-    $('up-message').textContent = 'Перезапуск… страница обновится сама.';
-    const wait = setInterval(async () => { try { const r = await fetch('api/health', { cache: 'no-store' }); if (r.ok) { clearInterval(wait); location.reload(); } } catch { /* restarting */ } }, 1000);
-  }
+  window.addEventListener('reika:route', (event) => { if (event.detail === 'update') { poll(); refreshHistory(); } });
 
-  // Polling runs only while the page is on screen (the shell announces route changes).
-  window.addEventListener('reika:route', (event) => {
-    clearTimeout(timer);
-    if (event.detail === 'update') { refresh(); refreshHistory(); }
-  });
-
-  // Is there something new? One quiet request at start-up feeds the dot in the menu and the cards on the home page.
-  // The answers are kept in window.ReikaUpdaterPresent / window.ReikaUpdateSummary as well as announced by events: the answer can
-  // arrive before shell.js has even loaded, and a lost event would hide the menu item for good.
-  const hasNewVersion = (st) => !!st.latest && /^[0-9a-f]{40}$/.test(st.localVersion || '') && st.latest.sha !== st.localVersion;
-  async function summary() {
-    try {
-      const st = await call('status');
-      window.ReikaUpdateSummary = { available: hasNewVersion(st) || st.phase === 'ready', version: st.localVersion, phase: st.phase, latest: st.latest ? st.latest.version : null };
-      window.dispatchEvent(new CustomEvent('reika:update-summary', { detail: window.ReikaUpdateSummary }));
-    } catch { /* the server (or its updater) is not there */ }
-  }
-  fetch('api/update/status').then((r) => { if (r.ok) { window.ReikaUpdaterPresent = true; window.dispatchEvent(new CustomEvent('reika:updater-present')); summary(); } }).catch(() => {});
+  // for the command palette
+  window.ReikaUpdate = {
+    check: () => call('check', 'POST', {}).then(poll),
+    open: () => { location.hash = '#/update'; },
+    install,
+    get status() { return last; },
+  };
+  poll();
 })();

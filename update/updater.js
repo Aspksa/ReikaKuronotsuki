@@ -160,7 +160,7 @@ class ProjectUpdater {
   }
 
   status() {
-    return { ...this.state, latest: this.latest, localVersion: this.localVersion(), config: this.getConfig(), rollbackPending: this.rollbackPending, blocked: this.blocked(), rateLimitedUntil: Date.now() < this.rateLimitUntil ? this.rateLimitUntil : null };
+    return { ...this.state, latest: this.latest, checkedAt: this.checkedAt || null, localVersion: this.localVersion(), config: this.getConfig(), rollbackPending: this.rollbackPending, blocked: this.blocked(), rateLimitedUntil: Date.now() < this.rateLimitUntil ? this.rateLimitUntil : null };
   }
 
   /** Why the newest version cannot be installed right now (null = it can). */
