@@ -110,7 +110,22 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
     if (!mem) return [];
     try {
       const hits = await mem.search({ query: text, limit: 4 });
-      return hits.map(hit => hit.node?.content).filter(x => typeof x === 'string').slice(0,4);
+      const found = hits.map(hit => hit.node?.content).filter(x => typeof x === 'string').slice(0, 4);
+      if (found.length) return found;
+      // Without a vector embedding model MemOS search may miss obvious lexical
+      // matches. For offline memory questions, fall back to bounded word overlap.
+      const words = String(text).toLocaleLowerCase('ru').match(/[а-яёa-z0-9]{3,}/g) || [];
+      const stop = new Set(['что', 'как', 'это', 'тебе', 'меня', 'обо', 'про', 'мои', 'мой', 'моя', 'помнишь', 'запомнила', 'вспомни', 'знаешь']);
+      const terms = [...new Set(words.filter(w => !stop.has(w)))];
+      if (!terms.length) return [];
+      const exported = await mem.export({ format: 'json' });
+      const nodes = JSON.parse(exported.data);
+      if (!Array.isArray(nodes)) return [];
+      return nodes.slice(0, 5000)
+        .map(n => ({ text: typeof n.content === 'string' ? n.content : '', score: terms.filter(t => String(n.content || '').toLocaleLowerCase('ru').includes(t)).length }))
+        .filter(n => n.text && n.score >= Math.min(2, terms.length))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 4).map(n => n.text);
     } catch (error) { console.warn('MemOS search:', error.message); return []; }
   }
   const root = path.resolve(webRoot);
