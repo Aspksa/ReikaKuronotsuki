@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="320" height="48" viewBox="0 0 320 48">
-<!-- one seamless tile: four wave periods of 80 px. Lighter crests on top of a darker trough line, like cel-shaded water. -->
-<path d="M0 22 Q20 8 40 22 T80 22 T120 22 T160 22 T200 22 T240 22 T280 22 T320 22" fill="none" stroke="#ffe7c2" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
-<path d="M0 30 Q20 18 40 30 T80 30 T120 30 T160 30 T200 30 T240 30 T280 30 T320 30" fill="none" stroke="#8f7bff" stroke-opacity=".28" stroke-width="3" stroke-linecap="round"/>
-<path d="M10 40 Q30 31 50 40 T90 40 T130 40 T170 40 T210 40 T250 40 T290 40 T330 40" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="2" stroke-linecap="round"/>
-</svg>

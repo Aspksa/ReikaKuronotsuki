@@ -1,91 +1,15 @@
 /*
- * The night scene, anime style: a deep indigo-to-violet sky with a warm glow at the horizon, a big cel-shaded cream moon with
- * rings and rays, four-point sparkle stars, drifting rim-lit clouds and a sea with stylised waves, ripples and the moon's
- * reflection. Layers, back to front:
- *   stars -> horizon glow -> moon (glow, rays, rings, disc, bloom, flare) -> clouds -> sea (path, waves, ripples) -> mist -> petals -> vignette
- * Light play: the moon breathes, rays turn very slowly, sparkles pulse, clouds drift across the moon, the waves flow, ripples
- * spread on the water and the whole scene shifts a few pixels with the pointer (--px/--py, set by sky.js).
+ * Background layer: a calm dark backdrop with falling sakura petals and a soft vignette.
+ * (The night scene with the moon, stars, clouds and sea was removed on request.)
  * This file is the only one that may use raw rgb() values besides tokens.css.
  */
-.sky {
-  position: fixed; inset: 0; z-index: var(--z-sky); overflow: hidden; pointer-events: none;
-  background:
-    radial-gradient(70% 46% at 84% 6%, rgb(255 190 140 / .20), transparent 70%),
-    radial-gradient(60% 50% at 8% 56%, rgb(125 95 255 / .22), transparent 72%),
-    linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 46%, var(--sky-low) 70%, var(--sky-horizon) 100%);
-}
-.sky > *, .sky-water > * { position: absolute; }
+.sky { position: fixed; inset: 0; z-index: var(--z-sky); overflow: hidden; pointer-events: none; background: var(--bg); }
+.sky > * { position: absolute; }
 #petals { inset: 0; }
-
-/* stars: round dots and four-point sparkles, created by sky.js (position/size/tint/pace are inline custom properties) */
-.sky-stars { inset: 0; transform: translate(calc(var(--px, 0) * -4px), calc(var(--py, 0) * -3px)); }
-.star { position: absolute; width: var(--s); height: var(--s); border-radius: 50%; background: var(--c); box-shadow: 0 0 calc(var(--s) * 3) var(--c); opacity: .55;
-  animation: twinkle var(--d) ease-in-out var(--delay) infinite alternate; }
-.sparkle { position: absolute; width: var(--s); height: var(--s); background: url("../assets/scene/sparkle.svg") center / contain no-repeat; filter: hue-rotate(var(--h, 0deg));
-  animation: sparkle var(--d) ease-in-out var(--delay) infinite; }
-@keyframes twinkle { from { opacity: .18; transform: scale(.8); } to { opacity: 1; transform: scale(1.15); } }
-@keyframes sparkle { 0%, 100% { transform: scale(.35) rotate(0deg); opacity: .25; } 50% { transform: scale(1) rotate(45deg); opacity: 1; } }
-.shooting-star { width: 140px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, rgb(255 250 230 / .95)); transform-origin: right center; opacity: 0;
-  animation: shoot 1.2s ease-out forwards; }
-.shooting-star::after { content: ""; position: absolute; right: -4px; top: -5px; width: 12px; height: 12px; background: url("../assets/scene/sparkle.svg") center / contain no-repeat; }
-@keyframes shoot { 0% { opacity: 0; transform: translate(0, 0) rotate(28deg) scaleX(.3); } 12% { opacity: 1; } 100% { opacity: 0; transform: translate(-320px, 170px) rotate(28deg) scaleX(1); } }
-
-.horizon-glow { left: 0; right: 0; bottom: 26vh; height: 34vh; background: radial-gradient(60% 100% at calc(100% - var(--moon-right) - var(--moon-size) * .5) 100%, rgb(255 170 150 / .30), transparent 70%); }
-
-/* the moon */
-.moon-stage { top: var(--moon-top); right: var(--moon-right); width: var(--moon-size); height: var(--moon-size);
-  transform: translate(calc(var(--px, 0) * -10px), calc(var(--py, 0) * -6px)); }
-.moon-stage > * { position: absolute; border-radius: 50%; }
-.moon-glow { inset: -120%; animation: breathe 9s ease-in-out infinite;
-  background: radial-gradient(circle closest-side, rgb(var(--moon-rgb) / .42) 0, rgb(255 190 150 / .17) 28%, rgb(190 130 220 / .08) 52%, transparent 100%); }
-.moon-rays { inset: -150%; mix-blend-mode: screen; animation: spin 300s linear infinite, breathe 14s ease-in-out infinite;
-  background: repeating-conic-gradient(from 0deg, rgb(var(--moon-rgb) / .08) 0 1.2deg, transparent 1.2deg 9deg);
-  -webkit-mask-image: radial-gradient(circle closest-side, black 16%, transparent 100%); mask-image: radial-gradient(circle closest-side, black 16%, transparent 100%); }
-.moon-ring { border: 1.5px solid rgb(var(--moon-rgb) / .38); }
-.moon-ring--a { inset: -13%; box-shadow: 0 0 26px rgb(var(--moon-rgb) / .28), inset 0 0 26px rgb(var(--moon-rgb) / .12); animation: breathe 7s ease-in-out infinite; }
-.moon-ring--b { inset: -30%; border-width: 1px; border-color: rgb(255 190 170 / .22); box-shadow: 0 0 40px rgb(255 190 170 / .12); }
-.moon-disc { inset: 0; background: url("../assets/scene/moon.svg") center / cover no-repeat;
-  box-shadow: 0 0 40px 6px rgb(var(--moon-rgb) / .45), 0 0 140px 40px rgb(255 190 150 / .22); }
-.moon-bloom { inset: -6%; mix-blend-mode: screen; background: radial-gradient(circle at 36% 32%, rgb(255 255 240 / .30), transparent 56%); }
-.moon-flare { border-radius: 0; width: 30%; height: 30%; top: -12%; right: -8%; background: url("../assets/scene/sparkle.svg") center / contain no-repeat; animation: flare 6s ease-in-out infinite; }
-@keyframes breathe { 0%, 100% { opacity: .82; } 50% { opacity: 1; } }
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes flare { 0%, 100% { transform: scale(.7) rotate(0deg); opacity: .55; } 50% { transform: scale(1) rotate(12deg); opacity: 1; } }
-
-/* clouds with a warm rim light drifting past the moon */
-.cloud { left: 0; width: calc(var(--moon-size) * 1.9); aspect-ratio: 600 / 160; background: url("../assets/scene/cloud.svg") center / contain no-repeat;
-  animation: drift var(--t) linear var(--delay) infinite;
-  -webkit-mask-image: linear-gradient(180deg, black 52%, transparent 96%); mask-image: linear-gradient(180deg, black 52%, transparent 96%); }
-.cloud--a { --t: 170s; --delay: -70s; top: calc(var(--moon-top) + var(--moon-size) * .52); }
-.cloud--b { --t: 240s; --delay: -170s; top: calc(var(--moon-top) + var(--moon-size) * .08); opacity: .8; width: calc(var(--moon-size) * 1.3); }
-@keyframes drift { from { transform: translateX(-60vw); } to { transform: translateX(115vw); } }
-
-/* the sea: a glowing horizon, flowing wave lines, the moon's reflection and ripples */
-.sky-water { left: 0; right: 0; bottom: 0; height: 30vh; overflow: hidden; box-shadow: 0 -2px 22px rgb(255 190 150 / .35);
-  border-top: 1px solid rgb(255 214 180 / .45);
-  background:
-    radial-gradient(55% 80% at calc(100% - var(--moon-right) - var(--moon-size) * .5) 0, rgb(var(--moon-rgb) / .24), transparent 70%),
-    linear-gradient(180deg, rgb(110 52 110 / .85), var(--sea-deep) 62%); }
-.wave { left: 0; right: 0; height: 48px; background: url("../assets/scene/waves.svg") 0 0 / 320px 48px repeat-x; animation: flow var(--t) linear infinite; }
-.wave--1 { top: 6%; opacity: .75; --t: 26s; background-size: 200px 30px; height: 30px; --w: 200px; }
-.wave--2 { top: 34%; opacity: .6; --t: 18s; animation-direction: reverse; background-size: 280px 42px; height: 42px; --w: 280px; }
-.wave--3 { top: 64%; opacity: .5; --t: 12s; background-size: 380px 56px; height: 56px; --w: 380px; }
-@keyframes flow { to { background-position-x: var(--w, 320px); } }
-.moon-path { top: 0; bottom: 4%; right: calc(var(--moon-right) + var(--moon-size) * .5); width: calc(var(--moon-size) * .8); transform: translateX(50%);
-  background: url("../assets/scene/moon-path.svg") center top / 100% 100% no-repeat; animation: shimmer 4.5s ease-in-out infinite alternate;
-  -webkit-mask-image: linear-gradient(180deg, black 55%, transparent); mask-image: linear-gradient(180deg, black 55%, transparent); }
-@keyframes shimmer { from { transform: translateX(50%) scaleX(.86); opacity: .7; } to { transform: translateX(50%) scaleX(1.04); opacity: 1; } }
-.ripple { border: 1.5px solid rgb(255 246 214 / .65); border-radius: 50%; width: var(--w); height: calc(var(--w) * .26); transform: translate(-50%, -50%) scale(.1); opacity: 0;
-  animation: ripple 3.6s ease-out forwards; }
-.ripple::after { content: ""; position: absolute; inset: 22%; border: 1px solid rgb(255 246 214 / .45); border-radius: 50%; }
-@keyframes ripple { 0% { transform: translate(-50%, -50%) scale(.1); opacity: 0; } 15% { opacity: .9; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 0; } }
-.mist { left: -20%; right: -20%; bottom: 24vh; height: 12vh; filter: blur(22px); opacity: .5; animation: mist-drift 70s ease-in-out infinite alternate;
-  background: linear-gradient(90deg, transparent, rgb(255 190 200 / .20), transparent 40%, rgb(190 170 255 / .16), transparent); }
-@keyframes mist-drift { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
 
 /* sakura petals: created by sky.js */
 .petal { top: -20px; width: var(--size, 10px); height: var(--size, 10px); background: linear-gradient(135deg, var(--sakura), var(--petal));
   border-radius: 150% 0 150% 0; opacity: .75; animation: fall linear infinite; }
 @keyframes fall { 0% { transform: translate(0, -5vh) rotate(0); } 50% { transform: translate(var(--sway, 30px), 55vh) rotate(180deg); } 100% { transform: translate(calc(var(--sway, 30px) * -1), 108vh) rotate(360deg); } }
 
-.sky-vignette { inset: 0; background: radial-gradient(120% 100% at 50% 40%, transparent 58%, rgb(8 4 24 / .5)); }
+.sky-vignette { inset: 0; background: radial-gradient(120% 100% at 50% 40%, transparent 60%, rgb(0 0 0 / .45)); }
