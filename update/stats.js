@@ -15,6 +15,42 @@ const sum = (xs, key) => xs.reduce((n, x) => n + (Number.isFinite(Number(x[key])
 const count = (xs, pred) => xs.filter(pred).length;
 const dateMs = x => { const n = Date.parse(x || ''); return Number.isFinite(n) ? n : null; };
 const optional = (arr, f) => arr.length ? f(arr) : null;
+const CACHE_MS = 60_000;
+const HISTORY_MAX = 1440;
+const cache = new Map();
+const writes = new Map();
+async function cachedInspect(root) {
+  const existing=cache.get(root);
+  if(existing && Date.now()-existing.at<CACHE_MS)return existing.value;
+  if(existing?.pending)return existing.pending;
+  const pending=inspect(root);
+  cache.set(root,{pending,at:Date.now()});
+  try { const value=await pending;cache.set(root,{value,at:Date.now()});return value; }
+  catch(e){cache.delete(root);throw e;}
+}
+async function readSamples(root){
+  try {const value=JSON.parse(await fs.readFile(path.join(root,'.updates','metric-samples.json'),'utf8'));return Array.isArray(value)?value.slice(-HISTORY_MAX):[];}
+  catch{return [];}
+}
+async function appendSample(root,sample){
+  const previous=writes.get(root);
+  if(previous?.pending)return previous.pending;
+  if(previous?.at && sample.at-previous.at<60_000)return;
+  const pending=(async()=>{
+    const samples=await readSamples(root);
+    if(samples.length && sample.at-samples.at(-1).at<60_000)return;
+    samples.push(sample);
+    const dir=path.join(root,'.updates');
+    const filename=path.join(dir,'metric-samples.json');
+    const temp=filename+'.'+process.pid+'.tmp';
+    await fs.mkdir(dir,{recursive:true});
+    try{await fs.writeFile(temp,JSON.stringify(samples.slice(-HISTORY_MAX)));await fs.rename(temp,filename);}
+    finally{await fs.rm(temp,{force:true}).catch(()=>{});}
+  })();
+  writes.set(root,{pending});
+  try {await pending;writes.set(root,{at:sample.at});}catch{writes.delete(root);}
+}
+
 async function inspect(root) {
   const result = { files: 0, bytes: 0, js: 0, css: 0, html: 0, json: 0, images: 0, text: 0,
     lines: 0, blank: 0, comments: 0, largest: 0, smallest: null, deepest: 0, directories: 0,
@@ -73,7 +109,7 @@ async function inspect(root) {
 async function collect(updater) {
   const root = updater.root, dir = path.join(root, '.updates');
   const [events, history, scan, lifetime] = await Promise.all([
-    readLines(path.join(dir, 'events.jsonl')), readLines(path.join(dir, 'history.jsonl')), inspect(root), readLines(path.join(dir, 'telemetry.jsonl'))
+    readLines(path.join(dir, 'events.jsonl')), readLines(path.join(dir, 'history.jsonl')), cachedInspect(root), readLines(path.join(dir, 'telemetry.jsonl'))
   ]);
   const status = updater.status();
   const types = Object.create(null);
@@ -107,7 +143,13 @@ async function collect(updater) {
   } catch { /* ZIP installations may not have git */ }
   const fsInfo = await fs.statfs(root).catch(() => null);
   const free = fsInfo ? Number(fsInfo.bavail) * Number(fsInfo.bsize) : null;
+  const sample={at:Date.now(),bytes:scan.bytes,files:scan.files,lines:scan.lines,rss:process.memoryUsage().rss,freeDiskBytes:free,installs:installs.length,failures:failures.length,downloads:sum(downloadEvents,'bytes_done')};
+  await appendSample(root,sample);
+  const samples=await readSamples(root);
+  const oldest=samples[0]||null;
+  const versionComparison=oldest?{from:oldest.at,to:sample.at,bytes:sample.bytes-oldest.bytes,files:sample.files-oldest.files,lines:sample.lines-oldest.lines,baseline:'earliest-recorded-sample'}:null;
   return {
+    samples,versionComparison,
     capturedAt: Date.now(), processStartedAt: Date.now() - Math.floor(process.uptime()*1000),
     uptimeMs: Math.floor(process.uptime()*1000), node: process.version, platform: process.platform,
     memoryRss: process.memoryUsage().rss, memoryHeap: process.memoryUsage().heapUsed,
@@ -132,4 +174,4 @@ async function collect(updater) {
       backups, backupBytes},
   };
 }
-module.exports = {collect, inspect, readLines};
+module.exports = {collect, inspect, readLines, cachedInspect, readSamples};
