@@ -1,0 +1,38 @@
+name: Vendor complete MemOS source
+on:
+  push:
+    branches: [feature/vendor-memos-full-source-20261013]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  vendor:
+    if: github.ref == 'refs/heads/feature/vendor-memos-full-source-20261013'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Import pinned upstream repository, including tests, docs and license
+        run: |
+          set -euxo pipefail
+          git clone --no-checkout https://github.com/Markgatcha/memos.git /tmp/reika-upstream-memos
+          git -C /tmp/reika-upstream-memos checkout --detach 53a681f58f831aed6a3af3bc51511d0e68af8747
+          mkdir -p vendor/memos
+          tar -C /tmp/reika-upstream-memos --exclude=.git -cf - . | tar -C vendor/memos -xf -
+          echo "Markgatcha/memos @ 53a681f58f831aed6a3af3bc51511d0e68af8747" > vendor/memos/REIKA_UPSTREAM.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Build upstream MemOS source
+        run: |
+          cd vendor/memos
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit all upstream sources and SDK build to Reika
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f vendor/memos
+          git commit -m "Vendor full MIT-licensed MemOS source and compiled SDK" || exit 0
+          git push origin HEAD:feature/vendor-memos-full-source-20261013
