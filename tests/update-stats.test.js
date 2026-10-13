@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { collect, inspect, readSamples, cachedInspect, findAnomalies, gitDiff } = require('../update/stats');
+const metricsDb = require('../update/metrics-db');
 
 test('statistics scan excludes user data and maintains project growth baseline', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'reika-stats-'));
@@ -180,4 +181,42 @@ test('every metric has a distinct value source and removed controls cannot retur
   }
   assert.ok(keys.includes('derived.avgNameBytes'));
   assert.ok(keys.includes('derived.filesPerDirectory'));
+});
+
+test('dashboard data lives in dedicated SQLite without touching primary user data', async () => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'reika-metrics-sqlite-'));
+  try {
+    const data=path.join(root,'data');
+    await fs.mkdir(data);
+    await fs.writeFile(path.join(data,'chat.json'),'untouched');
+    await fs.writeFile(path.join(root,'hello.js'),'const value=1;\n');
+    const updater={root,status:()=>({phase:'idle',checks:[],pendingRemovals:[],config:{}})};
+    const result=await collect(updater);
+    const database=path.join(root,'.updates','metrics.sqlite');
+    const bytes=await fs.readFile(database);
+    assert.equal(bytes.subarray(0,16).toString('utf8'),'SQLite format 3\0');
+    assert.equal((await fs.readFile(path.join(data,'chat.json'),'utf8')),'untouched');
+    assert.equal(result.samples.length,1);
+    assert.equal((await readSamples(root)).length,1);
+    assert.equal(await fs.stat(path.join(root,'.updates','metric-samples.json')).then(()=>true,()=>false),false);
+    assert.equal(await fs.stat(path.join(root,'.updates','stats-baseline.json')).then(()=>true,()=>false),false);
+  }finally {metricsDb.close(root);await fs.rm(root,{recursive:true,force:true});}
+});
+test('existing metric history migrates once and the SQLite timeline stays bounded', async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'reika-metrics-legacy-'));
+  try{
+    await fs.mkdir(path.join(root,'.updates'));
+    const initial={at:Date.now()-120000,bytes:5,files:1,lines:2,version:'old'};
+    await fs.writeFile(path.join(root,'.updates','metric-samples.json'),JSON.stringify([initial]));
+    await fs.writeFile(path.join(root,'.updates','stats-baseline.json'),JSON.stringify({bytes:5,files:1,lines:2,at:initial.at}));
+    const values=metricsDb.readSamples(root);
+    assert.equal(values.length,1);
+    assert.equal(values[0].bytes,5);
+    const baseline=metricsDb.getBaseline(root,{bytes:10,files:2,lines:5});
+    assert.equal(baseline.bytes,5);
+    metricsDb.appendSample(root,{at:Date.now(),bytes:11,files:3,lines:6});
+    assert.equal(metricsDb.readSamples(root).length,2);
+    metricsDb.close(root);
+    assert.equal(metricsDb.readSamples(root).length,2);
+  }finally{metricsDb.close(root);await fs.rm(root,{recursive:true,force:true});}
 });
