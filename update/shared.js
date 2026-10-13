@@ -17,7 +17,8 @@ const RESERVED_WINDOWS = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;
 function safeUpdatePath(p) {
   return typeof p === 'string' && p.length > 0 && p.length < 1024
     && !p.startsWith('/') && !p.includes('\\') && !WINDOWS_FORBIDDEN.test(p)
-    && p.split('/').every((s) => s && s !== '.' && s !== '..' && !BLOCKED.has(s) && !RESERVED_WINDOWS.test(s) && !/[. ]$/.test(s));
+    && !BLOCKED.has(p.split('/')[0])
+    && p.split('/').every((s) => s && s !== '.' && s !== '..' && !RESERVED_WINDOWS.test(s) && !/[. ]$/.test(s));
 }
 
 // Two paths that are the same file on Windows/macOS (case or Unicode normalisation differ) share one key.
