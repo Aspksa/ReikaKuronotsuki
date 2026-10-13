@@ -210,11 +210,17 @@
     ['Ошибок','events.errorCount','number']
   ];
   heroes.forEach(([label,key,unit],i)=>highlights.appendChild(createCard(label,key,unit,100+i,true)));
+  let lastData=null;
+  const period=$('up-stats-period');
+  period.addEventListener('change',()=>{if(lastData){replaySamples(lastData);for(const c of cards)renderValue(c,lastData);}});
   const persisted = {'events.downloadedBytes':'downloads','scan.bytes':'bytes','scan.files':'files','scan.lines':'lines','memoryRss':'rss','freeDiskBytes':'freeDiskBytes','history.installs':'installs','history.failures':'failures'};
   function replaySamples(data) {
-    const rows=Array.isArray(data.samples)?data.samples:[];
+    const now=data.capturedAt||Date.now();
+    const cutoff=now-Number(period.value);
+    const rows=(Array.isArray(data.samples)?data.samples:[]).filter(x=>Number.isFinite(x.at)&&x.at>=cutoff);
     for(const [key,field] of Object.entries(persisted)){
-      const series=rows.map(row=>row[field]).filter(numeric).slice(-24);
+      const all=rows.map(row=>row[field]).filter(numeric);
+      const series=all.length>36?all.filter((_,i)=>i%Math.ceil(all.length/36)===0).concat(all.at(-1)).slice(-36):all;
       if(series.length)traces.set(key,series);
     }
   }
@@ -225,7 +231,7 @@
     if(baseline){
       const when=new Date(baseline.from).toLocaleDateString('ru-RU');
       const signed=n=>(n>0?'+':'')+num(n);
-      comparison.textContent='С '+when+': '+signed(baseline.files)+' файлов · '+signed(baseline.lines)+' строк · '+signed(baseline.bytes)+' байт. Сравнение с первой сохранённой точкой, не с первой версией.';
+      comparison.textContent=(baseline.baseline==='previous-recorded-version'?'С прошлой записанной версии, ': 'С первой записи, ')+when+': '+signed(baseline.files)+' файлов · '+signed(baseline.lines)+' строк · '+signed(baseline.bytes)+' байт. Сравнение с первой сохранённой точкой, не с первой версией.';
     }else comparison.textContent='Сравнение появится после первого сохранённого измерения.';
     const sentences=[];
     if(baseline){
@@ -278,7 +284,7 @@
     try{
       const res=await fetch('api/update/stats',{cache:'no-store'});
       if(!res.ok)throw Error('HTTP '+res.status);
-      const data=expand(await res.json());lastFetch=Date.now();
+      const data=expand(await res.json());lastData=data;lastFetch=Date.now();
       replaySamples(data);
       showContext(data);
       for(const c of cards)renderValue(c,data);
