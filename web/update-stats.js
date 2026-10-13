@@ -113,11 +113,15 @@
   const selected={index:0};
   const reduced=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const numeric=value=>typeof value==='number'&&Number.isFinite(value);
-  function sparkline(values){
+  function sparkline(values,key){
     const good=values.filter(numeric);
     if(good.length<2)return null; // never pretend there is a trend without samples
-    const lo=Math.min(...good), hi=Math.max(...good);
-    const range=hi-lo || 1;
+    const rawLo=Math.min(...good), hi=Math.max(...good);
+    // Cumulative counters start at zero; fluctuating gauges keep an honest context band.
+    const cumulative=/^(events\.|history\.|growth\.|scan\.|uptimeMs)/.test(key);
+    const lo=cumulative?Math.min(0,rawLo):Math.min(0,rawLo-(Math.max(hi,1)*0.1));
+    const upper=Math.max(hi,lo+Math.max(Math.abs(hi)*0.1,1));
+    const range=upper-lo;
     const points=good.map((v,i)=>[4+i*112/(good.length-1),27-(v-lo)*22/range]);
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox','0 0 120 32');
@@ -251,7 +255,7 @@
       // A fresh poll with the same value is still a real sample, not fake chart data.
       if(c.sampleAt!==data.capturedAt && !persisted[c.key]){arr.push(value);if(arr.length>24)arr.shift();traces.set(c.key,arr);c.sampleAt=data.capturedAt;}
       c.chart.replaceChildren();
-      const line=sparkline(arr);
+      const line=sparkline(arr,c.key);
       if(line)c.chart.appendChild(line);
       if(arr.length<2){c.trend.textContent='Набираем данные';c.card.dataset.direction='unknown';}
       else{
