@@ -1,0 +1,59 @@
+site_name: MemOS
+site_description: Universal, local-first, persistent memory layer for AI agents.
+site_url: https://memos.readthedocs.io
+repo_url: https://github.com/Markgatcha/memos
+repo_name: Markgatcha/memos
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.expand
+    - toc.follow
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Troubleshooting: troubleshooting.md
+  - Memory Operations Guide: memory-guide.md
+  - API Reference: api-reference.md
+  - Adapters: adapters.md
+  - Benchmarks: benchmark-comparison.md
+  - Benchmark Quality: benchmark-quality.md
+  - Benchmarking Guide: benchmarking.md
+  - AI Trio Contracts: ai-trio-contracts.md
+  - Fidelity Levels: fidelity-levels.md
+  - Temporal Events & Reminders: temporal-events.md
+  - Cross-Harness Memory Sync: cross-harness.md
+  - Integrations: integrations.md
+  - Memory Explorer (MCP App): mcp-apps-explorer.md
+  - Contributing: https://github.com/Markgatcha/memos/blob/main/CONTRIBUTING.md
+  - Roadmap: https://github.com/Markgatcha/memos/blob/main/ROADMAP.md

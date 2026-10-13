@@ -1,0 +1,170 @@
+{
+  "name": "@mem-os/sdk",
+  "version": "1.6.26",
+  "description": "Universal, local-first, persistent memory layer for AI agents, LLM apps, and chatbots.",
+  "license": "MIT",
+  "author": "Markgatcha",
+  "homepage": "https://github.com/Markgatcha/memos",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Markgatcha/memos.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Markgatcha/memos/issues"
+  },
+  "keywords": [
+    "memory",
+    "ai-memory",
+    "llm",
+    "agent",
+    "agent-memory",
+    "graph",
+    "sqlite",
+    "local-first",
+    "ollama",
+    "langchain",
+    "chatbot",
+    "persistent-memory",
+    "context-window",
+    "rag",
+    "vector-memory",
+    "embedding",
+    "mcp",
+    "mem0",
+    "local-llm",
+    "semantic-search"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./mcp": {
+      "import": "./dist/mcp.js",
+      "types": "./dist/mcp.d.ts"
+    },
+    "./sqlite": {
+      "import": "./dist/storage/sqlite.js",
+      "types": "./dist/storage/sqlite.d.ts"
+    },
+    "./openai": {
+      "import": "./dist/adapters/openai.js",
+      "types": "./dist/adapters/openai.d.ts"
+    },
+    "./anthropic": {
+      "import": "./dist/adapters/anthropic.js",
+      "types": "./dist/adapters/anthropic.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "UPGRADING.md",
+    "docs/",
+    "memos/adapters/*.py",
+    "memos/adapters/__init__.py",
+    "!memos/adapters/__pycache__/**",
+    "src/adapters/",
+    "__tests__/",
+    "scripts/"
+  ],
+  "bin": {
+    "memos": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "oxlint src --quiet",
+    "lint:fix": "oxlint src --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepublishOnly": "pnpm run clean && pnpm run build",
+    "serve": "node dist/cli.js serve",
+    "bench": "tsx scripts/bench.ts",
+    "bench:quality": "tsx scripts/bench-quality.ts",
+    "bench:quality:local": "tsx scripts/bench-quality.ts --provider=local",
+    "bench:toon": "tsx scripts/bench-toon-formats.ts",
+    "bench:beam": "tsx scripts/bench-beam.ts",
+    "bench:beam:100k": "tsx scripts/bench-beam.ts --scale=100k",
+    "bench:beam:1m": "tsx scripts/bench-beam.ts --scale=1m",
+    "bench:locomo:retrieve": "tsx scripts/bench-locomo-noapi.ts",
+    "bench:locomo": "OPENAI_API_KEY=$OPENAI_API_KEY tsx scripts/bench-locomo.ts",
+    "bench:longmemeval": "OPENAI_API_KEY=$OPENAI_API_KEY tsx scripts/bench-longmemeval.ts",
+    "bench:crossrepo": "tsx scripts/bench-crossrepo.ts",
+    "bench:memory": "tsx scripts/bench-memory.ts",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "bench:longmemeval:retrieve": "tsx scripts/bench-longmemeval.ts --retrieve-only",
+    "check:plugin": "node scripts/check-plugin-version.mjs",
+    "eval:retrieval": "tsx scripts/eval-retrieval.ts",
+    "redteam:quarantine": "tsx scripts/redteam-quarantine.ts",
+    "eval:retrieval:check": "tsx scripts/eval-retrieval.ts --check",
+    "eval:retrieval:baseline": "tsx scripts/eval-retrieval.ts --write-baseline"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.0",
+    "better-sqlite3": "^13.0.3",
+    "zod": "^4.6.5"
+  },
+  "peerDependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@xenova/transformers": "^2.17.2"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    },
+    "@xenova/transformers": {
+      "optional": true
+    }
+  },
+  "overrides": {
+    "brace-expansion@>=4.0.0 <5.0.5": "5.0.5",
+    "js-yaml": ">=4.1.0",
+    "adm-zip": "^0.6.1",
+    "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "^4.3.0",
+    "@swc/core": "^1.16.13",
+    "@swc/jest": "^0.2.39",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.4",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "jest": "^30.5.2",
+    "oxlint": "^1.86.0",
+    "oxlint-tsgolint": "^7.0.2003",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "allowScripts": {
+    "better-sqlite3": true,
+    "@swc/core": true,
+    "esbuild": true,
+    "unrs-resolver": true,
+    "better-sqlite3-multiple-ciphers": true,
+    "protobufjs@7.6.6": true,
+    "@parcel/watcher@2.6.0": true,
+    "onnxruntime-node@1.30.0": true
+  },
+  "optionalDependencies": {
+    "better-sqlite3-multiple-ciphers": "^13.0.3"
+  },
+  "packageManager": "pnpm@12.9.1"
+}

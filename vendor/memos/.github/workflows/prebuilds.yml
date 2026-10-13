@@ -1,0 +1,99 @@
+name: Prebuilds
+
+# Build and verify the native better-sqlite3 binding on every push to main
+# and on every published release. Each run produces per-platform binding
+# artifacts; release runs additionally attach them to the GitHub Release
+# (with a combined SHA256SUMS.txt) so users on platforms without an
+# upstream prebuild never need a compiler toolchain.
+#
+# better-sqlite3 v13 ships N-API prebuilds (prebuilds/<platform>-<arch>.node
+# inside the npm tarball), so one job per OS is enough — the binary is
+# Node-version independent.
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Prebuild (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies (downloads the better-sqlite3 prebuild)
+        # --ignore-scripts: see ci.yml — the installer auto-runs
+        # `node-gyp rebuild` for better-sqlite3's shipped binding.gyp;
+        # the prebuild needs no build.
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Verify the native binding loads and runs
+        run: >-
+          node -e "const db = require('better-sqlite3')(':memory:');
+          db.exec('CREATE TABLE t (x INTEGER)');
+          db.prepare('INSERT INTO t VALUES (?)').run(42);
+          if (db.prepare('SELECT x FROM t').get().x !== 42) throw new Error('smoke failed');
+          console.log('better-sqlite3 binding OK')"
+
+      - name: Stage the binding artifact
+        shell: bash
+        run: |
+          SQ_VERSION=$(node -p "require('./node_modules/better-sqlite3/package.json').version")
+          PLATFORM=$(node -p "process.platform")
+          ARCH=$(node -p "process.arch")
+          PREBUILD=$(node -p "require('./node_modules/better-sqlite3/lib/binding.js').getPrebuildPath()")
+          cp "$PREBUILD" "better_sqlite3-v${SQ_VERSION}-${PLATFORM}-${ARCH}.node"
+          ls -la better_sqlite3-*.node
+
+      - name: Upload prebuild artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: prebuild-${{ matrix.os }}
+          path: better_sqlite3-*.node
+          retention-days: 14
+          if-no-files-found: error
+
+  attach:
+    name: Attach prebuilds to release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all prebuild artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: prebuilds
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd prebuilds
+          sha256sum better_sqlite3-*.node > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Attach to the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" prebuilds/* --clobber

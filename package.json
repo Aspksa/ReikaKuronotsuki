@@ -4,6 +4,6 @@
   "version": "0.0.0",
   "description": "Reika with integrated MemOS persistence",
   "dependencies": {
-    "@mem-os/sdk": "1.6.26"
+    "@mem-os/sdk": "file:vendor/memos"
   }
 }

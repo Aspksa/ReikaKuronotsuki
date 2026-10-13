@@ -1,0 +1,490 @@
+{
+  "startedAt": "2026-09-06T00:15:10.205Z",
+  "finishedAt": "2026-09-06T00:15:10.594Z",
+  "durationMs": 389,
+  "provider": {
+    "id": "openai-compatible",
+    "model": "LFM2.5-Embedding-350M-BF16",
+    "dimensions": 1024
+  },
+  "dataset": {
+    "nodes": 30,
+    "queries": 19
+  },
+  "metrics": {
+    "recallAt5": 1,
+    "recallAt10": 1,
+    "mrr": 0.9342105263157895,
+    "perCategory": {
+      "factual": {
+        "queries": 11,
+        "recallAt10": 1,
+        "mrr": 0.9545454545454546
+      },
+      "preference": {
+        "queries": 5,
+        "recallAt10": 1,
+        "mrr": 0.85
+      },
+      "temporal": {
+        "queries": 2,
+        "recallAt10": 1,
+        "mrr": 1
+      },
+      "entity": {
+        "queries": 1,
+        "recallAt10": 1,
+        "mrr": 1
+      }
+    },
+    "shared": {
+      "at5": {
+        "hitRate": 1,
+        "evidenceRecall": 0.9473684210526315,
+        "evidenceRecallMicro": 0.9333333333333333,
+        "allEvidenceRecall": 0.8947368421052632,
+        "precision": 0.4929824561403509,
+        "precisionMicro": 0.39436619718309857,
+        "mrr": 0.9342105263157895,
+        "ndcg": 0.9047283645009451,
+        "questionCount": 19
+      },
+      "at10": {
+        "hitRate": 1,
+        "evidenceRecall": 0.9473684210526315,
+        "evidenceRecallMicro": 0.9333333333333333,
+        "allEvidenceRecall": 0.8947368421052632,
+        "precision": 0.4476817042606516,
+        "precisionMicro": 0.26666666666666666,
+        "mrr": 0.9342105263157895,
+        "ndcg": 0.9047283645009451,
+        "questionCount": 19
+      },
+      "perCategory": {
+        "entity": {
+          "questionCount": 1,
+          "hitAt10": 1,
+          "evidenceRecallAt10": 1,
+          "allEvidenceRecallAt10": 1,
+          "precisionAt10": 0.5,
+          "mrr": 1,
+          "ndcgAt10": 1
+        },
+        "factual": {
+          "questionCount": 11,
+          "hitAt10": 1,
+          "evidenceRecallAt10": 0.9090909090909091,
+          "allEvidenceRecallAt10": 0.8181818181818182,
+          "precisionAt10": 0.5766233766233766,
+          "mrr": 0.9545454545454546,
+          "ndcgAt10": 0.8944946889360341
+        },
+        "preference": {
+          "questionCount": 5,
+          "hitAt10": 1,
+          "evidenceRecallAt10": 1,
+          "allEvidenceRecallAt10": 1,
+          "precisionAt10": 0.17928571428571427,
+          "mrr": 0.85,
+          "ndcgAt10": 0.8700794694443161
+        },
+        "temporal": {
+          "questionCount": 2,
+          "hitAt10": 1,
+          "evidenceRecallAt10": 1,
+          "allEvidenceRecallAt10": 1,
+          "precisionAt10": 0.3833333333333333,
+          "mrr": 1,
+          "ndcgAt10": 1
+        }
+      },
+      "latency": {
+        "p50": 0,
+        "p95": 0,
+        "mean": 0
+      }
+    }
+  },
+  "metadata": {
+    "schemaVersion": 2,
+    "timestamp": "2026-09-06T00:15:10.594Z",
+    "git": {
+      "sha": "00afdb496c0376e58b232c5cb439ef218f05ac64",
+      "dirty": true
+    },
+    "nodeVersion": "v26.7.0",
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26220"
+    },
+    "dataset": {
+      "name": "synthetic-quality-v1",
+      "path": "file:///C:/Users/marki/memos/scripts/bench-quality.ts",
+      "sha256": "file-not-found"
+    },
+    "embedding": {
+      "requestedProvider": "openai-compatible",
+      "resolvedProvider": "openai-compatible",
+      "requestedModel": "LFM2.5-Embedding-350M-BF16",
+      "resolvedModel": "LFM2.5-Embedding-350M-BF16",
+      "modelRevision": null,
+      "requestedDimensions": 1024,
+      "observedDimensions": null,
+      "fallbackActive": false,
+      "fallbackReason": null,
+      "providerKind": "openai-compatible",
+      "queryPrefix": "query: ",
+      "documentPrefix": "document: "
+    },
+    "retrieval": {
+      "sessionExpansion": false,
+      "graphExpansion": false
+    }
+  },
+  "perQuery": [
+    {
+      "query": "where does the user live",
+      "category": "factual",
+      "retrievedIds": [
+        "n-1",
+        "n-9",
+        "n-26",
+        "n-2",
+        "n-23",
+        "n-19",
+        "n-3",
+        "n-11",
+        "n-5",
+        "n-21"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-1"
+      ]
+    },
+    {
+      "query": "what color does the user like",
+      "category": "preference",
+      "retrievedIds": [
+        "n-2",
+        "n-11",
+        "n-1",
+        "n-13",
+        "n-24",
+        "n-26",
+        "n-5",
+        "n-27",
+        "n-8",
+        "n-3"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-2"
+      ]
+    },
+    {
+      "query": "tell me about Pixel the corgi",
+      "category": "entity",
+      "retrievedIds": [
+        "n-4",
+        "n-3",
+        "n-19",
+        "n-28"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-3",
+        "n-4"
+      ]
+    },
+    {
+      "query": "where does the user work and what industry",
+      "category": "factual",
+      "retrievedIds": [
+        "n-5",
+        "n-11",
+        "n-1",
+        "n-24",
+        "n-13",
+        "n-26",
+        "n-27",
+        "n-2",
+        "n-3",
+        "n-9"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-5",
+        "n-6"
+      ]
+    },
+    {
+      "query": "when did the user start at their company",
+      "category": "temporal",
+      "retrievedIds": [
+        "n-7",
+        "n-6",
+        "n-11",
+        "n-1",
+        "n-24",
+        "n-5",
+        "n-13",
+        "n-26",
+        "n-2",
+        "n-3"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-7"
+      ]
+    },
+    {
+      "query": "dark mode preference editor",
+      "category": "preference",
+      "retrievedIds": [
+        "n-8",
+        "n-9",
+        "n-16",
+        "n-10",
+        "n-2",
+        "n-25",
+        "n-13"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-8",
+        "n-9"
+      ]
+    },
+    {
+      "query": "what extensions on vscode",
+      "category": "factual",
+      "retrievedIds": [
+        "n-10",
+        "n-9",
+        "n-8",
+        "n-30",
+        "n-18",
+        "n-21",
+        "n-6"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-10"
+      ]
+    },
+    {
+      "query": "instrument hobby and how long",
+      "category": "factual",
+      "retrievedIds": [
+        "n-12",
+        "n-30",
+        "n-11"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-11",
+        "n-12"
+      ]
+    },
+    {
+      "query": "coffee preference and brand",
+      "category": "preference",
+      "retrievedIds": [
+        "n-14",
+        "n-8",
+        "n-13",
+        "n-2",
+        "n-16",
+        "n-25",
+        "n-6"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-13",
+        "n-14"
+      ]
+    },
+    {
+      "query": "exercise routine",
+      "category": "factual",
+      "retrievedIds": [
+        "n-15"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-15"
+      ]
+    },
+    {
+      "query": "favorite podcast",
+      "category": "preference",
+      "retrievedIds": [
+        "n-16",
+        "n-2",
+        "n-23",
+        "n-8",
+        "n-21",
+        "n-17",
+        "n-14",
+        "n-18",
+        "n-30",
+        "n-9"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-16"
+      ]
+    },
+    {
+      "query": "last vacation destination and when",
+      "category": "temporal",
+      "retrievedIds": [
+        "n-17",
+        "n-18",
+        "n-7"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-17",
+        "n-18"
+      ]
+    },
+    {
+      "query": "partner and their job",
+      "category": "factual",
+      "retrievedIds": [
+        "n-19",
+        "n-5"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-19",
+        "n-20"
+      ]
+    },
+    {
+      "query": "book author preferences",
+      "category": "preference",
+      "retrievedIds": [
+        "n-8",
+        "n-2",
+        "n-16",
+        "n-21",
+        "n-9",
+        "n-15",
+        "n-24",
+        "n-26"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 0.25,
+      "expectedRelevant": [
+        "n-21"
+      ]
+    },
+    {
+      "query": "siblings and where they live",
+      "category": "factual",
+      "retrievedIds": [
+        "n-1",
+        "n-23",
+        "n-22"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 0.5,
+      "expectedRelevant": [
+        "n-22",
+        "n-23"
+      ]
+    },
+    {
+      "query": "transportation method and bike",
+      "category": "factual",
+      "retrievedIds": [
+        "n-24",
+        "n-25"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-24",
+        "n-25"
+      ]
+    },
+    {
+      "query": "allergies and health restrictions",
+      "category": "factual",
+      "retrievedIds": [
+        "n-26"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-26"
+      ]
+    },
+    {
+      "query": "online games and skill level",
+      "category": "factual",
+      "retrievedIds": [
+        "n-27",
+        "n-28",
+        "n-12"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-27",
+        "n-28"
+      ]
+    },
+    {
+      "query": "language study tool and duration",
+      "category": "factual",
+      "retrievedIds": [
+        "n-30",
+        "n-29",
+        "n-10",
+        "n-12"
+      ],
+      "hitAt5": true,
+      "hitAt10": true,
+      "reciprocalRank": 1,
+      "expectedRelevant": [
+        "n-29",
+        "n-30"
+      ]
+    }
+  ]
+}

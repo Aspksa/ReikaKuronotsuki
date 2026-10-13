@@ -1,0 +1,2428 @@
+/**
+ * SQLite-backed storage adapter for MemOS.
+ *
+ * Uses `better-sqlite3` for synchronous, high-performance local persistence.
+ * Full-text search is powered by SQLite FTS5.
+ *
+ * @module @memos/storage/sqlite
+ */
+import Database from "better-sqlite3";
+import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { escapeLikePrefix } from "../scope.js";
+import { clampLessonScore } from "../procedural.js";
+import { isProvenanceTier } from "../provenance.js";
+import { backfillEntityIndex, ensureEntityIndexTable, extractContentEntities, searchByEntities as searchEntityIndex, writeEntityIndexRows, } from "../entity-index.js";
+import { GENESIS_PREV, entryHash as tamperEntryHash } from "../tamper-log.js";
+import { cosineSimilarity } from "../embeddings.js";
+/**
+ * Default database path: `~/.memos/memos.db`.
+ */
+export function defaultDbPath() {
+    const home = homedir() || process.env.USERPROFILE || process.env.HOME || ".";
+    return join(home, ".memos", "memos.db");
+}
+/**
+ * Streaming bounded top-K selector.
+ *
+ * A binary min-heap of capacity `k` that keeps the largest `k` scores
+ * seen so far, so the caller never has to materialise an O(N) pair array
+ * and re-heapify it afterwards (O(N log K) either way, but without the
+ * allocation churn — and with the heap floor available *while* scanning,
+ * which is what the early-exit bound needs).
+ *
+ * Retention is identical to `takeTopK(pairs, k)` / `pairs.sort(desc).slice(0, k)`:
+ * same elements, same descending order, and the same strict-improvement
+ * rule — a candidate must beat the current floor strictly to displace it,
+ * so among equal scores the earlier-scanned one wins.
+ */
+class TopKSelector {
+    heap = [];
+    capacity;
+    constructor(capacity) {
+        this.capacity = capacity > 0 ? capacity : 0;
+    }
+    /** Current K-th best score, or `-Infinity` while the heap is filling. */
+    get floor() {
+        return this.heap.length > 0 ? this.heap[0].score : -Infinity;
+    }
+    /**
+     * True once the heap holds `capacity` items. The early-exit bound in
+     * the caller is only sound at this point: a full heap can never admit
+     * another candidate without a strict improvement over its floor,
+     * whereas a partially-filled heap still has slots that equally-scored
+     * (tied) candidates must be allowed to take.
+     */
+    get full() {
+        return this.heap.length >= this.capacity;
+    }
+    /** Offer a candidate; returns true when it was retained. */
+    push(item) {
+        if (this.capacity === 0)
+            return false;
+        if (this.heap.length < this.capacity) {
+            this.heap.push(item);
+            this.siftDown(0);
+            return true;
+        }
+        if (item.score > this.heap[0].score) {
+            this.heap[0] = item;
+            this.siftDown(0);
+            return true;
+        }
+        return false;
+    }
+    /** Retained items, best first. */
+    result() {
+        return this.heap.sort((a, b) => b.score - a.score);
+    }
+    siftDown(start) {
+        let i = start;
+        for (;;) {
+            const left = 2 * i + 1;
+            const right = left + 1;
+            let smallest = i;
+            if (left < this.heap.length &&
+                this.heap[left].score < this.heap[smallest].score)
+                smallest = left;
+            if (right < this.heap.length &&
+                this.heap[right].score < this.heap[smallest].score)
+                smallest = right;
+            if (smallest === i)
+                break;
+            const tmp = this.heap[i];
+            this.heap[i] = this.heap[smallest];
+            this.heap[smallest] = tmp;
+            i = smallest;
+        }
+    }
+}
+/**
+ * Squared L2 norm, accumulated in index order.
+ *
+ * Kept as a standalone helper (rather than inlined into
+ * `cosineSimilarity`) so the semantic scan can cache it per stored row:
+ * the value only changes when the row is written, and every write goes
+ * through `SQLiteStorage.vectorCacheSet`, so the cache can never drift.
+ */
+function sumSquares(vector) {
+    let total = 0;
+    for (let index = 0; index < vector.length; index += 1) {
+        const value = vector[index];
+        total += value * value;
+    }
+    return total;
+}
+/** Stride of the coarse prefix projection used by the prefilter mode. */
+const PREFILTER_STRIDE = 8;
+/** Floor for the prefilter's exact-rescore window. */
+const PREFILTER_MIN_KEEP = 32;
+/**
+ * Minimal function-word stoplist for FTS5 query tokenization.
+ *
+ * Deliberately SMALL: only grammatical glue words. Content words
+ * ("development", "language", "preferences", ...) must survive —
+ * filtering them out destroys the retrieval signal. Words like
+ * "user" are intentionally NOT listed: FTS5's bm25 ranking already
+ * down-weights terms that appear in (nearly) every document.
+ */
+const FTS_STOPWORDS = new Set([
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "does",
+    "did",
+    "do",
+    "has",
+    "have",
+    "had",
+    "of",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "and",
+    "or",
+    "not",
+    "no",
+    "with",
+    "by",
+    "from",
+    "as",
+    "it",
+    "its",
+    "this",
+    "that",
+    "these",
+    "those",
+    "what",
+    "when",
+    "where",
+    "who",
+    "whom",
+    "which",
+    "how",
+    "why",
+    "can",
+    "could",
+    "will",
+    "would",
+    "should",
+    "shall",
+    "may",
+    "might",
+    "must",
+    "about",
+    "into",
+    "over",
+    "after",
+    "before",
+    "they",
+    "them",
+    "their",
+    "theirs",
+    "he",
+    "she",
+    "his",
+    "her",
+    "hers",
+    "we",
+    "us",
+    "our",
+    "ours",
+    "you",
+    "your",
+    "yours",
+    "i",
+    "me",
+    "my",
+    "mine",
+    "if",
+    "then",
+    "than",
+    "so",
+    "there",
+    "here",
+    "any",
+    "all",
+    "some",
+    "very",
+    "too",
+    "also",
+]);
+/**
+ * Tokenize a natural-language query into individually quoted FTS5
+ * terms.
+ *
+ * The query is split on non-alphanumeric boundaries, lowercased, and
+ * function words are dropped. Each surviving term is double-quoted
+ * (escaping any embedded quote) so FTS5 special characters cannot
+ * inject syntax.
+ *
+ * If stopword removal empties the query (e.g. "what is it"), the raw
+ * tokens are used instead so the search never degrades to a
+ * match-everything no-op.
+ *
+ * @param query — Raw user query text.
+ * @returns Quoted FTS5 terms, e.g. `['"dark"', '"mode"']`.
+ */
+export function buildFtsTerms(query) {
+    const tokens = query
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length > 1);
+    const terms = tokens.filter((t) => !FTS_STOPWORDS.has(t));
+    const effective = terms.length > 0 ? terms : tokens;
+    if (effective.length === 0) {
+        // Nothing tokenizable (e.g. punctuation-only). Quote the raw
+        // string so FTS5 treats it as a literal (likely zero-result)
+        // phrase rather than a syntax error.
+        return [`"${query.replace(/"/g, '""')}"`];
+    }
+    return effective.map((t) => `"${t.replace(/"/g, '""')}"`);
+}
+/**
+ * Build an FTS5 MATCH expression from a natural-language query.
+ *
+ * Terms are joined with `operator` — `" AND "` for precision (every
+ * term must appear) or `" OR "` for recall (any term may appear).
+ *
+ * @param query — Raw user query text.
+ * @param operator — Join operator between terms. Default `" AND "`.
+ * @returns An FTS5 MATCH expression, e.g. `"dark" AND "mode"`.
+ */
+export function buildFtsQuery(query, operator = " AND ") {
+    return buildFtsTerms(query).join(operator);
+}
+/**
+ * SQLite storage implementation.
+ */
+export class SQLiteStorage {
+    db;
+    cipherKey;
+    path;
+    wal;
+    /**
+     * Per-id access count delta buffer. Batched into a single UPDATE per
+     * id on a 500 ms debounce. Removes the read-modify-write write that
+     * was previously amplified to a `SET access_count = access_count + 1`
+     * on every `getNode` call. See {@link flushAccessCounts}.
+     */
+    accessBuffer = new Map();
+    accessFlushTimer = null;
+    accessFlushIntervalMs;
+    /**
+     * Create a new SQLiteStorage instance.
+     *
+     * @param path — Filesystem path to the `.db` file.
+     * @param wal  — Enable WAL journal mode (recommended).
+     */
+    constructor(path, wal = true, options = {}) {
+        this.path = path;
+        this.wal = wal;
+        // 500 ms is the sweet spot — long enough to coalesce rapid reads,
+        // short enough that the persisted value is never far behind the
+        // in-memory truth.
+        this.accessFlushIntervalMs = 500;
+        this.vectorCacheMaxEntries = Math.max(100, options.vectorCacheEntries ?? 25_000);
+        this.semanticScanMode = options.semanticScan ?? "exact";
+        this.cipherKey = options.cipherKey;
+    }
+    /**
+     * Open the database file, switching to the cipher-capable driver and
+     * applying `PRAGMA key` when encryption is configured. The key MUST be
+     * set before any other statement on an encrypted database.
+     */
+    openDatabase(path, cipherKey) {
+        if (!cipherKey || path === ":memory:" || path.startsWith("file::memory:")) {
+            // In-memory databases cannot be encrypted (the driver rejects
+            // PRAGMA key) — and there is nothing on disk to protect.
+            return new Database(path);
+        }
+        const CipherDatabase = loadCipherDriver();
+        const db = new CipherDatabase(path);
+        // Escape single quotes for the pragma literal; a mismatched key makes
+        // the first real statement fail with SQLITE_NOTADB, which callers see
+        // as a clear decryption error.
+        const escaped = cipherKey.replace(/'/g, "''");
+        db.pragma(`key = '${escaped}'`);
+        return db;
+    }
+    /**
+     * Open the database and create tables / indices if they do not exist.
+     */
+    async init() {
+        const fs = await import("fs");
+        const { dirname } = await import("path");
+        const dir = dirname(this.path);
+        if (dir && !fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        this.db = this.openDatabase(this.path, this.cipherKey);
+        if (this.wal) {
+            this.db.pragma("journal_mode = WAL");
+        }
+        this.db.pragma("foreign_keys = ON");
+        // Cross-OS performance pragmas. `synchronous = NORMAL` is safe with WAL
+        // (the WAL file itself is still fsynced) and gives ~10x faster writes
+        // compared to FULL on macOS / Windows where fsync is expensive. The
+        // 32 MiB page cache and 256 MiB mmap cut read latency for medium
+        // stores without bumping RSS materially. Temp tables in memory keep
+        // ORDER BY and GROUP BY on heavy queries from spilling to disk.
+        this.db.pragma("synchronous = NORMAL");
+        this.db.pragma("cache_size = -32000");
+        this.db.pragma("temp_store = MEMORY");
+        this.db.pragma("wal_autocheckpoint = 1000");
+        this.db.pragma("mmap_size = 268435456");
+        this.db.exec(`
+      CREATE TABLE IF NOT EXISTS nodes (
+        id            TEXT PRIMARY KEY,
+        content       TEXT NOT NULL,
+        summary       TEXT NOT NULL DEFAULT '',
+        type          TEXT NOT NULL DEFAULT 'fact',
+        metadata      TEXT NOT NULL DEFAULT '{}',
+        importance    REAL NOT NULL DEFAULT 0.5,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        access_count  INTEGER NOT NULL DEFAULT 0,
+        last_accessed INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS edges (
+        id          TEXT PRIMARY KEY,
+        source_id   TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+        target_id   TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+        relation    TEXT NOT NULL DEFAULT 'relates_to',
+        weight      REAL NOT NULL DEFAULT 0.5,
+        metadata    TEXT NOT NULL DEFAULT '{}',
+        -- Bitemporal transaction time: when MemOS learned the fact.
+        -- Never renamed/repurposed; event-time validity lives in
+        -- valid_from / valid_to (added by migration below).
+        created_at  INTEGER NOT NULL,
+        UNIQUE(source_id, target_id, relation)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(type);
+      CREATE INDEX IF NOT EXISTS idx_nodes_importance ON nodes(importance);
+      CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
+      CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
+
+      -- Store vectors as float32 BLOBs instead of JSON to keep local DBs smaller
+      -- and avoid OS-specific JSON number formatting differences.
+      CREATE TABLE IF NOT EXISTS embeddings (
+        node_id    TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
+        vector     BLOB NOT NULL,
+        dimensions INTEGER NOT NULL,
+        model      TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      -- Covering index for the semantic id-select: every query filters on
+      -- (dimensions, model) before scoring, so without this SQLite walks
+      -- the whole table even when the caller needs no node-side filters.
+      CREATE INDEX IF NOT EXISTS idx_embeddings_model_dims ON embeddings(dimensions, model);
+
+      -- Image (CLIP) vectors live in their OWN space: cosine similarity
+      -- between a 512-d CLIP vector and a 384-d bge text vector is
+      -- meaningless, so the two must never share a table (every existing
+      -- query would have to reason about which space a row is in). Same
+      -- float32-LE serialization as embeddings; ON DELETE CASCADE
+      -- does the cleanup, so forget() needs no image-side change.
+      CREATE TABLE IF NOT EXISTS image_embeddings (
+        node_id    TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
+        vector     BLOB NOT NULL,
+        dimensions INTEGER NOT NULL,
+        model      TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_image_embeddings_model_dims
+        ON image_embeddings(dimensions, model);
+
+      -- Contradiction pairs (accuracy item 4): write-time rule-based
+      -- detection records node pairs that disagree (similarity in the
+      -- 0.5–0.85 band + entity overlap + shared subject). Add-only is
+      -- preserved — both versions are kept; read-time resolution demotes
+      -- the older member instead of deleting anything. node_a/node_b are
+      -- stored in canonical (sorted) order so the UNIQUE constraint
+      -- dedups pairs regardless of insertion order.
+      CREATE TABLE IF NOT EXISTS contradictions (
+        id          TEXT PRIMARY KEY,
+        node_a      TEXT NOT NULL,
+        node_b      TEXT NOT NULL,
+        detected_at INTEGER NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'unresolved',
+        UNIQUE(node_a, node_b)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_contradictions_nodes ON contradictions(node_a, node_b);
+
+      -- Procedural lessons (self-editing instructions): behavioral
+      -- guidance rather than facts. Scores are adjusted by outcome
+      -- feedback (success reinforces, failure demotes) with a mild
+      -- read-time decay; all scoring math lives in src/procedural.ts.
+      CREATE TABLE IF NOT EXISTS procedural_lessons (
+        id            TEXT PRIMARY KEY,
+        lesson        TEXT NOT NULL,
+        context       TEXT NOT NULL DEFAULT '',
+        tags          TEXT NOT NULL DEFAULT '[]',
+        score         REAL NOT NULL DEFAULT 0.5,
+        success_count INTEGER NOT NULL DEFAULT 0,
+        failure_count INTEGER NOT NULL DEFAULT 0,
+        use_count     INTEGER NOT NULL DEFAULT 0,
+        namespace     TEXT NOT NULL DEFAULT 'default',
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        last_used_at  INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_procedural_lessons_namespace ON procedural_lessons(namespace);
+      CREATE INDEX IF NOT EXISTS idx_procedural_lessons_score ON procedural_lessons(score);
+
+      -- Tamper-evident mutation log: append-only hash chain over every
+      -- node mutation (store / import / update / forget). The chain
+      -- itself is checked by verifyTamperLog(); the tip hash can be
+      -- anchored externally via the memos log checkpoint command.
+      CREATE TABLE IF NOT EXISTS tamper_log (
+        seq           INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts            INTEGER NOT NULL,
+        op            TEXT NOT NULL,
+        node_id       TEXT NOT NULL,
+        node_hash     TEXT NOT NULL,
+        prev_hash     TEXT NOT NULL,
+        entry_hash    TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tamper_log_node ON tamper_log(node_id);
+    `);
+        // Migration from the first-day schema, which stored a content-only
+        // `content_hash`. Carry old rows into `node_hash`; verifyTamperLog
+        // keeps a legacy v1 check for those rows (chain linkage + content
+        // comparison) and reports them as legacyEntries.
+        const tamperCols = this.db
+            .prepare(`PRAGMA table_info(tamper_log)`)
+            .all();
+        const tamperNames = new Set(tamperCols.map((c) => c.name));
+        if (tamperNames.has("content_hash") && !tamperNames.has("node_hash")) {
+            this.db.exec(`ALTER TABLE tamper_log ADD COLUMN node_hash TEXT NOT NULL DEFAULT ''`);
+            this.db.exec(`UPDATE tamper_log SET node_hash = content_hash WHERE node_hash = ''`);
+            // The old column is fully redundant after the backfill, and its
+            // NOT NULL constraint would reject new inserts — drop it.
+            this.db.exec(`ALTER TABLE tamper_log DROP COLUMN content_hash`);
+        }
+        // Migration: add expires_at column if missing
+        this.migrateAddColumn("nodes", "expires_at", "INTEGER DEFAULT NULL");
+        // Migration: add tags column if missing
+        this.migrateAddColumn("nodes", "tags", "TEXT NOT NULL DEFAULT '[]'");
+        // Migration: add namespace column if missing
+        this.migrateAddColumn("nodes", "namespace", "TEXT NOT NULL DEFAULT 'default'");
+        // Migration: temporal validity columns
+        this.migrateAddColumn("nodes", "valid_from", "INTEGER DEFAULT NULL");
+        this.migrateAddColumn("nodes", "valid_to", "INTEGER DEFAULT NULL");
+        // Migration: provenance & trust columns
+        this.migrateAddColumn("nodes", "source", "TEXT NOT NULL DEFAULT 'user_input'");
+        this.migrateAddColumn("nodes", "trust_score", "REAL NOT NULL DEFAULT 1.0");
+        // Migration: multi-granularity retrieval pool (event | note | procedure).
+        // Every pre-pool memory reads as "event", matching the legacy semantics.
+        this.migrateAddColumn("nodes", "pool", "TEXT NOT NULL DEFAULT 'event'");
+        // Migration: provenance-trust layer. Every pre-layer memory reads as
+        // the "user" tier (ordinary statements) with no quarantine history —
+        // the exclusion default below is a no-op for legacy rows, so recall
+        // behaviour on existing databases is unchanged.
+        this.migrateAddColumn("nodes", "provenance", "TEXT NOT NULL DEFAULT 'user'");
+        this.migrateAddColumn("nodes", "quarantined", "INTEGER NOT NULL DEFAULT 0");
+        this.migrateAddColumn("nodes", "quarantined_at", "INTEGER DEFAULT NULL");
+        this.migrateAddColumn("nodes", "quarantine_reason", "TEXT DEFAULT NULL");
+        // Migration: harness attribution ("one memory, every harness").
+        // Every pre-attribution row reads as "unknown", so scoped recall
+        // treats legacy data as unscoped and `harness list` shows it under
+        // "unknown".
+        this.migrateAddColumn("nodes", "harness", "TEXT NOT NULL DEFAULT 'unknown'");
+        // Migration: bitemporal event-time validity on edges. `created_at`
+        // remains the transaction/ingest time — it is NOT renamed; it is the
+        // transaction-time axis of the bitemporal pair.
+        this.migrateAddColumn("edges", "valid_from", "INTEGER DEFAULT NULL");
+        this.migrateAddColumn("edges", "valid_to", "INTEGER DEFAULT NULL");
+        // Index for edge validity-interval queries (as-of / time-travel reads).
+        // Created here rather than in the schema block above because the
+        // columns only exist after the migrations run on pre-existing DBs.
+        this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_edges_valid_from ON edges(valid_from);
+      CREATE INDEX IF NOT EXISTS idx_edges_valid_to ON edges(valid_to);
+    `);
+        // Index for TTL sweep
+        this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_nodes_expires_at ON nodes(expires_at);
+    `);
+        // Index for temporal queries
+        this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_nodes_valid_from ON nodes(valid_from);
+      CREATE INDEX IF NOT EXISTS idx_nodes_valid_to ON nodes(valid_to);
+      CREATE INDEX IF NOT EXISTS idx_nodes_trust_score ON nodes(trust_score);
+      CREATE INDEX IF NOT EXISTS idx_nodes_source ON nodes(source);
+      CREATE INDEX IF NOT EXISTS idx_nodes_pool ON nodes(pool);
+      CREATE INDEX IF NOT EXISTS idx_nodes_harness ON nodes(harness);
+    `);
+        // FTS5 virtual table for full-text search. The `porter unicode61`
+        // tokenizer applies Porter stemming, so word variants match
+        // ("research" finds "researching", "studies" finds "study").
+        // Note: `IF NOT EXISTS` means pre-existing databases keep their
+        // original tokenizer; new databases get stemming.
+        this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
+        content,
+        summary,
+        content='nodes',
+        content_rowid='rowid',
+        tokenize='porter unicode61'
+      );
+    `);
+        // Triggers to keep FTS index in sync
+        this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS nodes_ai AFTER INSERT ON nodes BEGIN
+        INSERT INTO nodes_fts(rowid, content, summary)
+        VALUES (new.rowid, new.content, new.summary);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS nodes_ad AFTER DELETE ON nodes BEGIN
+        INSERT INTO nodes_fts(nodes_fts, rowid, content, summary)
+        VALUES ('delete', old.rowid, old.content, old.summary);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS nodes_au AFTER UPDATE ON nodes BEGIN
+        INSERT INTO nodes_fts(nodes_fts, rowid, content, summary)
+        VALUES ('delete', old.rowid, old.content, old.summary);
+        INSERT INTO nodes_fts(rowid, content, summary)
+        VALUES (new.rowid, new.content, new.summary);
+      END;
+    `);
+        // Tag join table. Replaces the JSON-LIKE scan on every tag query with
+        // a real B-tree index. The (node_id, tag) primary key makes writes
+        // O(tags) and the (tag) secondary index makes reverse lookups O(1).
+        this.db.exec(`
+      CREATE TABLE IF NOT EXISTS node_tags (
+        node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+        tag     TEXT NOT NULL,
+        PRIMARY KEY (node_id, tag)
+      );
+      CREATE INDEX IF NOT EXISTS idx_node_tags_tag ON node_tags(tag);
+    `);
+        // Migration: back-fill node_tags from the JSON column for any pre-
+        // existing rows. Safe to run on every init — INSERT OR IGNORE means
+        // already-synced rows are no-ops.
+        this.migrateBackfillNodeTags();
+        // ── item2: entity leg ── entity→memories inverted index (first-class
+        // entity channel). Mirrors the node_tags pattern: join table with a
+        // (entity) lookup index, backfilled from existing rows on init.
+        ensureEntityIndexTable(this.db);
+        this.migrateBackfillEntityIndex();
+    }
+    /**
+     * One-time backfill: for every node, read the JSON `tags` column and
+     * ensure each tag exists in `node_tags`. Idempotent thanks to
+     * `INSERT OR IGNORE`. Runs inside a single transaction so a 100k-node
+     * database finishes in well under a second on a warm cache.
+     */
+    migrateBackfillNodeTags() {
+        const rows = this.db.prepare("SELECT id, tags FROM nodes").all();
+        if (rows.length === 0)
+            return;
+        const insert = this.db.prepare("INSERT OR IGNORE INTO node_tags (node_id, tag) VALUES (?, ?)");
+        const seen = new Map();
+        const tx = this.db.transaction(() => {
+            for (const row of rows) {
+                let tags;
+                try {
+                    tags = JSON.parse(row.tags);
+                }
+                catch {
+                    continue;
+                }
+                if (!Array.isArray(tags))
+                    continue;
+                let ids = seen.get(row.id);
+                if (!ids) {
+                    ids = new Set();
+                    seen.set(row.id, ids);
+                }
+                for (const tag of tags) {
+                    if (typeof tag !== "string" || tag.length === 0)
+                        continue;
+                    if (ids.has(tag))
+                        continue;
+                    ids.add(tag);
+                    insert.run(row.id, tag);
+                }
+            }
+        });
+        tx();
+    }
+    /**
+     * One-time backfill of the `entity_index` inverted table for pre-existing
+     * rows (databases created before the table existed). Idempotent — nodes
+     * already present in the index are skipped. Delegates to
+     * `src/entity-index.ts`, which prefers each row's stored
+     * `metadata.entities` (canonicalized with the deployment's aliases at
+     * write time) and falls back to extracting from content.
+     */
+    migrateBackfillEntityIndex() {
+        backfillEntityIndex(this.db);
+    }
+    /**
+     * Replace the `node_tags` rows for a single node. Used after
+     * `saveNode` / `updateNode` to keep the join table in lockstep with
+     * the JSON column.
+     *
+     * Runs inside the caller's transaction (saveNode/updateNode wrap their
+     * write + this call in one `db.transaction`) and reuses cached prepared
+     * statements — previously each call paid two uncached `db.prepare()`
+     * parses plus its own transaction commit.
+     */
+    writeNodeTags(nodeId, tags) {
+        const deleteStmt = this.getPreparedStatement("writeNodeTags::delete", "DELETE FROM node_tags WHERE node_id = ?");
+        deleteStmt.run(nodeId);
+        if (tags.length === 0)
+            return;
+        const insert = this.getPreparedStatement("writeNodeTags::insert", "INSERT OR IGNORE INTO node_tags (node_id, tag) VALUES (?, ?)");
+        const seen = new Set();
+        for (const tag of tags) {
+            if (typeof tag !== "string" || tag.length === 0)
+                continue;
+            if (seen.has(tag))
+                continue;
+            seen.add(tag);
+            insert.run(nodeId, tag);
+        }
+    }
+    /**
+     * ── item2: entity leg ── mirror a node's entities into the
+     * `entity_index` inverted table, keeping it in lockstep with the node
+     * row (the entity analogue of `writeNodeTags`). Runs inside the
+     * caller's transaction (`saveNode` / `updateNode`).
+     *
+     * Prefers the write-time canonicalized `metadata.entities` — `MemOS.store`
+     * canonicalizes with the deployment's `entityAliases`, so reusing it
+     * keeps the index consistent with query-time canonicalization. Falls
+     * back to extracting from content (built-in aliases) for rows written
+     * straight through storage.
+     */
+    writeNodeEntities(node) {
+        const stored = node.metadata
+            ?.entities;
+        const entities = Array.isArray(stored)
+            ? stored
+            : extractContentEntities(node.content);
+        writeEntityIndexRows(this.db, node.id, entities);
+    }
+    /**
+     * Migration-safe column addition. Checks if column exists before ALTER TABLE.
+     * SQLite does not support ALTER TABLE IF NOT EXISTS, so we check pragmatically.
+     */
+    migrateAddColumn(table, column, definition) {
+        const cols = this.db.prepare(`PRAGMA table_info(${table})`).all();
+        const exists = cols.some((c) => c.name === column);
+        if (!exists) {
+            this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+        }
+    }
+    // -----------------------------------------------------------------------
+    // Nodes
+    // -----------------------------------------------------------------------
+    async saveNode(node) {
+        const stmt = this.getPreparedStatement("saveNode", `INSERT INTO nodes (id, content, summary, type, metadata, importance, created_at, updated_at, access_count, last_accessed, expires_at, tags, namespace, valid_from, valid_to, source, trust_score, pool, provenance, quarantined, quarantined_at, quarantine_reason, harness)
+       VALUES (@id, @content, @summary, @type, @metadata, @importance, @createdAt, @updatedAt, @accessCount, @lastAccessed, @expiresAt, @tags, @namespace, @validFrom, @validTo, @source, @trustScore, @pool, @provenance, @quarantined, @quarantinedAt, @quarantineReason, @harness)`);
+        // One transaction for the row INSERT plus the tag-join mirror:
+        // previously each ran in its own autocommit transaction (three commits
+        // per store), and writeNodeTags also paid two uncached prepares.
+        const tx = this.db.transaction((params) => {
+            stmt.run(params);
+            // Mirror to the join table for index-backed tag lookups.
+            this.writeNodeTags(node.id, node.tags);
+            // ── item2: entity leg ── mirror the node's entities into the
+            // entity→memories inverted index (same transaction). Prefer the
+            // write-time canonicalized `metadata.entities` (deployment aliases
+            // applied in `MemOS.store`); fall back to content extraction for
+            // rows written straight through storage.
+            this.writeNodeEntities(node);
+        });
+        tx({
+            id: node.id,
+            content: node.content,
+            summary: node.summary,
+            type: node.type,
+            metadata: JSON.stringify({
+                ...node.metadata,
+                confidence: node.confidence,
+                evidenceCount: node.evidenceCount,
+            }),
+            importance: node.importance,
+            createdAt: node.createdAt,
+            updatedAt: node.updatedAt,
+            accessCount: node.accessCount,
+            lastAccessed: node.lastAccessed,
+            expiresAt: node.expiresAt,
+            tags: JSON.stringify(node.tags),
+            namespace: node.namespace,
+            validFrom: node.validFrom,
+            validTo: node.validTo,
+            source: node.source,
+            trustScore: node.trustScore,
+            pool: node.pool ?? "event",
+            // Provenance-trust columns: default at the storage boundary so
+            // node literals built before the layer (or by custom adapters)
+            // still save — the columns stay NOT NULL in the schema.
+            provenance: node.provenance ?? "user",
+            quarantined: node.quarantined ? 1 : 0,
+            quarantinedAt: node.quarantinedAt ?? null,
+            quarantineReason: node.quarantineReason ?? null,
+            // Harness attribution: same boundary defaulting — a missing tag
+            // (legacy literals, custom adapters) stores as "unknown".
+            harness: node.harness ?? "unknown",
+        });
+        return node;
+    }
+    async getNode(id) {
+        const stmt = this.getPreparedStatement("getNode", "SELECT * FROM nodes WHERE id = ?");
+        const row = stmt.get(id);
+        if (!row)
+            return null;
+        // Buffer the access stats instead of writing immediately. Coalesces
+        // bursts of reads (e.g. a search that re-fetches the same node) into
+        // a single UPDATE per id.
+        this.bufferAccess(id, Date.now());
+        return this.rowToNode(row);
+    }
+    /**
+     * Record a read access. Routes through the same debounced
+     * `accessBuffer` as `getNode`, so a search that touches the top N
+     * results costs one coalesced UPDATE per id instead of a
+     * read-modify-write per hit — and, critically, does NOT stamp
+     * `updated_at`.
+     */
+    recordAccess(id) {
+        this.bufferAccess(id, Date.now());
+    }
+    bufferAccess(id, now) {
+        const existing = this.accessBuffer.get(id);
+        if (existing) {
+            existing.count += 1;
+            existing.lastAccessed = now;
+        }
+        else {
+            this.accessBuffer.set(id, { count: 1, lastAccessed: now });
+        }
+        this.scheduleAccessFlush();
+    }
+    scheduleAccessFlush() {
+        if (this.accessFlushTimer !== null)
+            return;
+        this.accessFlushTimer = setTimeout(() => {
+            this.accessFlushTimer = null;
+            try {
+                this.flushAccessCounts();
+            }
+            catch {
+                // Flush errors are non-fatal; we'll retry on the next buffer hit.
+            }
+        }, this.accessFlushIntervalMs);
+        // Don't keep the process alive for a flush.
+        if (this.accessFlushTimer &&
+            typeof this.accessFlushTimer.unref === "function") {
+            this.accessFlushTimer.unref();
+        }
+    }
+    /** Drain the buffered access counters to SQLite. */
+    flushAccessCounts() {
+        if (this.accessBuffer.size === 0)
+            return;
+        const updates = this.db.prepare("UPDATE nodes SET access_count = access_count + ?, last_accessed = MAX(last_accessed, ?) WHERE id = ?");
+        const tx = this.db.transaction(() => {
+            for (const [id, { count, lastAccessed }] of this.accessBuffer) {
+                updates.run(count, lastAccessed, id);
+            }
+            this.accessBuffer.clear();
+        });
+        tx();
+    }
+    async peekNode(id) {
+        const stmt = this.getPreparedStatement("peekNode", "SELECT * FROM nodes WHERE id = ?");
+        const row = stmt.get(id);
+        return row ? this.rowToNode(row) : null;
+    }
+    async evictLeastImportant() {
+        // Pick the least important + oldest-accessed node in a single SQL
+        // statement. Avoids loading the whole table into memory.
+        const row = this.db
+            .prepare("SELECT id FROM nodes ORDER BY importance ASC, last_accessed ASC, created_at ASC LIMIT 1")
+            .get();
+        if (!row)
+            return null;
+        const id = row.id;
+        const result = this.db.prepare("DELETE FROM nodes WHERE id = ?").run(id);
+        if (result.changes > 0)
+            return id;
+        return null;
+    }
+    async updateNode(id, input) {
+        const existing = await this.getNode(id);
+        if (!existing)
+            return null;
+        const updated = {
+            ...existing,
+            ...input,
+            metadata: input.metadata ?? existing.metadata,
+            tags: input.tags ?? existing.tags,
+            namespace: input.namespace ?? existing.namespace,
+            validFrom: input.validFrom !== undefined ? input.validFrom : existing.validFrom,
+            validTo: input.validTo !== undefined ? input.validTo : existing.validTo,
+            source: input.source ?? existing.source,
+            trustScore: input.trustScore !== undefined ? input.trustScore : existing.trustScore,
+            provenance: input.provenance ?? existing.provenance,
+            quarantined: input.quarantined !== undefined
+                ? input.quarantined
+                : existing.quarantined,
+            quarantinedAt: input.quarantinedAt !== undefined
+                ? input.quarantinedAt
+                : existing.quarantinedAt,
+            quarantineReason: input.quarantineReason !== undefined
+                ? input.quarantineReason
+                : existing.quarantineReason,
+            updatedAt: Date.now(),
+        };
+        const updateStmt = this.getPreparedStatement("updateNode", `UPDATE nodes SET content = @content, summary = @summary, type = @type,
+         metadata = @metadata, importance = @importance, updated_at = @updatedAt,
+         tags = @tags, namespace = @namespace,
+         valid_from = @validFrom, valid_to = @validTo, source = @source, trust_score = @trustScore,
+         provenance = @provenance, quarantined = @quarantined, quarantined_at = @quarantinedAt, quarantine_reason = @quarantineReason
+         WHERE id = @id`);
+        const params = {
+            id: updated.id,
+            content: updated.content,
+            summary: updated.summary,
+            type: updated.type,
+            metadata: JSON.stringify({
+                ...updated.metadata,
+                // Keep the node-level evidence state in sync with the persisted
+                // metadata blob — rowToNode reads confidence/evidenceCount back
+                // from here, so omitting this silently drops reinforcement.
+                confidence: updated.confidence,
+                evidenceCount: updated.evidenceCount,
+            }),
+            importance: updated.importance,
+            updatedAt: updated.updatedAt,
+            tags: JSON.stringify(updated.tags),
+            namespace: updated.namespace,
+            validFrom: updated.validFrom,
+            validTo: updated.validTo,
+            source: updated.source,
+            trustScore: updated.trustScore,
+            provenance: updated.provenance,
+            quarantined: updated.quarantined ? 1 : 0,
+            quarantinedAt: updated.quarantinedAt,
+            quarantineReason: updated.quarantineReason,
+        };
+        // Keep the tag join table in sync when the tag set changed — in the
+        // same transaction as the row UPDATE (previously two commits).
+        const syncTags = input.tags !== undefined;
+        // ── item2: entity leg ── the entity signal may have changed when the
+        // content or metadata was updated; re-sync the inverted index rows.
+        const syncEntities = input.content !== undefined || input.metadata !== undefined;
+        const tx = this.db.transaction(() => {
+            updateStmt.run(params);
+            if (syncTags)
+                this.writeNodeTags(updated.id, updated.tags);
+            if (syncEntities)
+                this.writeNodeEntities(updated);
+        });
+        tx();
+        return updated;
+    }
+    async deleteNode(id) {
+        // The `image_embeddings` row goes with the node via ON DELETE
+        // CASCADE; the in-memory cache entry has to go explicitly (a node
+        // deleted between two queries must not be served from cache).
+        this.vectorCache.delete(id);
+        const result = this.db.prepare("DELETE FROM nodes WHERE id = ?").run(id);
+        return result.changes > 0;
+    }
+    // -----------------------------------------------------------------------
+    // Tamper-evident mutation log
+    // -----------------------------------------------------------------------
+    async appendTamperEntry(entry) {
+        // Atomic chain-position assignment: tip lookup, seq allocation,
+        // entry-hash computation, and insert happen in ONE transaction, so
+        // concurrent writers can never fork the chain with the same prevHash.
+        // BEGIN IMMEDIATE takes the write lock up front, which also keeps
+        // two MemOS instances on the same DB file from interleaving.
+        this.db.prepare("BEGIN IMMEDIATE").run();
+        try {
+            const tip = this.db
+                .prepare(`SELECT entry_hash FROM tamper_log ORDER BY seq DESC LIMIT 1`)
+                .get();
+            const prevHash = tip?.entry_hash ?? GENESIS_PREV;
+            // AUTOINCREMENT assigns seq; lastInsertRowid gives it back inside
+            // the same transaction, so the hash commits the true position.
+            const seq = Number(this.db
+                .prepare(`INSERT INTO tamper_log (ts, op, node_id, node_hash, prev_hash, entry_hash)
+             VALUES (?, ?, ?, ?, ?, '')`)
+                .run(entry.ts, entry.op, entry.nodeId, entry.nodeHash, prevHash)
+                .lastInsertRowid);
+            const entryHash = tamperEntryHash({
+                seq,
+                ts: entry.ts,
+                op: entry.op,
+                nodeId: entry.nodeId,
+                nodeHash: entry.nodeHash,
+                prevHash,
+            });
+            this.db
+                .prepare(`UPDATE tamper_log SET entry_hash = ? WHERE seq = ?`)
+                .run(entryHash, seq);
+            this.db.prepare("COMMIT").run();
+            return {
+                seq,
+                ts: entry.ts,
+                op: entry.op,
+                nodeId: entry.nodeId,
+                nodeHash: entry.nodeHash,
+                prevHash,
+                entryHash,
+            };
+        }
+        catch (err) {
+            this.db.prepare("ROLLBACK").run();
+            throw err;
+        }
+    }
+    async readTamperLog() {
+        const rows = this.db
+            .prepare(`SELECT seq, ts, op, node_id, node_hash, prev_hash, entry_hash
+         FROM tamper_log ORDER BY seq ASC`)
+            .all();
+        return rows.map((r) => ({
+            seq: r.seq,
+            ts: r.ts,
+            op: r.op,
+            nodeId: r.node_id,
+            nodeHash: r.node_hash,
+            prevHash: r.prev_hash,
+            entryHash: r.entry_hash,
+        }));
+    }
+    // -----------------------------------------------------------------------
+    // Edges
+    // -----------------------------------------------------------------------
+    async saveEdge(edge) {
+        const stmt = this.getPreparedStatement("saveEdge", `INSERT INTO edges (id, source_id, target_id, relation, weight, metadata, created_at, valid_from, valid_to)
+       VALUES (@id, @sourceId, @targetId, @relation, @weight, @metadata, @createdAt, @validFrom, @validTo)`);
+        stmt.run({
+            id: edge.id,
+            sourceId: edge.sourceId,
+            targetId: edge.targetId,
+            relation: edge.relation,
+            weight: edge.weight,
+            metadata: JSON.stringify(edge.metadata),
+            createdAt: edge.createdAt,
+            validFrom: edge.validFrom ?? null,
+            validTo: edge.validTo ?? null,
+        });
+        return edge;
+    }
+    /**
+     * Batch-insert multiple edges in a single transaction.
+     * Uses a cached prepared statement — ~10x faster than calling
+     * saveEdge() in a loop for 10+ edges.
+     */
+    async saveEdgesBatch(edges) {
+        if (edges.length === 0)
+            return [];
+        const stmt = this.getPreparedStatement("saveEdge", `INSERT INTO edges (id, source_id, target_id, relation, weight, metadata, created_at, valid_from, valid_to)
+       VALUES (@id, @sourceId, @targetId, @relation, @weight, @metadata, @createdAt, @validFrom, @validTo)`);
+        const insert = (edge) => stmt.run({
+            id: edge.id,
+            sourceId: edge.sourceId,
+            targetId: edge.targetId,
+            relation: edge.relation,
+            weight: edge.weight,
+            metadata: JSON.stringify(edge.metadata),
+            createdAt: edge.createdAt,
+            validFrom: edge.validFrom ?? null,
+            validTo: edge.validTo ?? null,
+        });
+        const tx = this.db.transaction(() => {
+            for (const edge of edges)
+                insert(edge);
+        });
+        tx();
+        return edges;
+    }
+    /**
+     * Prepared statement cache. better-sqlite3 caches at the C++ level,
+     * but the JS Statement wrapper is still recreated on each prepare()
+     * call. Caching the JS object avoids that overhead on hot paths.
+     */
+    stmtCache = new Map();
+    getPreparedStatement(key, sql) {
+        let stmt = this.stmtCache.get(key);
+        if (!stmt) {
+            stmt = this.db.prepare(sql);
+            this.stmtCache.set(key, stmt);
+        }
+        return stmt;
+    }
+    async getEdge(id) {
+        const row = this.db.prepare("SELECT * FROM edges WHERE id = ?").get(id);
+        if (!row)
+            return null;
+        return this.rowToEdge(row);
+    }
+    async deleteEdge(id) {
+        const result = this.db.prepare("DELETE FROM edges WHERE id = ?").run(id);
+        return result.changes > 0;
+    }
+    /**
+     * Close (invalidate) the currently-valid edges incident to a node by
+     * stamping `valid_to`. Rows are updated, never deleted — as-of reads at
+     * earlier timestamps still return them. Returns the number of edges closed.
+     */
+    async closeEdgesForNode(nodeId, validTo) {
+        const result = this.db
+            .prepare(`UPDATE edges SET valid_to = ?
+         WHERE (source_id = ? OR target_id = ?)
+           AND (valid_to IS NULL OR valid_to > ?)`)
+            .run(validTo, nodeId, nodeId, validTo);
+        return result.changes;
+    }
+    // -----------------------------------------------------------------------
+    // Queries
+    // -----------------------------------------------------------------------
+    async queryNodes(filter = {}) {
+        let rows;
+        // Build the extra filters that apply to both FTS and structured paths.
+        const extraConds = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const extraParams = [];
+        if (filter.source) {
+            extraConds.push("n.source = ?");
+            extraParams.push(filter.source);
+        }
+        // Scoped-space namespace constraint: exact (`namespace`), multi
+        // (`namespaces`), or hierarchical (`namespacePrefix`). When
+        // `includeSharedScope` is set, the shared `default` namespace is
+        // OR'd in — a scoped read always sees shared memories.
+        const nsCond = this.buildNamespaceCondition(filter, "n");
+        if (nsCond) {
+            extraConds.push(nsCond.sql);
+            extraParams.push(...nsCond.params);
+        }
+        if (filter.minTrustScore !== undefined) {
+            extraConds.push("n.trust_score >= ?");
+            extraParams.push(filter.minTrustScore);
+        }
+        if (filter.provenance) {
+            extraConds.push("n.provenance = ?");
+            extraParams.push(filter.provenance);
+        }
+        // Harness attribution: "all" (or unset) is the behavior-preserving
+        // default — the filter applies to both the FTS and the structured
+        // path via extraConds.
+        if (filter.harness && filter.harness !== "all") {
+            extraConds.push("n.harness = ?");
+            extraParams.push(filter.harness);
+        }
+        // Provenance-trust: quarantine visibility. Quarantined memories are
+        // excluded from recall by default (the write-gate guarantee);
+        // `includeQuarantined: true` shows everything, `quarantinedOnly: true`
+        // shows only quarantined rows (the review queue).
+        if (filter.quarantinedOnly === true) {
+            extraConds.push("n.quarantined = 1");
+        }
+        else if (filter.includeQuarantined !== true) {
+            extraConds.push("n.quarantined = 0");
+        }
+        // Temporal: exclude historical (validTo in the past) unless
+        // includeHistorical is explicitly true. Also support validAt.
+        const now = Date.now();
+        if (filter.validAt !== undefined) {
+            extraConds.push("(n.valid_from IS NULL OR n.valid_from <= ?)");
+            extraParams.push(filter.validAt);
+            extraConds.push("(n.valid_to IS NULL OR n.valid_to >= ?)");
+            extraParams.push(filter.validAt);
+        }
+        else if (filter.includeHistorical !== true) {
+            // Default and explicit false: exclude historical memories.
+            // Strict `>` (not `>=`): a memory superseded in the same millisecond
+            // as this query (validTo === now) is already historical and must be
+            // excluded. `>=` would keep it. validAt below intentionally stays `>=`.
+            extraConds.push("(n.valid_to IS NULL OR n.valid_to > ?)");
+            extraParams.push(now);
+        }
+        // Type and importance filters apply to the FTS path too — without
+        // these, `search({ query, type })` leaked keyword hits of any type
+        // into hybrid results (the structured branch already filtered them).
+        if (filter.type) {
+            extraConds.push("n.type = ?");
+            extraParams.push(filter.type);
+        }
+        if (filter.minImportance !== undefined) {
+            extraConds.push("n.importance >= ?");
+            extraParams.push(filter.minImportance);
+        }
+        if (filter.maxImportance !== undefined) {
+            extraConds.push("n.importance <= ?");
+            extraParams.push(filter.maxImportance);
+        }
+        // Multi-granularity pool filter (OR within a list). Pre-pool
+        // memories carry the 'event' default from the migration.
+        if (filter.pool !== undefined) {
+            const pools = Array.isArray(filter.pool) ? filter.pool : [filter.pool];
+            if (pools.length > 0) {
+                extraConds.push(`n.pool IN (${pools.map(() => "?").join(", ")})`);
+                extraParams.push(...pools);
+            }
+        }
+        if (filter.query) {
+            // Full-text search via FTS5. The query is tokenized into
+            // individually quoted terms (see `buildFtsTerms`) instead of
+            // being wrapped as a single phrase: a phrase match requires the
+            // exact question text to appear verbatim in stored content,
+            // which never happens for natural-language queries — so phrase
+            // mode silently returned zero keyword results for every query.
+            //
+            // Matching strategy: AND first (every term must appear — keeps
+            // multi-word queries precise), then fall back to OR when the
+            // AND query matches nothing (any term may appear — keeps
+            // paraphrased queries from returning empty). bm25 ranking
+            // (`ORDER BY rank`) puts documents matching more terms first.
+            const ftsTerms = buildFtsTerms(filter.query);
+            const tagFilter = this.buildTagFilter(filter.tags, "n");
+            const metadata = this.buildMetadataFilter(filter.metadata, "n");
+            const whereParts = [
+                tagFilter,
+                ...metadata.conditions,
+                ...extraConds,
+            ].filter(Boolean);
+            const whereExtra = whereParts.length
+                ? ` AND ${whereParts.join(" AND ")}`
+                : "";
+            const ftsSql = `SELECT n.*, rank
+           FROM nodes n
+           INNER JOIN nodes_fts fts ON fts.rowid = n.rowid
+           WHERE nodes_fts MATCH ?${whereExtra}
+           ORDER BY rank
+           LIMIT ? OFFSET ?`;
+            // Statement cache keyed by the built SQL text: `whereExtra` /
+            // `namespaceFilter` vary with the caller's filter combination, and
+            // better-sqlite3 charges ~20-60µs of parse/plan time per
+            // `db.prepare()` call. Reusing the prepared object for repeated
+            // identical shapes removes that cost from the hot search path.
+            const runFts = (ftsQuery) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const params = [ftsQuery];
+                if (filter.tags && filter.tags.length > 0) {
+                    for (const tag of filter.tags) {
+                        params.push(tag);
+                    }
+                }
+                params.push(...metadata.params);
+                params.push(...extraParams);
+                params.push(filter.limit ?? 50, filter.offset ?? 0);
+                return this.getPreparedStatement(`fts::${ftsSql}`, ftsSql).all(...params);
+            };
+            const operator = filter.ftsOperator ?? "AUTO";
+            const andRows = runFts(ftsTerms.join(" AND "));
+            if (operator === "OR") {
+                rows = runFts(ftsTerms.join(" OR "));
+            }
+            else if (operator === "AUTO" &&
+                andRows.length === 0 &&
+                ftsTerms.length > 1) {
+                // AUTO (default): precision AND first; only when it matches
+                // NOTHING relax to OR so partial-term matches still surface
+                // instead of an empty result set. `ftsOperator: "OR"` forces the
+                // recall-first query (benchmark ablation for multi-evidence work).
+                rows = runFts(ftsTerms.join(" OR "));
+            }
+            else {
+                rows = andRows;
+            }
+        }
+        else {
+            // Structured query
+            const conditions = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const params = [];
+            if (filter.type) {
+                conditions.push("type = ?");
+                params.push(filter.type);
+            }
+            if (filter.minImportance !== undefined) {
+                conditions.push("importance >= ?");
+                params.push(filter.minImportance);
+            }
+            if (filter.maxImportance !== undefined) {
+                conditions.push("importance <= ?");
+                params.push(filter.maxImportance);
+            }
+            // Scoped-space namespace constraint (same semantics as the FTS
+            // path: exact / multi / hierarchical, optional shared-union).
+            const nsCond = this.buildNamespaceCondition(filter, "");
+            if (nsCond) {
+                conditions.push(nsCond.sql);
+                params.push(...nsCond.params);
+            }
+            if (filter.source) {
+                conditions.push("source = ?");
+                params.push(filter.source);
+            }
+            if (filter.provenance) {
+                conditions.push("provenance = ?");
+                params.push(filter.provenance);
+            }
+            // Harness attribution (structured path; the FTS path applies the
+            // same rule via extraConds above).
+            if (filter.harness && filter.harness !== "all") {
+                conditions.push("harness = ?");
+                params.push(filter.harness);
+            }
+            // Provenance-trust: quarantine visibility (see the FTS branch above
+            // for the rationale — excluded from recall by default).
+            if (filter.quarantinedOnly === true) {
+                conditions.push("quarantined = 1");
+            }
+            else if (filter.includeQuarantined !== true) {
+                conditions.push("quarantined = 0");
+            }
+            if (filter.minTrustScore !== undefined) {
+                conditions.push("trust_score >= ?");
+                params.push(filter.minTrustScore);
+            }
+            // Temporal filters (structured path)
+            if (filter.validAt !== undefined) {
+                conditions.push("(valid_from IS NULL OR valid_from <= ?)");
+                params.push(filter.validAt);
+                conditions.push("(valid_to IS NULL OR valid_to >= ?)");
+                params.push(filter.validAt);
+            }
+            else if (filter.includeHistorical !== true) {
+                // Strict `>`: a memory superseded in the same millisecond as the
+                // query (validTo === now) is historical and must be excluded.
+                conditions.push("(valid_to IS NULL OR valid_to > ?)");
+                params.push(now);
+            }
+            const metadata = this.buildMetadataFilter(filter.metadata);
+            conditions.push(...metadata.conditions);
+            params.push(...metadata.params);
+            // Tag filter: node must contain ALL specified tags
+            if (filter.tags && filter.tags.length > 0) {
+                for (const tag of filter.tags) {
+                    conditions.push("tags LIKE ?");
+                    params.push(`%${JSON.stringify(tag)}%`);
+                }
+            }
+            const where = conditions.length
+                ? "WHERE " + conditions.join(" AND ")
+                : "";
+            const sortField = this.mapSortField(filter.sortBy);
+            // Runtime allowlist: filter.sortOrder is typed "asc" | "desc" but
+            // arrives as unchecked runtime data (e.g. MCP JSON input), and it is
+            // interpolated into the SQL below — so it must be validated here.
+            const order = filter.sortOrder === "asc" ? "asc" : "desc";
+            // Cache the prepared statement by its built SQL — the shape varies
+            // with the filter combination, so the key must include the text.
+            const structuredSql = `SELECT * FROM nodes ${where} ORDER BY ${sortField} ${order} LIMIT ? OFFSET ?`;
+            rows = this.getPreparedStatement(`structured::${structuredSql}`, structuredSql).all(...params, filter.limit ?? 50, filter.offset ?? 0);
+        }
+        return rows.map((row) => ({
+            node: this.rowToNode(row),
+            score: typeof row.rank === "number" ? row.rank : 1,
+        }));
+    }
+    async saveEmbedding(nodeId, vector, model) {
+        const normalized = this.serializeEmbedding(vector);
+        this.db
+            .prepare(`INSERT INTO embeddings (node_id, vector, dimensions, model, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(node_id) DO UPDATE SET
+           vector = excluded.vector,
+           dimensions = excluded.dimensions,
+           model = excluded.model,
+           updated_at = excluded.updated_at`)
+            .run(nodeId, normalized, vector.length, model, Date.now());
+        this.vectorCacheSet(nodeId, this.parseEmbeddingF32(normalized), "text");
+    }
+    async getEmbeddingInfo(nodeId) {
+        const row = this.getPreparedStatement("getEmbeddingInfo", "SELECT model, dimensions, updated_at FROM embeddings WHERE node_id = ?").get(nodeId);
+        if (!row)
+            return null;
+        return {
+            model: row.model,
+            dimensions: row.dimensions,
+            updatedAt: row.updated_at,
+        };
+    }
+    /**
+     * Bulk-fetch stored embedding vectors for the given node ids —
+     * the write-time contradiction scan's bounded neighbor lookup.
+     * Cache hits are zero-cost; misses are fetched in chunks of 500
+     * (SQLite bound-parameter limits). Returns only ids with a stored
+     * vector.
+     */
+    async getEmbeddingVectors(nodeIds) {
+        const result = new Map();
+        const missing = [];
+        for (const id of nodeIds) {
+            const cached = this.vectorCacheGet(id, "text");
+            if (cached) {
+                result.set(id, Array.from(cached.vector));
+            }
+            else if (!missing.includes(id)) {
+                missing.push(id);
+            }
+        }
+        for (let start = 0; start < missing.length; start += 500) {
+            const chunk = missing.slice(start, start + 500);
+            const placeholders = chunk.map(() => "?").join(",");
+            const rows = this.getPreparedStatement(`getEmbeddingVectors::${chunk.length}`, `SELECT node_id, vector FROM embeddings WHERE node_id IN (${placeholders})`).all(...chunk);
+            for (const row of rows) {
+                if (Buffer.isBuffer(row.vector) || row.vector instanceof Uint8Array) {
+                    this.vectorCacheSet(row.node_id, this.parseEmbeddingF32(row.vector), "text");
+                    result.set(row.node_id, this.parseEmbedding(row.vector));
+                }
+                else {
+                    const parsed = this.parseEmbedding(row.vector);
+                    if (parsed.length > 0)
+                        result.set(row.node_id, parsed);
+                }
+            }
+        }
+        return result;
+    }
+    /**
+     * Record a contradiction pair. Node ids are canonicalized (sorted)
+     * so the UNIQUE(node_a, node_b) constraint dedups reversed pairs;
+     * INSERT OR IGNORE makes repeat detection idempotent.
+     */
+    async addContradiction(nodeA, nodeB, status = "unresolved") {
+        const [a, b] = nodeA < nodeB ? [nodeA, nodeB] : [nodeB, nodeA];
+        const existing = this.db
+            .prepare("SELECT * FROM contradictions WHERE node_a = ? AND node_b = ?")
+            .get(a, b);
+        if (existing)
+            return this.rowToContradiction(existing);
+        const record = {
+            id: randomUUID(),
+            nodeA: a,
+            nodeB: b,
+            detectedAt: Date.now(),
+            status,
+        };
+        this.db
+            .prepare(`INSERT OR IGNORE INTO contradictions (id, node_a, node_b, detected_at, status)
+         VALUES (?, ?, ?, ?, ?)`)
+            .run(record.id, a, b, record.detectedAt, status);
+        return record;
+    }
+    /**
+     * Bounded read-time lookup: recorded contradiction pairs where
+     * node_a OR node_b is in `nodeIds`. Empty input returns [] without
+     * touching the database.
+     */
+    async getContradictionPairsFor(nodeIds) {
+        if (nodeIds.length === 0)
+            return [];
+        const placeholders = nodeIds.map(() => "?").join(",");
+        const rows = this.getPreparedStatement(`getContradictionPairsFor::${nodeIds.length}`, `SELECT * FROM contradictions WHERE node_a IN (${placeholders}) OR node_b IN (${placeholders})`).all(...nodeIds, ...nodeIds);
+        return rows.map((row) => this.rowToContradiction(row));
+    }
+    async updateContradictionStatus(id, status) {
+        this.db
+            .prepare("UPDATE contradictions SET status = ? WHERE id = ?")
+            .run(status, id);
+    }
+    rowToContradiction(row) {
+        return {
+            id: row.id,
+            nodeA: row.node_a,
+            nodeB: row.node_b,
+            detectedAt: row.detected_at,
+            status: row.status,
+        };
+    }
+    // -----------------------------------------------------------------------
+    // Procedural lessons (self-editing instructions)
+    // -----------------------------------------------------------------------
+    async saveProceduralLesson(input) {
+        const now = Date.now();
+        const score = clampLessonScore(input.initialScore ?? 0.5);
+        const lesson = {
+            id: randomUUID(),
+            lesson: input.lesson,
+            context: input.context ?? "",
+            tags: input.tags ?? [],
+            score,
+            successCount: 0,
+            failureCount: 0,
+            useCount: 0,
+            namespace: input.namespace ?? "default",
+            createdAt: now,
+            updatedAt: now,
+            lastUsedAt: 0,
+        };
+        this.db
+            .prepare(`INSERT INTO procedural_lessons
+           (id, lesson, context, tags, score, success_count, failure_count,
+            use_count, namespace, created_at, updated_at, last_used_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(lesson.id, lesson.lesson, lesson.context, JSON.stringify(lesson.tags), lesson.score, lesson.successCount, lesson.failureCount, lesson.useCount, lesson.namespace, lesson.createdAt, lesson.updatedAt, lesson.lastUsedAt);
+        return lesson;
+    }
+    async getProceduralLesson(id) {
+        const row = this.getPreparedStatement("getProceduralLesson", "SELECT * FROM procedural_lessons WHERE id = ?").get(id);
+        return row ? this.rowToProceduralLesson(row) : null;
+    }
+    async updateProceduralLesson(id, patch) {
+        const current = await this.getProceduralLesson(id);
+        if (!current)
+            return null;
+        const next = { ...current, ...patch, id: current.id };
+        this.db
+            .prepare(`UPDATE procedural_lessons
+         SET lesson = ?, context = ?, tags = ?, score = ?,
+             success_count = ?, failure_count = ?, use_count = ?,
+             namespace = ?, updated_at = ?, last_used_at = ?
+         WHERE id = ?`)
+            .run(next.lesson, next.context, JSON.stringify(next.tags), next.score, next.successCount, next.failureCount, next.useCount, next.namespace, next.updatedAt, next.lastUsedAt, id);
+        return next;
+    }
+    async listProceduralLessons(namespace) {
+        const rows = (namespace
+            ? this.getPreparedStatement("listProceduralLessons::ns", "SELECT * FROM procedural_lessons WHERE namespace = ? ORDER BY score DESC, updated_at DESC").all(namespace)
+            : this.getPreparedStatement("listProceduralLessons::all", "SELECT * FROM procedural_lessons ORDER BY score DESC, updated_at DESC").all());
+        return rows.map((row) => this.rowToProceduralLesson(row));
+    }
+    rowToProceduralLesson(row) {
+        let tags = [];
+        try {
+            const parsed = JSON.parse(row.tags ?? "[]");
+            if (Array.isArray(parsed))
+                tags = parsed.filter((t) => typeof t === "string");
+        }
+        catch {
+            tags = [];
+        }
+        return {
+            id: row.id,
+            lesson: row.lesson,
+            context: row.context ?? "",
+            tags,
+            score: row.score,
+            successCount: row.success_count,
+            failureCount: row.failure_count,
+            useCount: row.use_count,
+            namespace: row.namespace ?? "default",
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            lastUsedAt: row.last_used_at ?? 0,
+        };
+    }
+    /**
+     * Bounded id-prefix lookup backing citation resolution. Dashes in
+     * stored ids are ignored so `[mem:a3f9]` matches `a3f9c2e1-…`.
+     */
+    async findNodesByIdPrefix(prefix) {
+        const clean = prefix.toLowerCase().replace(/[^0-9a-f]/g, "");
+        if (clean.length < 2)
+            return [];
+        // `clean` is hex-only after the replace, so interpolation is safe —
+        // LIKE wildcards cannot appear in it.
+        const rows = this.db
+            .prepare(`SELECT * FROM nodes
+         WHERE replace(id, '-', '') LIKE '${clean}%'
+         ORDER BY updated_at DESC
+         LIMIT 25`)
+            .all();
+        return rows.map((row) => this.rowToNode(row));
+    }
+    async getAllEmbeddingInfos() {
+        const rows = this.getPreparedStatement("getAllEmbeddingInfos", "SELECT node_id, model, dimensions, updated_at FROM embeddings").all();
+        return rows.map((row) => ({
+            nodeId: row.node_id,
+            model: row.model,
+            dimensions: row.dimensions,
+            updatedAt: row.updated_at,
+        }));
+    }
+    async getAllEmbeddings() {
+        const rows = this.db
+            .prepare("SELECT node_id, vector, model, dimensions FROM embeddings")
+            .all();
+        return rows.map((r) => ({
+            nodeId: r.node_id,
+            model: r.model,
+            vector: this.parseEmbedding(r.vector),
+        }));
+    }
+    async setNodeNamespace(id, namespace) {
+        this.db
+            .prepare("UPDATE nodes SET namespace = ? WHERE id = ?")
+            .run(namespace, id);
+    }
+    async querySimilarEmbeddings(vector, filter = {}, limit, threshold = 0, model) {
+        return this.scanSimilar("text", vector, filter, limit, threshold, model);
+    }
+    /**
+     * Query image memories by CLIP vector similarity.
+     *
+     * Identical scoring to `querySimilarEmbeddings` — the scan loop is
+     * table-agnostic — but runs against `image_embeddings` and filters on
+     * model + dimensions, so a text-space vector can never be scored
+     * against a CLIP query (or vice versa).
+     *
+     * The hook for image→image search is already here: pass an
+     * *image-encoded* query and the same call returns the nearest
+     * neighbouring images ("more like this screenshot").
+     */
+    async querySimilarImages(vector, filter = {}, limit, threshold = 0, model) {
+        return this.scanSimilar("image", vector, filter, limit, threshold, model);
+    }
+    /**
+     * The shared semantic scan. `space` selects the vector table
+     * (`embeddings` vs `image_embeddings`) AND the vectorCache namespace,
+     * so the two spaces can never cross even when one nodeId carries both.
+     */
+    async scanSimilar(space, vector, filter, limit, threshold, model) {
+        const table = space === "image" ? "image_embeddings" : "embeddings";
+        const indexName = space === "image"
+            ? "idx_image_embeddings_model_dims"
+            : "idx_embeddings_model_dims";
+        const conditions = [];
+        const params = [vector.length];
+        // True as soon as any node-side (`n.*`) condition is added — only then
+        // do we need the JOIN. The common case (no type/namespace/pool/tags/
+        // importance/metadata filter) selects ids straight from the table,
+        // which the model/dims index serves without a scan.
+        let needsNodeJoin = false;
+        // Only compare vectors produced by compatible models/dimensions; cosine
+        // similarity is meaningless when the stored vector length differs, and
+        // two models can share a dimensionality while producing incomparable
+        // vector spaces — hence the explicit model check when provided.
+        conditions.push("e.dimensions = ?");
+        if (model) {
+            conditions.push("e.model = ?");
+            params.push(model);
+        }
+        if (filter.type) {
+            conditions.push("n.type = ?");
+            params.push(filter.type);
+            needsNodeJoin = true;
+        }
+        if (filter.minImportance !== undefined) {
+            conditions.push("n.importance >= ?");
+            params.push(filter.minImportance);
+            needsNodeJoin = true;
+        }
+        if (filter.maxImportance !== undefined) {
+            conditions.push("n.importance <= ?");
+            params.push(filter.maxImportance);
+            needsNodeJoin = true;
+        }
+        if (filter.namespace) {
+            conditions.push("n.namespace = ?");
+            params.push(filter.namespace);
+            needsNodeJoin = true;
+        }
+        if (filter.namespacePrefix) {
+            conditions.push("n.namespace LIKE ? ESCAPE '\\'");
+            params.push(escapeLikePrefix(filter.namespacePrefix) + "%");
+            needsNodeJoin = true;
+        }
+        if (filter.pool !== undefined) {
+            const pools = Array.isArray(filter.pool) ? filter.pool : [filter.pool];
+            if (pools.length > 0) {
+                conditions.push(`n.pool IN (${pools.map(() => "?").join(", ")})`);
+                params.push(...pools);
+                needsNodeJoin = true;
+            }
+        }
+        const metadata = this.buildMetadataFilter(filter.metadata, "n");
+        conditions.push(...metadata.conditions);
+        params.push(...metadata.params);
+        if (metadata.conditions.length > 0)
+            needsNodeJoin = true;
+        if (filter.tags && filter.tags.length > 0) {
+            for (const tag of filter.tags) {
+                conditions.push("n.tags LIKE ?");
+                params.push(`%${JSON.stringify(tag)}%`);
+            }
+            needsNodeJoin = true;
+        }
+        // Harness attribution on the semantic leg: needs the node join.
+        // "all" (or unset) keeps the default cross-harness behavior.
+        if (filter.harness && filter.harness !== "all") {
+            conditions.push("n.harness = ?");
+            params.push(filter.harness);
+            needsNodeJoin = true;
+        }
+        // Provenance-trust: quarantine visibility (see `queryNodes` — excluded
+        // from recall by default; the entity-leg and graph-expansion paths in
+        // MemOS apply the same rule via `quarantineVisible`).
+        if (filter.quarantinedOnly === true) {
+            conditions.push("n.quarantined = 1");
+            needsNodeJoin = true;
+        }
+        else if (filter.includeQuarantined !== true) {
+            conditions.push("n.quarantined = 0");
+            needsNodeJoin = true;
+        }
+        const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+        const fromClause = needsNodeJoin
+            ? `FROM ${table} e JOIN nodes n ON n.id = e.node_id`
+            : `FROM ${table} e`;
+        // Lazy hydration: score every candidate vector, but fully hydrate
+        // (JSON.parse metadata + tags + timestamps) ONLY the top-`limit` rows.
+        // The previous implementation called `rowToNode()` for every row —
+        // O(N) JSON parses per query, of which all but `limit` were thrown
+        // away. Cosine scoring still touches every vector (unavoidable
+        // without a vector index), but the expensive per-row hydration now
+        // runs at most `limit` times instead of N times.
+        //
+        // Statement cache key includes the built WHERE clause AND the join
+        // shape: the filter composition above varies the SQL text, and reusing
+        // one prepared statement across different SQL would return wrong
+        // results.
+        // Two-phase retrieval: ids are cheap to select; vectors come from the
+        // in-memory cache when warm, so repeat queries skip re-fetching every
+        // BLOB (tens of MB per query on large stores). Statement cache keys
+        // include the WHERE clause — filter composition varies the SQL.
+        const idRows = this.getPreparedStatement(`querySimilarEmbeddingsIds::${space}::${needsNodeJoin ? "jn" : "noj"}::${where}`, `SELECT e.node_id
+       ${fromClause}
+       ${where}`).all(...params);
+        const candidateIds = idRows.map((r) => r.node_id);
+        const missing = candidateIds.filter((id) => !this.vectorCacheGet(id, space));
+        // Chunked fetch for cache misses (SQLite bound-parameter limits).
+        // A miss also materialises the cached squared norm (and, in prefilter
+        // mode, the coarse projection) — once per stored row, not once per
+        // query. That is the count the scan reports as `normComputations`.
+        let normsComputed = 0;
+        for (let start = 0; start < missing.length; start += 500) {
+            const chunk = missing.slice(start, start + 500);
+            const placeholders = chunk.map(() => "?").join(",");
+            const blobRows = this.getPreparedStatement(`querySimilarEmbeddingsBlobs::${space}::${placeholders.length}`, `SELECT node_id, vector FROM ${table} WHERE node_id IN (${placeholders})`).all(...chunk);
+            for (const row of blobRows) {
+                if (Buffer.isBuffer(row.vector) || row.vector instanceof Uint8Array) {
+                    this.vectorCacheSet(row.node_id, this.parseEmbeddingF32(row.vector), space);
+                    normsComputed += 1;
+                }
+            }
+        }
+        // Score — (nodeId, score) pairs only, no node hydration. Warm-cache
+        // hits reuse the parsed Float32Array AND its cached squared norm;
+        // legacy JSON-stored rows (never cached) fall back to `parseEmbedding`
+        // per lookup.
+        //
+        // Every candidate is still visited — without an ANN index there is no
+        // way to prove a candidate irrelevant without scoring it — but the
+        // PER-CANDIDATE cost is what actually dominated: `cosineSimilarity`
+        // recomputed the stored row's L2 norm on every query, paying 3·d
+        // multiply-adds per candidate where d suffice. The norm now lives in
+        // the cache entry next to the vector it came from, computed once per
+        // stored row.
+        //
+        // Scores are bit-identical to `cosineSimilarity(query, stored)`: the
+        // dot product accumulates in the same index order, and the divisor is
+        // `Math.sqrt(queryNormSq · storedNormSq)` with the same operand order,
+        // so rankings and reported scores do not move.
+        const queryF32 = vector instanceof Float32Array ? vector : Float32Array.from(vector);
+        const queryNormSq = sumSquares(queryF32);
+        // Opt-in coarse prefilter (`storageOptions.semanticScan`): rank the
+        // candidates by a strided prefix projection and exactly rescore only
+        // the best `keep`. Bounded work on large corpora, approximate: a
+        // candidate the projection ranks below the cutoff is never seen
+        // again. Off by default, so the exact scan above is the shipped
+        // behavior.
+        let scanIds = candidateIds;
+        let prefilterSkipped = 0;
+        if (this.semanticScanMode === "prefilter" &&
+            candidateIds.length > PREFILTER_MIN_KEEP) {
+            const keep = Math.max(PREFILTER_MIN_KEEP, Math.min(candidateIds.length, limit * 4));
+            const ranked = this.rankByProjection(candidateIds, queryF32, space);
+            scanIds = ranked.slice(0, keep);
+            prefilterSkipped = candidateIds.length - scanIds.length;
+        }
+        // Streaming bounded top-K: the selector is fed while scoring instead
+        // of materialising an O(N) pair array and re-heapifying it, and its
+        // floor doubles as the early-exit bound. Its retention rule is
+        // identical to the previous `takeTopK(scoredPairs, limit)` — same
+        // elements, same descending order, same strict-improvement tie
+        // break — so rankings do not move.
+        const top = new TopKSelector(limit);
+        let cacheHits = 0;
+        let legacyRows = 0;
+        let earlyExit = false;
+        for (const nodeId of scanIds) {
+            const cached = this.vectorCacheGet(nodeId, space);
+            let score;
+            if (cached && cached.vector.length === queryF32.length) {
+                cacheHits += 1;
+                if (cached.normSq === 0 || queryNormSq === 0) {
+                    // cosineSimilarity's zero-norm guard: an all-zero row scores 0.
+                    score = 0;
+                }
+                else {
+                    let dot = 0;
+                    const stored = cached.vector;
+                    for (let i = 0; i < stored.length; i += 1) {
+                        dot += queryF32[i] * stored[i];
+                    }
+                    score = dot / Math.sqrt(queryNormSq * cached.normSq);
+                }
+            }
+            else {
+                legacyRows += 1;
+                score = cosineSimilarity(vector, this.parseEmbedding(this.lookupStoredVector(nodeId, space)));
+            }
+            if (score < threshold)
+                continue;
+            top.push({ nodeId, score });
+            // Cosine similarity is bounded by 1 and retention requires a
+            // STRICT improvement, so once the selector is FULL and its floor
+            // is 1.0 no remaining candidate can enter the top-K: stop
+            // scanning. Fires on exact-duplicate / verbatim-needle queries.
+            // The fullness check is what makes this correct: a full floor of
+            // 1.0 cannot be beaten, but a HALF-full heap at floor 1.0 can
+            // still admit the remaining equally-scored rows (ties keep the
+            // earlier-scanned one but must still fill the requested K), so
+            // stopping there would silently drop recall.
+            if (top.full && top.floor >= 1) {
+                earlyExit = true;
+                break;
+            }
+        }
+        this.semanticScanTelemetry = {
+            candidates: candidateIds.length,
+            cacheHits,
+            normComputations: normsComputed,
+            legacyRows,
+            prefilterSkipped,
+            rescored: scanIds.length,
+            earlyExit,
+        };
+        // Descending score; equal scores keep scan order (the selector only
+        // displaces the floor on a strict improvement).
+        const survivors = top.result();
+        // Hydrate only the survivors, preserving score order.
+        const results = [];
+        for (const { nodeId, score } of survivors) {
+            const node = await this.getNode(nodeId);
+            if (!node)
+                continue; // node deleted between the two queries
+            results.push({
+                node,
+                score,
+                scores: { semantic: score },
+            });
+        }
+        return results;
+    }
+    /**
+     * Rank candidate ids by cosine against a strided prefix projection of
+     * each stored vector (opt-in prefilter path). The projection is built
+     * once per stored row and cached with it, so repeat queries pay only
+     * the `dims / PREFILTER_STRIDE` dot product per candidate.
+     *
+     * Approximate by design: it orders candidates, it does not certify
+     * them. Callers must rescore the survivors exactly.
+     */
+    rankByProjection(candidateIds, queryF32, space) {
+        const projQuery = this.project(queryF32);
+        const projQueryNormSq = sumSquares(projQuery);
+        if (projQueryNormSq === 0)
+            return candidateIds;
+        const queryNorm = Math.sqrt(projQueryNormSq);
+        const scored = [];
+        for (const nodeId of candidateIds) {
+            const cached = this.vectorCacheGet(nodeId, space);
+            const proj = cached?.proj;
+            const projNormSq = cached?.projNormSq;
+            if (proj === undefined || projNormSq === undefined || projNormSq === 0) {
+                continue;
+            }
+            let dot = 0;
+            const length = Math.min(proj.length, projQuery.length);
+            for (let i = 0; i < length; i += 1) {
+                dot += projQuery[i] * proj[i];
+            }
+            scored.push({ nodeId, score: dot / (queryNorm * Math.sqrt(projNormSq)) });
+        }
+        scored.sort((a, b) => b.score - a.score);
+        // Candidates the cache never hydrated (or whose projection vanished)
+        // are appended after the ranked ones rather than dropped, so a cold
+        // cache degrades to "projection-ranked first, everything else after"
+        // instead of silently losing rows.
+        const ranked = new Set(scored.map((s) => s.nodeId));
+        return [
+            ...scored.map((s) => s.nodeId),
+            ...candidateIds.filter((id) => !ranked.has(id)),
+        ];
+    }
+    /**
+     * Strided prefix projection used by the prefilter. Built lazily on the
+     * first prefilter query so the exact path never pays for it.
+     */
+    project(vector) {
+        const length = Math.ceil(vector.length / PREFILTER_STRIDE);
+        const out = new Float32Array(length);
+        for (let i = 0; i < length; i += 1) {
+            out[i] = vector[i * PREFILTER_STRIDE] ?? 0;
+        }
+        return out;
+    }
+    async getEmbeddingModelCounts() {
+        const rows = this.db
+            .prepare(`SELECT model, COUNT(*) as count FROM embeddings GROUP BY model ORDER BY count DESC`)
+            .all();
+        return rows;
+    }
+    async deleteEmbeddingsByModel(model) {
+        const info = this.db
+            .prepare(`DELETE FROM embeddings WHERE model = ?`)
+            .run(model);
+        this.vectorCache.clear();
+        return info.changes;
+    }
+    // -----------------------------------------------------------------------
+    // Image (CLIP) embeddings — the second vector space
+    // -----------------------------------------------------------------------
+    async saveImageEmbedding(nodeId, vector, model) {
+        const normalized = this.serializeEmbedding(vector);
+        this.db
+            .prepare(`INSERT INTO image_embeddings (node_id, vector, dimensions, model, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(node_id) DO UPDATE SET
+           vector = excluded.vector,
+           dimensions = excluded.dimensions,
+           model = excluded.model,
+           updated_at = excluded.updated_at`)
+            .run(nodeId, normalized, vector.length, model, Date.now());
+        this.vectorCacheSet(nodeId, this.parseEmbeddingF32(normalized), "image");
+    }
+    async getImageEmbeddingInfo(nodeId) {
+        const row = this.getPreparedStatement("getImageEmbeddingInfo", "SELECT model, dimensions, updated_at FROM image_embeddings WHERE node_id = ?").get(nodeId);
+        if (!row)
+            return null;
+        return {
+            model: row.model,
+            dimensions: row.dimensions,
+            updatedAt: row.updated_at,
+        };
+    }
+    async getAllImageEmbeddings() {
+        const rows = this.db
+            .prepare("SELECT node_id, vector, model, dimensions FROM image_embeddings")
+            .all();
+        return rows.map((r) => ({
+            nodeId: r.node_id,
+            model: r.model,
+            vector: this.parseEmbedding(r.vector),
+        }));
+    }
+    async getImageEmbeddingModelCounts() {
+        return this.db
+            .prepare(`SELECT model, COUNT(*) as count FROM image_embeddings
+         GROUP BY model ORDER BY count DESC`)
+            .all();
+    }
+    async deleteImageEmbedding(nodeId) {
+        const info = this.db
+            .prepare("DELETE FROM image_embeddings WHERE node_id = ?")
+            .run(nodeId);
+        const entry = this.vectorCache.get(nodeId);
+        if (entry && entry.space === "image") {
+            this.vectorCache.delete(nodeId);
+        }
+        return info.changes > 0;
+    }
+    async deleteImageEmbeddingsByModel(model) {
+        const info = this.db
+            .prepare("DELETE FROM image_embeddings WHERE model = ?")
+            .run(model);
+        this.vectorCache.clear();
+        return info.changes;
+    }
+    async queryEdges(filter = {}) {
+        const conditions = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const params = [];
+        if (filter.sourceId) {
+            conditions.push("source_id = ?");
+            params.push(filter.sourceId);
+        }
+        if (filter.targetId) {
+            conditions.push("target_id = ?");
+            params.push(filter.targetId);
+        }
+        if (filter.relation) {
+            conditions.push("relation = ?");
+            params.push(filter.relation);
+        }
+        if (filter.validAt !== undefined) {
+            // Bitemporal as-of read: the event-time validity interval must cover
+            // the timestamp. NULL bounds are open-ended.
+            conditions.push("(valid_from IS NULL OR valid_from <= ?)");
+            params.push(filter.validAt);
+            conditions.push("(valid_to IS NULL OR valid_to > ?)");
+            params.push(filter.validAt);
+        }
+        const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
+        const rows = this.db
+            .prepare(`SELECT * FROM edges ${where}`)
+            .all(...params);
+        return rows.map((r) => this.rowToEdge(r));
+    }
+    async getGraph() {
+        const nodes = this.db.prepare("SELECT * FROM nodes").all();
+        const edges = this.db.prepare("SELECT * FROM edges").all();
+        return {
+            nodes: nodes.map((r) => this.rowToNode(r)),
+            edges: edges.map((r) => this.rowToEdge(r)),
+        };
+    }
+    /**
+     * Bitemporal as-of graph read: nodes and edges whose validity interval
+     * covers `atTime` (unix ms). Predicates mirror the existing as-of read
+     * paths exactly — nodes use `valid_to >= ?` (see the `validAt` search
+     * filter), edges use strict `valid_to > ?` (see `queryEdges`).
+     */
+    async getGraphAtTime(atTime) {
+        const nodes = this.db
+            .prepare(`SELECT * FROM nodes
+         WHERE (valid_from IS NULL OR valid_from <= ?)
+           AND (valid_to IS NULL OR valid_to >= ?)`)
+            .all(atTime, atTime);
+        const edges = this.db
+            .prepare(`SELECT * FROM edges
+         WHERE (valid_from IS NULL OR valid_from <= ?)
+           AND (valid_to IS NULL OR valid_to > ?)`)
+            .all(atTime, atTime);
+        return {
+            nodes: nodes.map((r) => this.rowToNode(r)),
+            edges: edges.map((r) => this.rowToEdge(r)),
+        };
+    }
+    // -----------------------------------------------------------------------
+    // TTL
+    // -----------------------------------------------------------------------
+    async setTTL(id, seconds) {
+        const expiresAt = Math.floor(Date.now() / 1000) + seconds;
+        this.db
+            .prepare("UPDATE nodes SET expires_at = ? WHERE id = ?")
+            .run(expiresAt, id);
+    }
+    async clearTTL(id) {
+        this.db.prepare("UPDATE nodes SET expires_at = NULL WHERE id = ?").run(id);
+    }
+    async sweepExpired() {
+        const now = Math.floor(Date.now() / 1000);
+        const result = this.db
+            .prepare("DELETE FROM nodes WHERE expires_at IS NOT NULL AND expires_at <= ?")
+            .run(now);
+        return result.changes;
+    }
+    // -----------------------------------------------------------------------
+    // Tags
+    // -----------------------------------------------------------------------
+    async queryNodesByTag(tag) {
+        // Uses the (tag) secondary index on node_tags — O(log n) lookup, no
+        // JSON scan.
+        const rows = this.db
+            .prepare(`SELECT n.* FROM nodes n
+         INNER JOIN node_tags nt ON nt.node_id = n.id
+         WHERE nt.tag = ?`)
+            .all(tag);
+        return rows.map((r) => this.rowToNode(r));
+    }
+    /**
+     * ── item2: entity leg ── candidate generation for hybrid search: node
+     * ids whose indexed entities intersect `entities`, ranked by number of
+     * matched entities (desc), node id tiebreak. Backed by the
+     * `entity_index` inverted table — O(indexed entities), no content scan.
+     */
+    async searchByEntities(entities, limit) {
+        return searchEntityIndex(this.db, entities, limit);
+    }
+    // -----------------------------------------------------------------------
+    // Harness attribution ("one memory, every harness")
+    // -----------------------------------------------------------------------
+    /**
+     * Per-harness memory counts for `memos harness list`. Legacy and
+     * unattributed rows read as `"unknown"` via the column default.
+     */
+    async getHarnessCounts() {
+        const rows = this.db
+            .prepare(`SELECT harness, COUNT(*) AS count FROM nodes
+         GROUP BY harness ORDER BY count DESC, harness ASC`)
+            .all();
+        return rows.map((r) => ({
+            harness: r.harness || "unknown",
+            count: Number(r.count),
+        }));
+    }
+    /**
+     * Full node snapshot for harness merges (`memos harness merge
+     * --from`). Returns EVERYTHING — including historical (superseded)
+     * and quarantined rows — so the merge preserves the bitemporal
+     * version ledger verbatim. Read-only; the merge writes through the
+     * target storage's normal save path.
+     */
+    async listAllNodes() {
+        const rows = this.db.prepare("SELECT * FROM nodes").all();
+        return rows.map((r) => this.rowToNode(r));
+    }
+    /**
+     * Full edge snapshot for harness merges. Endpoints are remapped by
+     * the merge when node ids collide in the target.
+     */
+    async listAllEdges() {
+        const rows = this.db.prepare("SELECT * FROM edges").all();
+        return rows.map((r) => this.rowToEdge(r));
+    }
+    // -----------------------------------------------------------------------
+    // Bulk Operations
+    // -----------------------------------------------------------------------
+    async deleteAllNodes() {
+        this.vectorCache.clear();
+        this.db.exec("DELETE FROM embeddings");
+        this.db.exec("DELETE FROM image_embeddings");
+        this.db.exec("DELETE FROM edges");
+        this.db.exec("DELETE FROM nodes");
+        // Rebuild FTS index
+        this.db.exec("INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')");
+    }
+    // -----------------------------------------------------------------------
+    // Lifecycle
+    // -----------------------------------------------------------------------
+    async close() {
+        if (this.accessFlushTimer !== null) {
+            clearTimeout(this.accessFlushTimer);
+            this.accessFlushTimer = null;
+        }
+        this.flushAccessCounts();
+        if (this.db) {
+            this.db.close();
+        }
+    }
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+    rowToNode(row) {
+        const metadata = JSON.parse(row.metadata || "{}");
+        return {
+            id: row.id,
+            content: row.content,
+            summary: row.summary,
+            type: row.type,
+            metadata,
+            importance: row.importance,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            accessCount: row.access_count,
+            lastAccessed: row.last_accessed,
+            tags: JSON.parse(row.tags || "[]"),
+            expiresAt: row.expires_at ?? null,
+            namespace: row.namespace || "default",
+            validFrom: row.valid_from ?? null,
+            validTo: row.valid_to ?? null,
+            source: row.source || "user_input",
+            trustScore: row.trust_score ?? 1.0,
+            pool: (row.pool || "event"),
+            provenance: isProvenanceTier(row.provenance) ? row.provenance : "user",
+            quarantined: row.quarantined === 1,
+            quarantinedAt: row.quarantined_at ?? null,
+            quarantineReason: row.quarantine_reason ?? null,
+            // Harness attribution reads as "unknown" for legacy rows (and for
+            // rows written by custom adapters that never set the tag).
+            harness: row.harness || "unknown",
+            // Load confidence state machine values from metadata
+            confidence: metadata.confidence,
+            evidenceCount: metadata.evidenceCount,
+        };
+    }
+    rowToEdge(row) {
+        return {
+            id: row.id,
+            sourceId: row.source_id,
+            targetId: row.target_id,
+            relation: row.relation,
+            weight: row.weight,
+            metadata: JSON.parse(row.metadata || "{}"),
+            createdAt: row.created_at,
+            validFrom: row.valid_from ?? null,
+            validTo: row.valid_to ?? null,
+        };
+    }
+    /**
+     * In-process parsed-vector cache (nodeId -> vector + derived norms).
+     * The semantic leg otherwise re-fetches EVERY stored vector BLOB from
+     * SQLite on every query (tens of MB of memcpy per query on large
+     * stores). Writes go through this class, so invalidation is exact;
+     * external writers are not tracked (single-process deployments are the
+     * supported shape — the Python bridge runs one Node process).
+     *
+     * The entry bundles the squared L2 norm with the vector: it is
+     * computed once per stored row instead of once per query, and it is
+     * invalidated by the same `set`/eviction/clear that invalidates the
+     * vector itself, so it can never disagree with the stored row.
+     */
+    vectorCache = new Map();
+    vectorCacheMaxEntries = 25_000;
+    semanticScanMode = "exact";
+    vectorCacheGet(nodeId, space) {
+        const entry = this.vectorCache.get(nodeId);
+        // A hit from the WRONG space is a miss, not a stale read: the two
+        // spaces share a nodeId (an image node has both), and serving one's
+        // vector to the other's query is the silent-corruption bug this
+        // namespace exists to prevent.
+        if (entry && entry.space !== space)
+            return undefined;
+        return entry;
+    }
+    vectorCacheSet(nodeId, vector, space) {
+        if (this.vectorCache.size >= this.vectorCacheMaxEntries &&
+            !this.vectorCache.has(nodeId)) {
+            // FIFO eviction (Map preserves insertion order). The norm rides in
+            // the same entry, so deleting the entry drops both.
+            const oldest = this.vectorCache.keys().next().value;
+            if (oldest !== undefined)
+                this.vectorCache.delete(oldest);
+        }
+        const entry = { vector, space, normSq: sumSquares(vector) };
+        // The coarse projection only exists in prefilter mode, so the exact
+        // path never pays to build it. Same funnel as the vector itself —
+        // every write re-derives it, so it can never go stale.
+        if (this.semanticScanMode === "prefilter") {
+            entry.proj = this.project(vector);
+            entry.projNormSq = sumSquares(entry.proj);
+        }
+        this.vectorCache.set(nodeId, entry);
+    }
+    /**
+     * Telemetry for the last `querySimilarEmbeddings` call. Read-only: the
+     * scan fills it in, nothing else mutates it.
+     */
+    semanticScanTelemetry = {
+        candidates: 0,
+        cacheHits: 0,
+        normComputations: 0,
+        legacyRows: 0,
+        prefilterSkipped: 0,
+        rescored: 0,
+        earlyExit: false,
+    };
+    /** Scan telemetry for the most recent semantic query. */
+    get semanticScanStats() {
+        return this.semanticScanTelemetry;
+    }
+    lookupStoredVector(nodeId, space) {
+        const table = space === "image" ? "image_embeddings" : "embeddings";
+        const row = this.getPreparedStatement(`querySimilarEmbeddingsOneVector::${space}`, `SELECT vector FROM ${table} WHERE node_id = ?`).get(nodeId);
+        return row?.vector;
+    }
+    /**
+     * Zero-copy Float32Array view over a float32 BLOB. Byte-order and values
+     * are identical to `parseEmbedding`'s BLOB branch; alignment is guarded
+     * (Node Buffers are 8-byte aligned from the pool, but a sliced view may
+     * not be 4-byte aligned — those fall back to `parseEmbedding`).
+     */
+    parseEmbeddingF32(value) {
+        const byteOffset = value.byteOffset;
+        const byteLength = value.byteLength;
+        if (byteOffset % 4 === 0 && byteLength % 4 === 0) {
+            return new Float32Array(value.buffer, byteOffset, byteLength / 4);
+        }
+        const aligned = Buffer.from(value);
+        return new Float32Array(aligned.buffer, aligned.byteOffset, aligned.byteLength / 4);
+    }
+    parseEmbedding(value) {
+        // Current databases store compact float32 blobs. The JSON branch keeps old
+        // databases readable so users do not need a manual migration.
+        if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+            const buffer = Buffer.from(value);
+            const vector = [];
+            for (let offset = 0; offset + 3 < buffer.length; offset += 4) {
+                vector.push(buffer.readFloatLE(offset));
+            }
+            return vector;
+        }
+        if (typeof value !== "string")
+            return [];
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed)
+            ? parsed.filter((item) => typeof item === "number")
+            : [];
+    }
+    serializeEmbedding(vector) {
+        // Float32 precision is enough for retrieval ranking and cuts storage size
+        // roughly in half compared with float64 arrays.
+        const buffer = Buffer.allocUnsafe(vector.length * 4);
+        for (let index = 0; index < vector.length; index += 1) {
+            buffer.writeFloatLE(vector[index], index * 4);
+        }
+        return buffer;
+    }
+    mapSortField(field) {
+        switch (field) {
+            case "importance":
+                return "importance";
+            case "createdAt":
+                return "created_at";
+            case "updatedAt":
+                return "updated_at";
+            case "accessCount":
+                return "access_count";
+            case "trustScore":
+                return "trust_score";
+            case "relevance":
+            default:
+                return "updated_at";
+        }
+    }
+    buildTagFilter(tags, tableAlias) {
+        if (!tags || tags.length === 0)
+            return "";
+        const prefix = tableAlias ? `${tableAlias}.` : "";
+        // AND across tags via EXISTS subqueries on the indexed node_tags
+        // table. The planner uses the (tag) index for each subquery, which
+        // is dramatically faster than the legacy `tags LIKE '%"tag"%'`.
+        return tags
+            .map(() => `EXISTS (SELECT 1 FROM node_tags nt ` +
+            `WHERE nt.node_id = ${prefix}id AND nt.tag = ?)`)
+            .join(" AND ");
+    }
+    buildMetadataFilter(metadata, tableAlias) {
+        if (!metadata || Object.keys(metadata).length === 0) {
+            return { conditions: [], params: [] };
+        }
+        const prefix = tableAlias ? `${tableAlias}.` : "";
+        const conditions = [];
+        const params = [];
+        for (const [key, value] of Object.entries(metadata)) {
+            if (!/^[A-Za-z0-9_-]+$/.test(key))
+                continue;
+            conditions.push(`json_extract(${prefix}metadata, ?) = ?`);
+            params.push(`$.${key}`, typeof value === "object" ? JSON.stringify(value) : value);
+        }
+        return { conditions, params };
+    }
+    /**
+     * Namespace/scope predicate shared by the FTS and structured query
+     * paths. Covers exact (`namespace`), multi (`namespaces`), and
+     * hierarchical (`namespacePrefix`) constraints. When
+     * `includeSharedScope` is set, the shared `default` namespace is OR'd
+     * in — a scoped read always sees shared memories (company-brain
+     * container semantics). Returns null when no namespace constraint is
+     * present (unscoped searches are untouched).
+     */
+    buildNamespaceCondition(filter, tableAlias) {
+        const col = tableAlias ? `${tableAlias}.namespace` : "namespace";
+        const parts = [];
+        const params = [];
+        if (filter.namespace) {
+            parts.push(`${col} = ?`);
+            params.push(filter.namespace);
+        }
+        if (filter.namespaces && filter.namespaces.length > 0) {
+            parts.push(`${col} IN (${filter.namespaces.map(() => "?").join(", ")})`);
+            params.push(...filter.namespaces);
+        }
+        if (filter.namespacePrefix) {
+            // Hierarchical scope match: escaped LIKE prefix so user values
+            // cannot inject % or _ wildcards.
+            parts.push(`${col} LIKE ? ESCAPE '\\'`);
+            params.push(escapeLikePrefix(filter.namespacePrefix) + "%");
+        }
+        if (parts.length === 0)
+            return null;
+        const base = parts.length === 1 ? parts[0] : `(${parts.join(" OR ")})`;
+        if (filter.includeSharedScope) {
+            return { sql: `(${base} OR ${col} = 'default')`, params };
+        }
+        return { sql: base, params };
+    }
+    /**
+     * Scoped-space inventory: every namespace with its live memory count.
+     * Powers `memos scope list`.
+     */
+    async listNamespaces() {
+        const rows = this.db
+            .prepare("SELECT namespace, COUNT(*) AS count FROM nodes GROUP BY namespace ORDER BY count DESC, namespace ASC")
+            .all();
+        return rows.map((r) => ({ namespace: r.namespace, count: r.count }));
+    }
+}
+/**
+ * Load the cipher-capable driver (an API-compatible better-sqlite3 fork
+ * with multiple-cipher support). Kept optional: installs without it keep
+ * the default plaintext driver and never load this module. Exported for
+ * the `memos encrypt` / `memos decrypt` CLI commands.
+ */
+export function loadCipherDriver() {
+    const require = createRequire(import.meta.url);
+    try {
+        const mod = require("better-sqlite3-multiple-ciphers");
+        return (mod.default ?? mod);
+    }
+    catch {
+        throw new Error("Encryption requires the optional driver better-sqlite3-multiple-ciphers.\n" +
+            "Install it with: npm i better-sqlite3-multiple-ciphers");
+    }
+}
+/**
+ * Encrypt a plaintext database in place. The original file is preserved
+ * as `<path>.plaintext.bak`. Uses the standard sqlcipher_export recipe.
+ * Returns the backup path.
+ */
+export async function encryptDatabase(dbPath, key) {
+    return convertDatabase(dbPath, key, "encrypt");
+}
+export async function decryptDatabase(dbPath, key) {
+    return convertDatabase(dbPath, key, "decrypt");
+}
+/**
+ * Convert a database between plaintext and encrypted forms by copying
+ * schema and data through an attached target (the standard
+ * better-sqlite3-multiple-ciphers migration path — sqlcipher_export is
+ * not available in this driver). The original file is preserved as a
+ * `.plaintext.bak` / `.encrypted.bak` sibling.
+ */
+async function convertDatabase(dbPath, key, mode) {
+    const Cipher = loadCipherDriver();
+    const tmp = mode === "encrypt" ? `${dbPath}.encrypted.tmp` : `${dbPath}.decrypted.tmp`;
+    const escapedKey = key.replace(/'/g, "''");
+    const escapedSrc = dbPath.replace(/'/g, "''");
+    const target = new Cipher(tmp);
+    try {
+        if (mode === "encrypt") {
+            target.pragma(`key = '${escapedKey}'`);
+        }
+        // The SOURCE attaches with a key only when it is encrypted (decrypt);
+        // a plaintext ATTACH must omit the KEY clause entirely — an explicit
+        // empty key makes the driver expect an encrypted file.
+        const sourceKey = mode === "decrypt" ? ` KEY '${escapedKey}'` : " KEY ''";
+        target.exec(`ATTACH DATABASE '${escapedSrc}' AS src${sourceKey}`);
+        const objects = target
+            .prepare("SELECT type, name, sql FROM src.sqlite_master " +
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' " +
+            // Exclude only the FTS5 SHADOW tables — the virtual
+            // table itself must be recreated (then rebuilt).
+            "AND name NOT LIKE 'nodes\\_fts\\_%' ESCAPE '\\'")
+            .all();
+        const tables = objects.filter((o) => o.type === "table");
+        const indexes = objects.filter((o) => o.type === "index");
+        const triggers = objects.filter((o) => o.type === "trigger");
+        // Tables first (the FTS virtual table is created empty), then data,
+        // then an FTS rebuild, then indexes and triggers last so nothing
+        // fires mid-copy.
+        for (const table of tables)
+            target.exec(table.sql);
+        for (const table of tables) {
+            if (/CREATE VIRTUAL TABLE/i.test(table.sql))
+                continue;
+            target.exec(`INSERT INTO main."${table.name}" SELECT * FROM src."${table.name}"`);
+        }
+        try {
+            // NOTE: unqualified — FTS5's special insert syntax does not
+            // accept schema-qualified table names.
+            target.exec(`INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')`);
+        }
+        catch (error) {
+            if (!error.message.includes("no such table")) {
+                console.error("[convert] FTS rebuild failed:", error.message);
+            }
+        }
+        for (const index of indexes)
+            target.exec(index.sql);
+        for (const trigger of triggers)
+            target.exec(trigger.sql);
+        target.exec("DETACH DATABASE src");
+    }
+    finally {
+        target.close();
+    }
+    const fs = await import("node:fs");
+    const backup = mode === "encrypt" ? `${dbPath}.plaintext.bak` : `${dbPath}.encrypted.bak`;
+    fs.renameSync(dbPath, backup);
+    fs.renameSync(tmp, dbPath);
+    return backup;
+}
+//# sourceMappingURL=sqlite.js.map

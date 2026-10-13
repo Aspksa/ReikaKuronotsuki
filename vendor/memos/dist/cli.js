@@ -1,0 +1,2880 @@
+#!/usr/bin/env node
+/**
+ * MemOS CLI — command-line interface for the MemOS memory layer.
+ *
+ * Usage:
+ *   memos store "User prefers dark mode" --type preference
+ *   memos search "dark mode"
+ *   memos history <id>
+ *   memos retrieve <id>
+ *   memos forget <id>
+ *   memos revert --last | --id <id> | --about <topic> | "<revert request>" [--dry-run]
+ *   memos summarize
+ *   memos graph [--mermaid]
+ *   memos browse
+ *   memos link <src> <dst>
+ *   memos count
+ *   memos tag <id> <tag1> [tag2...]
+ *   memos untag <id> <tag1> [tag2...]
+ *   memos list --tag <tag>
+ *   memos export [--format json|markdown|obsidian] [--output <dir>] [--tag <tag>]
+ *   memos backup [--output <path>]
+ *   memos restore <path>
+ *   memos mcp
+ *
+ * @module @memos/cli
+ */
+import { MemOS } from "./memory.js";
+import { graphToMermaid } from "./graph-mermaid.js";
+import { parseScopeArg } from "./scope.js";
+import { MemorySkippedError } from "./memory.js";
+import { isProvenanceTier } from "./provenance.js";
+import { parseRevertCliArgs } from "./revert.js";
+import { listReminders, splitRemindText } from "./event-memory.js";
+import { parseTemporal } from "./temporal.js";
+import { cipherKeyEnvName, loadProjectConfig } from "./project-config.js";
+import { getSdkVersion } from "./version.js";
+import { redactSecrets } from "./redact.js";
+import { CLI_COMMANDS, suggestCommand, getCommandHelp } from "./cli-help.js";
+import { getCompletionScript, COMPLETION_SHELLS } from "./cli-completion.js";
+import { resolve, dirname, join } from "path";
+import * as os from "os";
+import { existsSync, copyFileSync, mkdirSync, statSync, writeFileSync, readFileSync, } from "fs";
+import * as readline from "node:readline";
+const args = process.argv.slice(2);
+const command = args[0];
+/**
+ * Filter out flags and their values from an argument list.
+ * Flags that take a value: --db, --type, --ttl, --limit, --format, --output,
+ * --id, --about, --reason, --actor, --namespace
+ * Boolean flags: --json
+ */
+function nonFlagArgs(args, startIndex) {
+    const flagsWithValue = new Set([
+        "--db",
+        "--type",
+        "--ttl",
+        "--limit",
+        "--format",
+        "--output",
+        "--id",
+        "--about",
+        "--reason",
+        "--actor",
+        "--namespace",
+    ]);
+    const result = [];
+    let skipNext = false;
+    for (let i = startIndex; i < args.length; i++) {
+        if (skipNext) {
+            skipNext = false;
+            continue;
+        }
+        if (args[i] === "--json")
+            continue;
+        if (flagsWithValue.has(args[i])) {
+            skipNext = true;
+            continue;
+        }
+        if (args[i].startsWith("--"))
+            continue;
+        result.push(args[i]);
+    }
+    return result;
+}
+/**
+ * Build an `EmbeddingConfig` from MEMOS_EMBEDDING_* environment variables.
+ * Returns null when MEMOS_EMBEDDING_PROVIDER is unset so callers fall
+ * through to the config file / SDK default.
+ */
+function cliEmbeddingsConfig(project) {
+    const provider = process.env.MEMOS_EMBEDDING_PROVIDER ?? project?.provider;
+    if (!provider)
+        return null;
+    const dimensions = process.env.MEMOS_EMBEDDING_DIMENSIONS;
+    const dimensionsRaw = process.env.MEMOS_EMBEDDING_DIMENSIONS;
+    return {
+        provider: provider,
+        model: process.env.MEMOS_EMBEDDING_MODEL ?? project?.model,
+        baseUrl: process.env.MEMOS_EMBEDDING_BASE_URL ?? project?.baseUrl,
+        apiKey: process.env.MEMOS_EMBEDDING_API_KEY,
+        dimensions: dimensionsRaw
+            ? parseInt(dimensionsRaw, 10)
+            : project?.dimensions,
+        queryPrefix: process.env.MEMOS_EMBEDDING_QUERY_PREFIX,
+        documentPrefix: process.env.MEMOS_EMBEDDING_DOCUMENT_PREFIX,
+    };
+}
+function configFilePath() {
+    return join(os.homedir(), ".memos", "config.json");
+}
+/** Read ~/.memos/config.json. Returns null when the file is missing or invalid. */
+function loadFileConfig() {
+    try {
+        const raw = readFileSync(configFilePath(), "utf-8");
+        const parsed = JSON.parse(raw);
+        if (typeof parsed !== "object" || parsed === null)
+            return null;
+        return parsed;
+    }
+    catch {
+        return null;
+    }
+}
+/** Persist the config file, creating ~/.memos when needed. */
+function saveFileConfig(config) {
+    mkdirSync(dirname(configFilePath()), { recursive: true });
+    writeFileSync(configFilePath(), JSON.stringify(config, null, 2) + "\n");
+}
+/** Prompt the user with a yes/no question. Resolves true only for y/yes. */
+function askYesNo(question) {
+    return new Promise((resolve) => {
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+        });
+        rl.question(question, (answer) => {
+            rl.close();
+            resolve(/^y(es)?$/i.test(answer.trim()));
+        });
+    });
+}
+/**
+ * Beta auto-prompt: if the beta channel is on and we haven't checked in a
+ * while, look for a newer fully-successful main commit and print a notice
+ * to stderr. Fail-open and cached — a network failure never breaks the
+ * command being run, and stdout stays clean for scripts/JSON.
+ */
+async function maybeBetaUpdateNotice() {
+    const { readBetaState, writeBetaState, findLatestGreenCommit, resolveInstalledRef, UPDATE_CHECK_INTERVAL_MS, } = await import("./updater.js");
+    const cfgPath = configFilePath();
+    const state = readBetaState(cfgPath);
+    if (!state.beta)
+        return;
+    const now = Date.now();
+    if (state.lastUpdateCheck &&
+        now - state.lastUpdateCheck < UPDATE_CHECK_INTERVAL_MS) {
+        return;
+    }
+    // Only the newest commit here — this is a cheap background nudge, not the
+    // full walk-back that `memos update` does.
+    const green = await findLatestGreenCommit({ maxCommits: 1 });
+    writeBetaState(cfgPath, { lastUpdateCheck: now });
+    if (!green)
+        return;
+    const installed = resolveInstalledRef();
+    if (installed === green.sha)
+        return;
+    const firstLine = green.message.split("\n")[0];
+    console.error(`\n[memos] Beta update available: ${green.sha.slice(0, 7)} — ${firstLine}\n` +
+        `[memos] Run \`memos update\` to install it.\n`);
+}
+/**
+ * Embedding config for the CLI: MEMOS_EMBEDDING_* wins, then the config
+ * file, then nothing (SDK default — embeddings on, fastembed provider).
+ */
+function resolveCliEmbeddingsConfig() {
+    const fromEnv = cliEmbeddingsConfig();
+    if (fromEnv)
+        return fromEnv;
+    const file = loadFileConfig();
+    const e = file?.embeddings;
+    if (!e || Object.keys(e).length === 0)
+        return null;
+    return {
+        ...(e.enabled !== undefined ? { enabled: e.enabled } : {}),
+        ...(e.provider ? { provider: e.provider } : {}),
+        ...(e.model ? { model: e.model } : {}),
+        ...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
+        ...(e.dimensions ? { dimensions: e.dimensions } : {}),
+        ...(e.queryPrefix ? { queryPrefix: e.queryPrefix } : {}),
+        ...(e.documentPrefix ? { documentPrefix: e.documentPrefix } : {}),
+    };
+}
+/** Database path: --db wins, then the config file, then the SDK default. */
+function resolveDbPath(cliDbPath) {
+    if (cliDbPath)
+        return cliDbPath;
+    return loadFileConfig()?.dbPath;
+}
+/** Prompt for a line of input; returns the default when the user hits enter. */
+async function promptText(rl, label, defaultValue) {
+    const answer = (await rl.question(`${label} [${defaultValue}]: `)).trim();
+    return answer === "" ? defaultValue : answer;
+}
+/** Numbered-choice prompt. Returns the chosen key, or the default on empty. */
+async function promptChoice(rl, label, options, defaultKey) {
+    console.log(label);
+    options.forEach((o, i) => {
+        const marker = o.key === defaultKey ? " (default)" : "";
+        console.log(`  ${i + 1}) ${o.label}${o.hint ? ` — ${o.hint}` : ""}${marker}`);
+    });
+    for (;;) {
+        const answer = (await rl.question(`Choice [${options.findIndex((o) => o.key === defaultKey) + 1}]: `)).trim();
+        if (answer === "")
+            return defaultKey;
+        const n = parseInt(answer, 10);
+        if (!Number.isNaN(n) && n >= 1 && n <= options.length) {
+            return options[n - 1].key;
+        }
+        console.log(`Enter a number 1–${options.length}, or press enter for the default.`);
+    }
+}
+/**
+ * Prompt for a passphrase with hidden (non-echoed) input.
+ * Used for the sync key when no --passphrase/--passphrase-file/MEMOS_SYNC_KEY is set.
+ */
+async function promptHidden(label) {
+    const readline = await import("node:readline");
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true,
+    });
+    // Mute echo while the user types the passphrase.
+    const rlAny = rl;
+    const originalWrite = rlAny._writeToOutput.bind(rl);
+    process.stdout.write(label);
+    rlAny._writeToOutput = () => { };
+    return new Promise((resolve) => {
+        rlAny.question("", (answer) => {
+            rlAny._writeToOutput = originalWrite;
+            rl.close();
+            process.stdout.write("\n");
+            resolve(answer);
+        });
+    });
+}
+/**
+ * Resolve the sync key, prompting interactively (hidden input) when no
+ * key was provided via --passphrase, --passphrase-file, or MEMOS_SYNC_KEY and stdin
+ * is a TTY. Non-TTY (piped/CI) keeps the hard error — scripts must
+ * pass the key explicitly.
+ */
+async function resolveSyncKeyInteractive(opts) {
+    const { resolveSyncKey } = await import("./sync.js");
+    try {
+        return resolveSyncKey(opts);
+    }
+    catch (err) {
+        if (!process.stdin.isTTY)
+            throw err;
+        const passphrase = await promptHidden("Sync passphrase: ");
+        if (!passphrase)
+            throw err;
+        return passphrase;
+    }
+}
+/**
+ * `memos init` — walk the user through database path + embedding provider,
+ * smoke-test the setup (store → semantic search → forget a probe memory),
+ * and save ~/.memos/config.json. `memos init --yes` accepts all defaults
+ * without prompting (for scripts); a non-TTY stdin (piped/CI) is also
+ * treated as non-interactive automatically.
+ */
+async function runInitWizard(cliArgs) {
+    // --yes/-y forces non-interactive; so does a non-TTY stdin (piped/CI),
+    // so scripts never hang on a readline prompt they can't answer.
+    const nonInteractive = cliArgs.includes("--yes") ||
+        cliArgs.includes("-y") ||
+        process.stdin.isTTY === false;
+    const { createInterface } = await import("node:readline/promises");
+    const rl = nonInteractive
+        ? null
+        : createInterface({ input: process.stdin, output: process.stdout });
+    try {
+        const existing = loadFileConfig();
+        if (existing && !nonInteractive) {
+            console.log(`Existing config found at ${configFilePath()}.`);
+            const again = await promptChoice(rl, "Re-run the wizard and overwrite it?", [
+                { key: "yes", label: "Yes, overwrite" },
+                { key: "no", label: "No, keep existing" },
+            ], "no");
+            if (again === "no") {
+                console.log("Keeping existing config. Nothing changed.");
+                return;
+            }
+        }
+        const defaultDb = join(os.homedir(), ".memos", "memos.db");
+        const dbPath = nonInteractive
+            ? (existing?.dbPath ?? defaultDb)
+            : await promptText(rl, "Database path", existing?.dbPath ?? defaultDb);
+        const providerChoice = nonInteractive
+            ? (existing?.embeddings?.provider ?? "fastembed")
+            : await promptChoice(rl, "Embedding provider (semantic search):", [
+                {
+                    key: "fastembed",
+                    label: "Local (fastembed)",
+                    hint: "free, on-device; needs `npm i @huggingface/transformers` for real vectors",
+                },
+                {
+                    key: "openai-compatible",
+                    label: "OpenAI-compatible server",
+                    hint: "e.g. scripts/embed-server.py on a GPU box",
+                },
+                {
+                    key: "ollama",
+                    label: "Ollama",
+                    hint: "local models via Ollama",
+                },
+                {
+                    key: "off",
+                    label: "Off",
+                    hint: "keyword-only search, no embeddings",
+                },
+            ], "fastembed");
+        const embeddings = {};
+        if (providerChoice === "off") {
+            embeddings.enabled = false;
+        }
+        else {
+            embeddings.enabled = true;
+            embeddings.provider = providerChoice;
+            if (providerChoice === "openai-compatible") {
+                embeddings.baseUrl = nonInteractive
+                    ? (existing?.embeddings?.baseUrl ?? "http://localhost:8000")
+                    : await promptText(rl, "Embedding server base URL", existing?.embeddings?.baseUrl ?? "http://localhost:8000");
+                embeddings.model = nonInteractive
+                    ? (existing?.embeddings?.model ?? "BAAI/bge-small-en-v1.5")
+                    : await promptText(rl, "Embedding model", existing?.embeddings?.model ?? "BAAI/bge-small-en-v1.5");
+                const dimsDefault = String(existing?.embeddings?.dimensions ?? 384);
+                const dimsAnswer = nonInteractive
+                    ? dimsDefault
+                    : await promptText(rl, "Embedding dimensions", dimsDefault);
+                const dims = parseInt(dimsAnswer, 10);
+                if (!Number.isNaN(dims) && dims > 0)
+                    embeddings.dimensions = dims;
+                console.log("Note: if the server needs an API key, set MEMOS_EMBEDDING_API_KEY — keys are never written to the config file.");
+            }
+            else if (providerChoice === "ollama") {
+                embeddings.baseUrl = nonInteractive
+                    ? (existing?.embeddings?.baseUrl ?? "http://localhost:11434")
+                    : await promptText(rl, "Ollama base URL", existing?.embeddings?.baseUrl ?? "http://localhost:11434");
+                embeddings.model = nonInteractive
+                    ? (existing?.embeddings?.model ?? "nomic-embed-text")
+                    : await promptText(rl, "Ollama embedding model", existing?.embeddings?.model ?? "nomic-embed-text");
+            }
+            else {
+                console.log("Note: real local vectors need `pnpm add @huggingface/transformers`; " +
+                    "without it MemOS falls back to a deterministic local hash and warns loudly.");
+            }
+        }
+        // Smoke test: open the store with this exact config, round-trip a probe.
+        console.log("\nSmoke-testing the setup…");
+        const memos = new MemOS({
+            dbPath,
+            ...(Object.keys(embeddings).length > 0 ? { embeddings } : {}),
+        });
+        try {
+            await memos.init();
+            const probe = `memos init smoke test ${Date.now()}`;
+            const { node } = await memos.store(probe);
+            const info = memos.getEmbeddingRuntimeInfo();
+            if (info) {
+                if (info.fallbackActive) {
+                    console.log(`  embeddings: ${info.resolvedProvider} (fallback — ${info.fallbackReason})`);
+                }
+                else {
+                    console.log(`  embeddings: ${info.resolvedProvider} (${info.resolvedModel}, ${info.observedDimensions ?? info.requestedDimensions}d)`);
+                }
+            }
+            else {
+                console.log("  embeddings: disabled (keyword search only)");
+            }
+            const hits = await memos.search({
+                query: "memos init smoke test",
+                limit: 3,
+            });
+            const found = hits.some((h) => h.node.id === node.id);
+            console.log(`  store → search round-trip: ${found ? "ok" : "PROBE NOT FOUND"}`);
+            await memos.forget(node.id);
+            if (!found) {
+                console.error("Smoke test failed: probe memory was not retrievable.");
+                process.exit(1);
+            }
+            console.log("  probe memory cleaned up.");
+        }
+        finally {
+            await memos.close();
+        }
+        const config = { version: 1, dbPath };
+        if (Object.keys(embeddings).length > 0)
+            config.embeddings = embeddings;
+        saveFileConfig(config);
+        console.log(`\nSaved ${configFilePath()}.`);
+        console.log("Every memos command (including `memos mcp`) now uses these settings.");
+        console.log("Precedence: --db and MEMOS_EMBEDDING_* env vars still override the file.");
+    }
+    finally {
+        rl?.close();
+    }
+}
+const MCP_COMMAND = ["npx", "-y", "@mem-os/sdk", "mcp"];
+function mcpServerEntry(dbPath) {
+    const env = {};
+    if (dbPath)
+        env.MEMOS_DB_PATH = dbPath;
+    if (process.env.MEMOS_EMBEDDING_PROVIDER)
+        env.MEMOS_EMBEDDING_PROVIDER = process.env.MEMOS_EMBEDDING_PROVIDER;
+    if (process.env.MEMOS_EMBEDDING_MODEL)
+        env.MEMOS_EMBEDDING_MODEL = process.env.MEMOS_EMBEDDING_MODEL;
+    if (process.env.MEMOS_EMBEDDING_BASE_URL)
+        env.MEMOS_EMBEDDING_BASE_URL = process.env.MEMOS_EMBEDDING_BASE_URL;
+    if (process.env.MEMOS_EMBEDDING_DIMENSIONS)
+        env.MEMOS_EMBEDDING_DIMENSIONS = process.env.MEMOS_EMBEDDING_DIMENSIONS;
+    if (process.env.MEMOS_EMBEDDING_QUERY_PREFIX)
+        env.MEMOS_EMBEDDING_QUERY_PREFIX = process.env.MEMOS_EMBEDDING_QUERY_PREFIX;
+    if (process.env.MEMOS_EMBEDDING_DOCUMENT_PREFIX)
+        env.MEMOS_EMBEDDING_DOCUMENT_PREFIX =
+            process.env.MEMOS_EMBEDDING_DOCUMENT_PREFIX;
+    return {
+        command: MCP_COMMAND[0],
+        args: MCP_COMMAND.slice(1),
+        ...(Object.keys(env).length > 0 ? { env } : {}),
+    };
+}
+function connectTarget(target, opts) {
+    const entry = mcpServerEntry(opts.dbPath);
+    const jsonEntry = JSON.stringify({ mcpServers: { memos: entry } }, null, 2);
+    switch (target) {
+        case "claude-code":
+        case "claude":
+        case "claudecode": {
+            const args = MCP_COMMAND.map((a) => `"${a}"`).join(" ");
+            return {
+                instructions: [
+                    "Claude Code — pick ONE:",
+                    "",
+                    "  # User scope (available in every project):",
+                    `  claude mcp add memos -s user -- ${MCP_COMMAND.join(" ")}`,
+                    "",
+                    "  # Project scope (checked into the repo for the whole team):",
+                    "  memos connect claude-code --write",
+                    "  # → writes ./.mcp.json:",
+                    jsonEntry,
+                    "",
+                    `  Or run inside Claude Code: /plugin marketplace add Markgatcha/memos`,
+                    `  then /plugin install memos@memos-marketplace (bundles this MCP`,
+                    `  server + /memos, /recall commands + a memory skill).`,
+                    "",
+                    `  Manual one-liner equivalent: claude mcp add memos -s user -- ${args}`,
+                    "",
+                    "  # Session hook (auto-extract facts at session end):",
+                    "  # Add to .claude/settings.json:",
+                    "  {",
+                    '    "hooks": {',
+                    '      "SessionEnd": [{ "hooks": [{ "type": "command", "command": "memos session-hook" }] }]',
+                    "    }",
+                    "  }",
+                ].join("\n"),
+                configPath: ".mcp.json",
+                fileContents: jsonEntry + "\n",
+            };
+        }
+        case "cursor": {
+            return {
+                instructions: [
+                    "Cursor — MCP config at ~/.cursor/mcp.json:",
+                    jsonEntry,
+                    "",
+                    "Or: memos connect cursor --write  (writes the file; --force overwrites).",
+                    "Restart Cursor, then enable the memos server in MCP settings.",
+                ].join("\n"),
+                configPath: join(homeDir(), ".cursor", "mcp.json"),
+                fileContents: jsonEntry + "\n",
+            };
+        }
+        case "windsurf": {
+            return {
+                instructions: [
+                    "Windsurf — MCP config at ~/.codeium/windsurf/mcp_config.json:",
+                    jsonEntry,
+                    "",
+                    "Or: memos connect windsurf --write",
+                ].join("\n"),
+                configPath: join(homeDir(), ".codeium", "windsurf", "mcp_config.json"),
+                fileContents: jsonEntry + "\n",
+            };
+        }
+        case "cline": {
+            return {
+                instructions: [
+                    "Cline (VS Code) — MCP settings file:",
+                    "  Windows: %APPDATA%\\Code\\User\\globalStorage\\saoudrizwan.claude-dev\\settings\\cline_mcp_settings.json",
+                    "  macOS:   ~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+                    "",
+                    "Merge this into the mcpServers object:",
+                    jsonEntry,
+                ].join("\n"),
+            };
+        }
+        case "opencode": {
+            return {
+                instructions: [
+                    "OpenCode — add to opencode.json (project) or ~/.config/opencode/opencode.json:",
+                    JSON.stringify({
+                        mcp: {
+                            memos: { type: "local", command: MCP_COMMAND },
+                        },
+                    }, null, 2),
+                    "",
+                    "Or: memos connect opencode --write  (writes ./opencode.json).",
+                ].join("\n"),
+                configPath: "opencode.json",
+                fileContents: JSON.stringify({ mcp: { memos: { type: "local", command: MCP_COMMAND } } }, null, 2) + "\n",
+            };
+        }
+        case "codex": {
+            const toml = `[mcp_servers.memos]\ncommand = "${MCP_COMMAND[0]}"\nargs = [${MCP_COMMAND.slice(1)
+                .map((a) => `"${a}"`)
+                .join(", ")}]\n`;
+            return {
+                instructions: [
+                    "Codex CLI — add to ~/.codex/config.toml:",
+                    toml,
+                    "Or: memos connect codex --write  (appends to the file).",
+                ].join("\n"),
+                configPath: join(homeDir(), ".codex", "config.toml"),
+                fileContents: toml,
+            };
+        }
+        case "gemini": {
+            return {
+                instructions: [
+                    "Gemini CLI — MCP config at ~/.gemini/settings.json:",
+                    jsonEntry,
+                    "",
+                    "Or: memos connect gemini --write",
+                ].join("\n"),
+                configPath: join(homeDir(), ".gemini", "settings.json"),
+                fileContents: jsonEntry + "\n",
+            };
+        }
+        case "generic":
+        case "any":
+        case "mcp": {
+            // Tool list is injected by the caller from getMcpTools() so the
+            // count and names can never go stale.
+            const short = (opts.toolNames ?? []).map((n) => n.replace(/^memos_/, ""));
+            return {
+                instructions: [
+                    "Any MCP-capable harness — the MemOS server is a plain stdio MCP",
+                    `server. Launch command: ${MCP_COMMAND.join(" ")}`,
+                    "",
+                    "MCP config shape (mcpServers object):",
+                    jsonEntry,
+                    "",
+                    "The server speaks MCP 2026-07-28 with a legacy-2025 fallback and",
+                    `exposes ${short.length} tools: ${short.join("/")}.`,
+                    "All data stays in local SQLite.",
+                ].join("\n"),
+            };
+        }
+        default:
+            console.error("Unknown target. Supported: claude-code, cursor, windsurf, cline, " +
+                "opencode, codex, gemini, generic.");
+            return null;
+    }
+}
+function homeDir() {
+    return os.homedir();
+}
+function existsSyncSafe(path) {
+    try {
+        return statSync(path).isFile();
+    }
+    catch {
+        return false;
+    }
+}
+function writeFileSafe(path, contents) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, contents, "utf8");
+}
+function printHelp() {
+    console.log(`
+MemOS — Universal memory layer for AI agents.
+
+Usage:
+  memos <command> [options]
+
+Commands:
+  init                  Interactive setup wizard: database path, embedding
+                          provider, smoke test — saves ~/.memos/config.json
+                          (--yes accepts all defaults)
+  store <content>         Store a new memory (--pool, --context,
+                          --scope user:alice[,agent:coder][,run:r1])
+  retrieve <id>           Retrieve a memory by ID
+  search <query>          Search memories by text (--pool event|note|procedure,
+                          --scope user:alice[,...])
+  forget <id>             Delete a memory by ID
+  summarize               Summarize all memories
+  graph                   Print the full memory graph (--mermaid for a
+                          GitHub-renderable Mermaid diagram)
+  browse                  Interactive terminal browser (search, inspect,
+                          forget memories)
+  image <add|list|search|show|purge>
+                          Image memories (needs --vision, or
+                          --vision-clip to also match pixels): add
+                          <path|url> [--caption <text>] [--kind <kind>]
+                          [--tags a,b]; list; search <query>;
+                          show <ref|id> [--out <path>]; purge
+  link <src> <dst>        Link two memories
+  count                   Show memory count
+  tag <id> <tag> [...]    Add tags to a memory
+  untag <id> <tag> [...]  Remove tags from a memory
+  list --tag <tag>        List memories by tag
+  export                  Export memories to file
+  backup                  Backup the database
+  restore <path>          Restore from a backup
+  import-external <file>  Import a ChatGPT/Claude memory export
+                          (--source auto|chatgpt|claude|generic, --dry-run,
+                          --max-items <n>, --namespace <ns>)
+  import                  Import a chat export: --from chatgpt|claude|slack
+                          (--file <path> | --dir <path>, --synthesize,
+                          --dry-run, --max-items <n>, --namespace <ns>)
+  learn "<lesson>"        Capture a procedural lesson — behavioral guidance,
+                          not a fact (--context <ctx>, --tags a,b)
+  lesson <id>             Record lesson outcome: --outcome success|failure
+                          (reinforces or demotes the lesson score)
+  lessons                 List procedural lessons (--namespace <ns>,
+                          --limit <n>)
+  cite <id>               Trace a [mem:xxxx] citation token back to its
+                          full source memory
+  quarantine <list|release>
+                          Review the write-gate quarantine queue: list
+                          flagged memories, release one back into recall
+                          (--limit <n>, --json)
+  harness <list|merge>    Cross-harness memory: per-harness memory counts
+                          (list), or merge another harness's DB file into
+                          this one (merge --from <db-path> [--dry-run])
+  scope list              List scoped memory spaces (namespaces) with counts
+                          (--json). Scoped reads union the shared default
+                          scope with the requested scope(s); free-form
+                          scopes use the project:<name> / harness:<name>
+                          convention
+  history <id>            Version timeline for one memory: supersedes,
+                          superseded by, derived notes
+  revert                  Revert a memory to its previous version
+                          (--last | --id <id> | --about <topic> |
+                          "<natural language>"; --dry-run, --reason <r>,
+                          --actor <a>)
+  reminders               List scheduled event reminders, earliest first
+                          (--due: only reminders due as of now;
+                          --namespace <ns>, --json)
+  remind "<text>" at <when>
+                          Store a reminder firing at <when>
+                          (e.g. memos remind "call mom" at tomorrow 9am)
+  digest                  Run consolidation now and print a summary
+  consolidate             Offline maintenance pass: merge duplicates, archive
+                          stale memories, supersede decayed ones (kept as
+                          history), distill cluster summary notes
+                          (--dry-run, --no-summarize, --no-decay,
+                          --decay-half-life <days>, --min-retention <score>,
+                          --older-than <days>, --namespace <ns>, --watch,
+                          --interval-min <n>)
+  encrypt                 Encrypt the database in place (--key <key> or
+                          MEMOS_KEY; requires better-sqlite3-multiple-ciphers)
+  decrypt                 Remove encryption in place (--key <key>)
+  stats                   Token-savings telemetry for this process
+                          (packs built, tokens injected vs naive baseline)
+  compact                 Fidelity backfill: generate missing L1/L2 levels
+                          for stored memories (--stats shows avg tokens per
+                          level, --namespace <ns>, --limit <n>, --dry-run)
+  doctor                  Health-check the store, embedding config and endpoints
+  connect <target>        Register the MemOS MCP server with a coding harness
+                          (claude-code, cursor, windsurf, cline, opencode,
+                          codex, gemini, generic) — --write saves the config
+  reindex-embeddings      Re-embed all memories with the configured provider
+                          (--purge-stale deletes vectors from other models first)
+  mcp                     Start the MemOS MCP stdio server
+  trio [--up]             Show (or launch) the full AI Trio: MemOS + LLM-Guardian + Universal-MCP-Toolkit
+  completion <shell>      Print shell completion script (bash|zsh|fish)
+  help                    Show this help message
+
+Options:
+  --db <path>             Database path (default: ~/.memos/memos.db)
+  --type <type>           Memory type (store command)
+  --ttl <seconds>         TTL in seconds (store command)
+  --limit <n>             Result limit (search command)
+  --harness <name|all>    Scope search to one harness's memories
+                          (search command; default: all harnesses)
+  --namespaces <a,b>      Search across comma-separated namespaces
+                          (search command; unions the shared default
+                          namespace like --scope does)
+  --namespace <ns>        Write into a free-form scope/namespace
+                          (store command; convention project:<name> /
+                          harness:<name>; wins over --scope)
+  --force                 Bypass the write-side salience triage
+                          (store command; triage is on by default)
+  --provenance <tier>     Provenance tier for the write: user-verified,
+                          user, tool-output, chat, imported
+                          (store command; tool-derived evidence should use
+                          tool-output — it retrieves at a lower trust tier)
+  --format <fmt>          Export format: json, markdown, obsidian
+  --output <path>         Output path (export/backup)
+  --tag <tag>             Tag filter (export/list)
+  --json                  Output as JSON
+  --vision                Enable image memory (caption track)
+  --vision-clip           Also enable CLIP pixel search (~350 MB model on
+                          first use)
+
+Examples:
+  memos store "User prefers dark mode" --type preference
+  memos store "Temp note" --ttl 3600
+  memos search "dark mode" --limit 5
+  memos graph --mermaid > graph.mmd
+  memos browse
+  memos tag <id> work important
+  memos list --tag work
+  memos export --format markdown --output ./my-export
+  memos backup --output ./backup.db
+  memos restore ./backup.db
+  memos mcp --db ~/.memos/memos.db
+`);
+}
+async function main() {
+    if (!command ||
+        command === "help" ||
+        command === "--help" ||
+        command === "-h") {
+        printHelp();
+        process.exit(0);
+    }
+    // Per-command help: `memos <command> --help` prints focused usage instead of
+    // being misinterpreted as an argument (e.g. `memos search --help` used to
+    // literally search for the string "--help").
+    if (CLI_COMMANDS.includes(command) &&
+        args.slice(1).some((a) => a === "--help" || a === "-h")) {
+        const detail = getCommandHelp(command);
+        if (detail) {
+            console.log(detail);
+            process.exit(0);
+        }
+    }
+    const dbFlagIdx = args.indexOf("--db");
+    const cliDbPath = dbFlagIdx !== -1 ? args[dbFlagIdx + 1] : undefined;
+    // --db wins, then ~/.memos/config.json (written by `memos init`), then the
+    // SDK default (~/.memos/memos.db).
+    const dbPath = resolveDbPath(cliDbPath);
+    const jsonFlag = args.includes("--json");
+    // Memory-as-code: nearest .memos.json (walking up) supplies policy
+    // defaults — scope, consolidation knobs, embedding routing, and the
+    // NAME of the env var holding the encryption key.
+    const projectConfig = loadProjectConfig(process.cwd());
+    const projectScope = projectConfig?.scope &&
+        (projectConfig.scope.user || projectConfig.scope.agent)
+        ? {
+            ...(projectConfig.scope.user
+                ? { user: projectConfig.scope.user }
+                : {}),
+            ...(projectConfig.scope.agent
+                ? { agent: projectConfig.scope.agent }
+                : {}),
+        }
+        : undefined;
+    // Encryption key for at-rest-encrypted databases: --key, the project's
+    // cipherKeyEnv, or MEMOS_KEY.
+    // encrypt/decrypt are excluded — they perform the conversion itself and
+    // must open the source at its CURRENT (pre/post conversion) state.
+    const keyFlagIdx = args.indexOf("--key");
+    const cipherKey = command === "encrypt" || command === "decrypt"
+        ? undefined
+        : keyFlagIdx !== -1
+            ? args[keyFlagIdx + 1]
+            : process.env[cipherKeyEnvName(projectConfig)];
+    if (command === "completion") {
+        const shell = args[1];
+        const script = shell ? getCompletionScript(shell) : null;
+        if (!script) {
+            console.error(`Usage: memos completion <${COMPLETION_SHELLS.join("|")}>\n` +
+                `Unknown shell: ${shell ?? "(none given)"}`);
+            process.exit(1);
+        }
+        console.log(script);
+        return;
+    }
+    if (command === "mcp") {
+        const { runMcpServer } = await import("./mcp.js");
+        const embeddings = cliEmbeddingsConfig(projectConfig?.embeddings);
+        await runMcpServer({
+            dbPath,
+            ...(embeddings ? { embeddings: { ...embeddings, enabled: true } } : {}),
+        });
+        return;
+    }
+    // Beta channel opt-in and beta updates. Neither needs the database open.
+    if (command === "beta") {
+        const { readBetaState, writeBetaState } = await import("./updater.js");
+        const sub = args[1];
+        const cfgPath = configFilePath();
+        if (!sub || sub === "status") {
+            const state = readBetaState(cfgPath);
+            console.log(`Beta channel: ${state.beta ? "enabled" : "disabled"}`);
+            if (!state.beta) {
+                console.log("Run `memos beta enable` to be prompted on every fully-successful main commit.");
+            }
+            return;
+        }
+        if (sub === "enable" || sub === "on") {
+            writeBetaState(cfgPath, { beta: true });
+            console.log("Beta channel enabled.");
+            console.log("You'll be prompted to update whenever a new fully-successful main commit lands (CI, Prebuilds, and CodeQL all green).");
+            console.log("Run `memos update --check` to check right now.");
+            return;
+        }
+        if (sub === "disable" || sub === "off") {
+            writeBetaState(cfgPath, { beta: false });
+            console.log("Beta channel disabled.");
+            return;
+        }
+        console.error("Usage: memos beta [enable|disable|status]");
+        process.exit(1);
+    }
+    if (command === "update") {
+        const { findLatestGreenCommit, resolveInstalledRef, installFromCommit, memosHomeDir, } = await import("./updater.js");
+        const checkOnly = args.includes("--check");
+        const yes = args.includes("--yes");
+        let green;
+        try {
+            green = await findLatestGreenCommit({ maxCommits: 10 });
+        }
+        catch (err) {
+            console.error(`Could not reach GitHub: ${err instanceof Error ? err.message : String(err)}`);
+            process.exit(1);
+        }
+        if (!green) {
+            console.log("No fully-successful main commit found in the last 10 commits (CI may still be running). Try again later.");
+            return;
+        }
+        const short = green.sha.slice(0, 7);
+        const installed = resolveInstalledRef();
+        const firstLine = green.message.split("\n")[0];
+        if (jsonFlag) {
+            console.log(JSON.stringify({
+                latestGreen: green.sha,
+                installed,
+                upToDate: installed === green.sha,
+            }, null, 2));
+            return;
+        }
+        console.log(`Newest fully-successful main commit: ${short} — ${firstLine}`);
+        console.log(`Installed: ${installed ?? "unknown"}`);
+        if (installed === green.sha) {
+            console.log("Already up to date.");
+            return;
+        }
+        if (checkOnly)
+            return;
+        let proceed = yes;
+        if (!proceed) {
+            if (!process.stdin.isTTY) {
+                console.log("Run `memos update --yes` to install it non-interactively.");
+                return;
+            }
+            proceed = await askYesNo("Install this beta build from source now? [y/N] ");
+        }
+        if (!proceed) {
+            console.log("Not installing.");
+            return;
+        }
+        console.log(`Installing ${short} from source (download + pnpm install + build)...`);
+        const { execSync } = await import("node:child_process");
+        const { installDir } = await installFromCommit(green.sha, {
+            memosHome: memosHomeDir(),
+            nodeBin: process.execPath,
+            runCmd: (cmd, a, cwd) => {
+                execSync([cmd, ...a]
+                    .map((x) => (/\s/.test(x) ? JSON.stringify(x) : x))
+                    .join(" "), { cwd, stdio: "inherit" });
+            },
+            download: async (url, dest) => {
+                const { pipeline } = await import("node:stream/promises");
+                const { createWriteStream } = await import("node:fs");
+                const res = await fetch(url);
+                if (!res.ok || !res.body)
+                    throw new Error(`download failed: ${res.status}`);
+                await pipeline(res.body, createWriteStream(dest));
+            },
+        });
+        console.log(`Updated to ${short}. Installed at ${installDir}`);
+        console.log("Restart your shell (or rehash) so the new memos is picked up.");
+        return;
+    }
+    // Beta auto-prompt: at most every 6h, cached, stderr only, never fatal.
+    // Skipped for the commands that manage updates themselves.
+    if (!["beta", "update", "completion", "mcp"].includes(command)) {
+        await maybeBetaUpdateNotice().catch(() => { });
+    }
+    // Encrypt/decrypt operate on the raw database file and must run BEFORE
+    // the store is opened (Windows refuses to rename an open file).
+    if (command === "encrypt" || command === "decrypt") {
+        const keyIdx = args.indexOf("--key");
+        const key = keyIdx !== -1 ? args[keyIdx + 1] : process.env.MEMOS_KEY;
+        if (!key) {
+            console.error("Error: --key <key> (or the MEMOS_KEY environment variable) is required.");
+            process.exit(1);
+        }
+        if (!dbPath) {
+            console.error("Error: --db <path> is required.");
+            process.exit(1);
+        }
+        const { encryptDatabase, decryptDatabase } = await import("./storage/sqlite.js");
+        const backup = command === "encrypt"
+            ? await encryptDatabase(dbPath, key)
+            : await decryptDatabase(dbPath, key);
+        if (jsonFlag) {
+            console.log(JSON.stringify({ command, dbPath, backup }, null, 2));
+        }
+        else {
+            console.log(`${command === "encrypt" ? "Encrypted" : "Decrypted"}: ${dbPath}`);
+            console.log(`  previous file kept as ${backup}`);
+            console.log(command === "encrypt"
+                ? "  From now on provide the key: --key, MEMOS_KEY, or cipherKey config."
+                : "  The database is now plaintext.");
+        }
+        return;
+    }
+    // Embedding config via environment (same variables the Python server
+    // and benchmark scripts accept). Without MEMOS_EMBEDDING_PROVIDER the
+    // CLI runs the default local-hash provider.
+    const embeddingsConfig = cliEmbeddingsConfig(projectConfig?.embeddings);
+    // Vision (image memory) config: `--vision` enables the caption track,
+    // `--vision-clip` additionally enables the CLIP pixel track. Env
+    // fallbacks (MEMOS_VISION=1 / MEMOS_VISION_CLIP=1) let scripts turn it
+    // on without flags. Off by default — a plain `memos` install has no
+    // image surface at all.
+    const visionEnabled = args.includes("--vision") ||
+        process.env.MEMOS_VISION === "1" ||
+        (projectConfig?.vision?.enabled ?? false);
+    const visionClipEnabled = args.includes("--vision-clip") ||
+        process.env.MEMOS_VISION_CLIP === "1" ||
+        (projectConfig?.vision?.clip?.enabled ?? false);
+    const memos = new MemOS({
+        dbPath,
+        ...(cipherKey ? { cipherKey } : {}),
+        ...(embeddingsConfig
+            ? { embeddings: { ...embeddingsConfig, enabled: true } }
+            : {}),
+        ...(visionEnabled || visionClipEnabled
+            ? {
+                vision: {
+                    enabled: true,
+                    ...(visionClipEnabled ? { clip: { enabled: true } } : {}),
+                },
+            }
+            : {}),
+    });
+    await memos.init();
+    try {
+        switch (command) {
+            case "store": {
+                const content = args[1];
+                if (!content) {
+                    console.error("Error: content is required.\n  Usage: memos store <content>");
+                    process.exit(1);
+                }
+                const typeIdx = args.indexOf("--type");
+                const type = typeIdx !== -1 ? args[typeIdx + 1] : undefined;
+                const ttlIdx = args.indexOf("--ttl");
+                const ttl = ttlIdx !== -1 ? parseInt(args[ttlIdx + 1], 10) : undefined;
+                const tagIdx = args.indexOf("--tag");
+                let tags;
+                if (tagIdx !== -1) {
+                    tags = [];
+                    for (let i = tagIdx + 1; i < args.length; i++) {
+                        if (args[i].startsWith("--"))
+                            break;
+                        tags.push(args[i]);
+                    }
+                    if (tags.length === 0)
+                        tags = undefined;
+                }
+                const opts = {};
+                if (type)
+                    opts.type = type;
+                if (ttl)
+                    opts.ttl = ttl;
+                if (tags && tags.length > 0)
+                    opts.tags = tags;
+                const poolIdx = args.indexOf("--pool");
+                const pool = poolIdx !== -1 ? args[poolIdx + 1] : undefined;
+                if (pool === "event" || pool === "note" || pool === "procedure") {
+                    opts.pool = pool;
+                }
+                const contextIdx = args.indexOf("--context");
+                const context = contextIdx !== -1 ? args[contextIdx + 1] : undefined;
+                if (context)
+                    opts.context = context;
+                const scopeIdx = args.indexOf("--scope");
+                if (scopeIdx !== -1 && args[scopeIdx + 1]) {
+                    opts.scope = parseScopeArg(args[scopeIdx + 1]);
+                }
+                else if (projectScope) {
+                    opts.scope = projectScope;
+                }
+                // Free-form scope/namespace (convention: project:<name>,
+                // harness:<name>). Explicit --namespace wins over --scope.
+                const namespaceIdx = args.indexOf("--namespace");
+                if (namespaceIdx !== -1 && args[namespaceIdx + 1]) {
+                    opts.namespace = args[namespaceIdx + 1];
+                    delete opts.scope;
+                }
+                const provenanceIdx = args.indexOf("--provenance");
+                const provenanceArg = provenanceIdx !== -1 ? args[provenanceIdx + 1] : undefined;
+                if (provenanceArg !== undefined) {
+                    if (!isProvenanceTier(provenanceArg)) {
+                        console.error(`Error: invalid --provenance "${provenanceArg}". ` +
+                            `Valid tiers: user-verified, user, tool-output, chat, imported.`);
+                        process.exit(1);
+                    }
+                    opts.provenance = provenanceArg;
+                }
+                // Write-side salience triage: the no-LLM retain filter drops
+                // trivial/noise writes (acknowledgements, near-duplicates) before
+                // they reach the store. `--force` bypasses it.
+                const force = args.includes("--force");
+                if (!force)
+                    opts.filterRetain = true;
+                let result;
+                try {
+                    result = await memos.store(content, opts);
+                }
+                catch (err) {
+                    if (err instanceof MemorySkippedError) {
+                        // Not a failure: the triage judged this write not worth
+                        // keeping. Debug detail behind MEMOS_DEBUG; one line on
+                        // stderr so the skip is never silent.
+                        if (process.env.MEMOS_DEBUG) {
+                            console.debug(`[retain-filter] skipped: ${err.message}`);
+                        }
+                        console.error(`Skipped: ${err.message} (use --force to store anyway)`);
+                        process.exit(0);
+                    }
+                    throw err;
+                }
+                if (jsonFlag) {
+                    console.log(JSON.stringify(result, null, 2));
+                }
+                else {
+                    console.log(`Stored memory: ${result.node.id}`);
+                    console.log(`  Summary: ${result.node.summary}`);
+                    if (result.node.expiresAt) {
+                        const expDate = new Date(result.node.expiresAt * 1000).toISOString();
+                        console.log(`  Expires: ${expDate}`);
+                    }
+                    if (result.node.tags.length > 0) {
+                        console.log(`  Tags: ${result.node.tags.join(", ")}`);
+                    }
+                    if (result.links.length > 0) {
+                        console.log(`  Auto-linked to ${result.links.length} existing memories`);
+                    }
+                }
+                break;
+            }
+            case "retrieve": {
+                const id = args[1];
+                if (!id) {
+                    console.error("Error: ID is required.\n  Usage: memos retrieve <id>");
+                    process.exit(1);
+                }
+                const node = await memos.retrieve(id);
+                if (!node) {
+                    console.error(`Memory not found: ${id}`);
+                    process.exit(1);
+                }
+                if (jsonFlag) {
+                    console.log(JSON.stringify(node, null, 2));
+                }
+                else {
+                    console.log(`[${node.type}] ${node.content}`);
+                    console.log(`  ID: ${node.id}`);
+                    console.log(`  Importance: ${node.importance}`);
+                    console.log(`  Access count: ${node.accessCount}`);
+                    console.log(`  Created: ${new Date(node.createdAt).toISOString()}`);
+                    if (node.tags.length > 0) {
+                        console.log(`  Tags: ${node.tags.join(", ")}`);
+                    }
+                    if (node.expiresAt) {
+                        console.log(`  Expires: ${new Date(node.expiresAt * 1000).toISOString()}`);
+                    }
+                }
+                break;
+            }
+            case "search": {
+                const query = args[1];
+                if (!query) {
+                    console.error("Error: query is required.\n  Usage: memos search <query>");
+                    process.exit(1);
+                }
+                const limitIdx = args.indexOf("--limit");
+                const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : 10;
+                const poolIdx = args.indexOf("--pool");
+                const poolArg = poolIdx !== -1 ? args[poolIdx + 1] : undefined;
+                const pool = poolArg
+                    ? poolArg.split(",").map((p) => p.trim())
+                    : undefined;
+                const scopeIdx = args.indexOf("--scope");
+                const scopeArg = scopeIdx !== -1 ? args[scopeIdx + 1] : undefined;
+                const scope = scopeArg ? parseScopeArg(scopeArg) : undefined;
+                // Multi-scope read: comma-separated raw namespaces, e.g.
+                // --namespaces project:alpha,project:beta (always unions the
+                // shared `default` namespace, like --scope does).
+                const namespacesIdx = args.indexOf("--namespaces");
+                const namespacesArg = namespacesIdx !== -1 ? args[namespacesIdx + 1] : undefined;
+                const namespaces = namespacesArg
+                    ? namespacesArg
+                        .split(",")
+                        .map((n) => n.trim())
+                        .filter((n) => n.length > 0)
+                    : undefined;
+                const harnessIdx = args.indexOf("--harness");
+                const harnessArg = harnessIdx !== -1 ? args[harnessIdx + 1] : undefined;
+                const tagIdx = args.indexOf("--tag");
+                let searchTags;
+                if (tagIdx !== -1) {
+                    searchTags = [];
+                    for (let i = tagIdx + 1; i < args.length; i++) {
+                        if (args[i].startsWith("--"))
+                            break;
+                        searchTags.push(args[i]);
+                    }
+                    if (searchTags.length === 0)
+                        searchTags = undefined;
+                }
+                const results = await memos.search({
+                    query,
+                    limit,
+                    tags: searchTags,
+                    ...(pool ? { pool } : {}),
+                    ...(scope && Object.keys(scope).length > 0 ? { scope } : {}),
+                    ...(namespaces && namespaces.length > 0 ? { namespaces } : {}),
+                    ...(harnessArg ? { harness: harnessArg } : {}),
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(results, null, 2));
+                }
+                else {
+                    if (results.length === 0) {
+                        console.log("No memories found.");
+                    }
+                    else {
+                        console.log(`Found ${results.length} memories:\n`);
+                        for (const r of results) {
+                            console.log(`  [${r.node.type}] ${r.node.content}`);
+                            console.log(`    ID: ${r.node.id}  Score: ${r.score.toFixed(3)}`);
+                            if (r.node.tags.length > 0) {
+                                console.log(`    Tags: ${r.node.tags.join(", ")}`);
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+            case "forget": {
+                const id = args[1];
+                if (!id) {
+                    console.error("Error: ID is required.\n  Usage: memos forget <id>");
+                    process.exit(1);
+                }
+                const deleted = await memos.forget(id);
+                if (jsonFlag) {
+                    console.log(JSON.stringify({ deleted, id }));
+                }
+                else {
+                    console.log(deleted ? `Forgot memory: ${id}` : `Memory not found: ${id}`);
+                }
+                break;
+            }
+            case "summarize": {
+                const summary = await memos.summarize();
+                if (jsonFlag) {
+                    console.log(JSON.stringify({ summary }));
+                }
+                else {
+                    console.log(summary);
+                }
+                break;
+            }
+            case "graph": {
+                const graph = await memos.getGraph();
+                if (args.includes("--mermaid")) {
+                    console.log(graphToMermaid(graph));
+                }
+                else if (jsonFlag) {
+                    console.log(JSON.stringify(graph, null, 2));
+                }
+                else {
+                    console.log(`Memory Graph: ${graph.nodes.length} nodes, ${graph.edges.length} edges\n`);
+                    for (const node of graph.nodes) {
+                        console.log(`  [${node.type}] ${node.id.slice(0, 8)} — ${node.content.slice(0, 60)}`);
+                    }
+                    if (graph.edges.length > 0) {
+                        console.log("\nEdges:");
+                        for (const edge of graph.edges) {
+                            console.log(`  ${edge.sourceId.slice(0, 8)} --[${edge.relation}]--> ${edge.targetId.slice(0, 8)}`);
+                        }
+                    }
+                }
+                break;
+            }
+            case "browse": {
+                const { runBrowse } = await import("./cli-browse.js");
+                await runBrowse(memos);
+                break;
+            }
+            case "image": {
+                // Vision (image memory). The subcommand reports plainly how to
+                // turn it on rather than throwing a stack trace at an operator
+                // who has not configured it yet.
+                const sub = args[1];
+                const target = args[2];
+                if (!sub || !["add", "list", "search", "show", "purge"].includes(sub)) {
+                    console.error("Error: image subcommand is required.\n" +
+                        "  Usage: memos image add <path|url> [--caption <text>] [--kind <kind>] [--tags a,b]\n" +
+                        "         memos image list [--limit <n>]\n" +
+                        "         memos image search <query> [--limit <n>]\n" +
+                        "         memos image show <ref|id>\n" +
+                        "         memos image purge");
+                    process.exit(1);
+                }
+                // Fail with instructions, not a stack trace, when vision is off.
+                // Every `image` subcommand needs it (even `list` — it reads
+                // image-tagged nodes, which is harmless but meaningless without
+                // the feature, and the message is more useful than an empty list).
+                try {
+                    // A cheap probe: listImages throws only when vision is off.
+                    if (sub !== "add")
+                        await memos.listImages({ limit: 1 });
+                    else
+                        await memos.addImageMemory(Buffer.alloc(0), { caption: "probe" });
+                }
+                catch (err) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    if (/disabled/i.test(message)) {
+                        console.error("Error: image memory is disabled.\n" +
+                            "  Enable it with --vision (caption search) or --vision-clip\n" +
+                            "  (also matches image pixels with CLIP), or set it in\n" +
+                            '  .memos.json: { "vision": { "enabled": true } }');
+                        process.exit(1);
+                    }
+                    // Any other error from the probe is not a config problem —
+                    // fall through and let the real subcommand run.
+                }
+                if (sub === "add") {
+                    if (!target) {
+                        console.error("Error: image path or URL is required.\n  Usage: memos image add <path|url> [--caption <text>]");
+                        process.exit(1);
+                    }
+                    const captionIdx = args.indexOf("--caption");
+                    const kindIdx = args.indexOf("--kind");
+                    const imageTagsIdx = args.indexOf("--tags");
+                    const nsIdx = args.indexOf("--namespace");
+                    const result = await memos.addImageMemory(target, {
+                        ...(captionIdx !== -1 && args[captionIdx + 1]
+                            ? { caption: args[captionIdx + 1] }
+                            : {}),
+                        ...(kindIdx !== -1 && args[kindIdx + 1]
+                            ? { kind: args[kindIdx + 1] }
+                            : {}),
+                        ...(imageTagsIdx !== -1 && args[imageTagsIdx + 1]
+                            ? { tags: args[imageTagsIdx + 1].split(",").map((t) => t.trim()) }
+                            : {}),
+                        ...(nsIdx !== -1 && args[nsIdx + 1]
+                            ? { namespace: args[nsIdx + 1] }
+                            : {}),
+                    });
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(result, null, 2));
+                    }
+                    else {
+                        const verb = result.deduped ? "already stored" : "stored";
+                        console.log(`Image ${verb}: ${result.image.ref}`);
+                        console.log(`  Node:  ${result.node.id}`);
+                        console.log(`  Kind:  ${result.image.kind}  ${result.image.width}x${result.image.height}`);
+                        console.log(`  Bytes: ${result.image.bytes}  (${result.image.mime})`);
+                        if (result.clipStatus !== "skipped") {
+                            console.log(`  CLIP:  ${result.clipStatus}`);
+                        }
+                    }
+                    break;
+                }
+                if (sub === "list") {
+                    const listLimitIdx = args.indexOf("--limit");
+                    const listNsIdx = args.indexOf("--namespace");
+                    const images = await memos.listImages({
+                        limit: listLimitIdx !== -1 ? parseInt(args[listLimitIdx + 1], 10) : 50,
+                        ...(listNsIdx !== -1 && args[listNsIdx + 1]
+                            ? { namespace: args[listNsIdx + 1] }
+                            : {}),
+                    });
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(images, null, 2));
+                    }
+                    else if (images.length === 0) {
+                        console.log("No images stored.");
+                    }
+                    else {
+                        console.log(`${images.length} image(s):\n`);
+                        for (const hit of images) {
+                            console.log(`  ${hit.image.ref}  [${hit.image.kind}]  ${hit.image.width}x${hit.image.height}`);
+                            console.log(`    ${hit.image.caption}`);
+                            console.log(`    Node: ${hit.node.id}`);
+                        }
+                    }
+                    break;
+                }
+                if (sub === "search") {
+                    if (!target) {
+                        console.error("Error: query is required.\n  Usage: memos image search <query> [--limit <n>]");
+                        process.exit(1);
+                    }
+                    const searchLimitIdx = args.indexOf("--limit");
+                    const searchNsIdx = args.indexOf("--namespace");
+                    const hits = await memos.searchImages(target, {
+                        limit: searchLimitIdx !== -1
+                            ? parseInt(args[searchLimitIdx + 1], 10)
+                            : 10,
+                        ...(searchNsIdx !== -1 && args[searchNsIdx + 1]
+                            ? { namespace: args[searchNsIdx + 1] }
+                            : {}),
+                    });
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(hits, null, 2));
+                    }
+                    else if (hits.length === 0) {
+                        console.log("No matching images found.");
+                    }
+                    else {
+                        console.log(`Found ${hits.length} image(s):\n`);
+                        for (const hit of hits) {
+                            console.log(`  ${hit.image.ref}  [${hit.image.kind}]  score ${hit.score.toFixed(3)}`);
+                            console.log(`    ${hit.image.caption}`);
+                            console.log(`    Node: ${hit.node.id}`);
+                        }
+                    }
+                    break;
+                }
+                if (sub === "show") {
+                    if (!target) {
+                        console.error("Error: image ref or node id is required.\n  Usage: memos image show <ref|id>");
+                        process.exit(1);
+                    }
+                    const resolved = await memos.imageMemory(target);
+                    if (!resolved) {
+                        console.error(`Image not found: ${target}`);
+                        process.exit(1);
+                    }
+                    // Write the bytes somewhere the user can open them: stdout
+                    // would corrupt the terminal for anything non-textual.
+                    const outIdx = args.indexOf("--out");
+                    const outPath = outIdx !== -1 ? args[outIdx + 1] : undefined;
+                    if (outPath) {
+                        const { writeFile } = await import("node:fs/promises");
+                        await writeFile(outPath, resolved.buffer);
+                        console.log(`Wrote ${resolved.buffer.length} bytes to ${outPath}`);
+                    }
+                    else if (jsonFlag) {
+                        console.log(JSON.stringify({
+                            ref: resolved.ref,
+                            mime: resolved.mime,
+                            bytes: resolved.buffer.length,
+                        }, null, 2));
+                    }
+                    else {
+                        console.log(`${resolved.ref}  (${resolved.mime}, ${resolved.buffer.length} bytes)`);
+                        console.log("  Use --out <path> to write the bytes to a file.");
+                    }
+                    break;
+                }
+                // sub === "purge"
+                const purged = await memos.purgeOrphanImages();
+                if (jsonFlag) {
+                    console.log(JSON.stringify({ purged }, null, 2));
+                }
+                else {
+                    console.log(purged === 0
+                        ? "No orphaned image blobs."
+                        : `Purged ${purged} orphaned image blob(s).`);
+                }
+                break;
+            }
+            case "import-external": {
+                const file = args[1];
+                if (!file) {
+                    console.error("Error: export file is required.\n  Usage: memos import-external <file> [--source auto|chatgpt|claude|generic] [--dry-run]");
+                    process.exit(1);
+                }
+                const sourceIdx = args.indexOf("--source");
+                const importSource = sourceIdx !== -1
+                    ? args[sourceIdx + 1]
+                    : "auto";
+                const maxItemsIdx = args.indexOf("--max-items");
+                const maxItems = maxItemsIdx !== -1 ? parseInt(args[maxItemsIdx + 1], 10) : undefined;
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 ? args[nsIdx + 1] : undefined;
+                const result = await memos.importExternal({
+                    file,
+                    ...(importSource ? { source: importSource } : {}),
+                    ...(maxItems !== undefined && !Number.isNaN(maxItems)
+                        ? { maxItems }
+                        : {}),
+                    ...(namespace ? { namespace } : {}),
+                    dryRun: args.includes("--dry-run"),
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(result, null, 2));
+                }
+                else {
+                    console.log(`Import from ${result.detected} export ${result.dryRun ? "(dry run)" : "complete"}: ${result.imported} imported, ${result.skipped} skipped of ${result.total} item(s)`);
+                }
+                break;
+            }
+            case "import": {
+                const fromIdx = args.indexOf("--from");
+                const from = fromIdx !== -1 ? args[fromIdx + 1] : undefined;
+                if (from !== "chatgpt" && from !== "claude" && from !== "slack") {
+                    console.error("Error: --from is required.\\n  Usage: memos import --from chatgpt|claude|slack (--file <path> | --dir <path>) [--synthesize] [--dry-run] [--max-items <n>] [--namespace <ns>] [--tags a,b]");
+                    process.exit(1);
+                }
+                const fileIdx = args.indexOf("--file");
+                const file = fileIdx !== -1 ? args[fileIdx + 1] : undefined;
+                const dirIdx = args.indexOf("--dir");
+                const dir = dirIdx !== -1 ? args[dirIdx + 1] : undefined;
+                if (!file && !dir) {
+                    console.error("Error: --file or --dir is required.\\n  Usage: memos import --from chatgpt|claude|slack (--file <path> | --dir <path>)");
+                    process.exit(1);
+                }
+                if (from === "slack" && !dir) {
+                    console.error("Error: Slack imports require --dir (the export folder with channels.json).");
+                    process.exit(1);
+                }
+                const maxItemsIdx = args.indexOf("--max-items");
+                const maxItems = maxItemsIdx !== -1 ? parseInt(args[maxItemsIdx + 1], 10) : undefined;
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 ? args[nsIdx + 1] : undefined;
+                const tagsIdx = args.indexOf("--tags");
+                const importTags = tagsIdx !== -1
+                    ? args[tagsIdx + 1]
+                        .split(",")
+                        .map((t) => t.trim())
+                        .filter((t) => t.length > 0)
+                    : undefined;
+                const result = await memos.importExternal({
+                    source: from,
+                    ...(file ? { file } : {}),
+                    ...(dir ? { dir } : {}),
+                    ...(maxItems !== undefined && !Number.isNaN(maxItems)
+                        ? { maxItems }
+                        : {}),
+                    ...(namespace ? { namespace } : {}),
+                    ...(importTags ? { tags: importTags } : {}),
+                    dryRun: args.includes("--dry-run"),
+                    synthesize: args.includes("--synthesize"),
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(result, null, 2));
+                }
+                else {
+                    console.log(`Import from ${result.detected} export${result.dryRun ? " (dry run)" : ""}: ${result.imported} imported, ${result.skipped} skipped of ${result.total} item(s)`);
+                    const s = result.synthesized;
+                    if (s.decisions + s.preferences + s.milestones > 0) {
+                        console.log(`Synthesized: ${s.decisions} decision(s), ${s.preferences} preference(s), ${s.milestones} milestone(s)`);
+                    }
+                }
+                break;
+            }
+            case "learn": {
+                const lesson = args[1];
+                if (!lesson) {
+                    console.error('Error: lesson text is required.\\n  Usage: memos learn "<lesson>" [--context <ctx>] [--tags a,b] [--namespace <ns>]');
+                    process.exit(1);
+                }
+                const contextIdx = args.indexOf("--context");
+                const context = contextIdx !== -1 ? args[contextIdx + 1] : undefined;
+                const tagsIdx = args.indexOf("--tags");
+                const tags = tagsIdx !== -1
+                    ? args[tagsIdx + 1]
+                        .split(",")
+                        .map((t) => t.trim())
+                        .filter((t) => t.length > 0)
+                    : undefined;
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 ? args[nsIdx + 1] : undefined;
+                const saved = await memos.memorizeProcedural(lesson, {
+                    ...(context ? { context } : {}),
+                    ...(tags ? { tags } : {}),
+                    ...(namespace ? { namespace } : {}),
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(saved, null, 2));
+                }
+                else {
+                    console.log(`Learned [${saved.id.slice(0, 8)}] (score ${saved.score.toFixed(2)}): ${saved.lesson}`);
+                }
+                break;
+            }
+            case "lesson": {
+                const id = args[1];
+                const outcomeIdx = args.indexOf("--outcome");
+                const outcome = outcomeIdx !== -1 ? args[outcomeIdx + 1] : undefined;
+                if (!id || (outcome !== "success" && outcome !== "failure")) {
+                    console.error("Error: lesson ID and --outcome are required.\\n  Usage: memos lesson <id> --outcome success|failure");
+                    process.exit(1);
+                }
+                try {
+                    const updated = await memos.recordLessonOutcome(id, outcome);
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(updated, null, 2));
+                    }
+                    else {
+                        console.log(`Lesson [${updated.id.slice(0, 8)}] ${outcome}: score ${updated.score.toFixed(2)} (${updated.successCount} success, ${updated.failureCount} failure, ${updated.useCount} uses)`);
+                    }
+                }
+                catch (err) {
+                    console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+                    process.exit(1);
+                }
+                break;
+            }
+            case "lessons": {
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 ? args[nsIdx + 1] : undefined;
+                const limitIdx = args.indexOf("--limit");
+                const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : 20;
+                const lessons = await memos.listProceduralLessons({
+                    ...(namespace ? { namespace } : {}),
+                });
+                const shown = Number.isNaN(limit) ? lessons : lessons.slice(0, limit);
+                if (jsonFlag) {
+                    console.log(JSON.stringify(shown, null, 2));
+                }
+                else if (shown.length === 0) {
+                    console.log('No procedural lessons yet. Teach one: memos learn "..."');
+                }
+                else {
+                    console.log(`Procedural lessons (${shown.length}):\\n`);
+                    for (const l of shown) {
+                        console.log(`  [${l.id.slice(0, 8)}] score ${l.score.toFixed(2)} · ${l.useCount} uses (${l.successCount}✓/${l.failureCount}✗)`);
+                        console.log(`    ${l.lesson}`);
+                        if (l.context)
+                            console.log(`    when: ${l.context}`);
+                    }
+                }
+                break;
+            }
+            case "cite": {
+                const id = args[1];
+                if (!id) {
+                    console.error("Error: citation ID is required.\\n  Usage: memos cite <id>  (accepts [mem:a3f9], a3f9, or a full ID)");
+                    process.exit(1);
+                }
+                const resolution = await memos.resolveCitation(id);
+                console.log(memos.formatCitation(resolution, jsonFlag));
+                if (resolution.status === "not_found")
+                    process.exit(1);
+                break;
+            }
+            case "quarantine": {
+                const { formatQuarantineList, releaseQuarantined } = await import("./quarantine-commands.js");
+                const sub = args[1];
+                if (sub === "list") {
+                    const limitIdx = args.indexOf("--limit");
+                    const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : undefined;
+                    const nodes = await memos.listQuarantined(limit !== undefined && !Number.isNaN(limit) ? { limit } : {});
+                    console.log(formatQuarantineList(nodes, jsonFlag));
+                    break;
+                }
+                if (sub === "release") {
+                    const id = args[2];
+                    if (!id) {
+                        console.error("Error: memory ID is required.\n  Usage: memos quarantine release <id>");
+                        process.exit(1);
+                    }
+                    try {
+                        console.log(await releaseQuarantined(memos, id, jsonFlag));
+                    }
+                    catch (err) {
+                        console.error(`Error: ${err.message}`);
+                        process.exit(1);
+                    }
+                    break;
+                }
+                console.error("Error: subcommand is required.\n  Usage: memos quarantine <list|release>  (list [--limit <n>] [--json], release <id> [--json])");
+                process.exit(1);
+            }
+            case "harness": {
+                const sub = args[1];
+                if (sub === "list") {
+                    const counts = await memos.getHarnessCounts();
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(counts, null, 2));
+                    }
+                    else if (counts.length === 0) {
+                        console.log("No memories stored.");
+                    }
+                    else {
+                        const total = counts.reduce((n, c) => n + c.count, 0);
+                        console.log(`Memories by harness (${total} total):\n`);
+                        for (const c of counts) {
+                            console.log(`  ${c.harness.padEnd(16)} ${c.count}`);
+                        }
+                    }
+                    break;
+                }
+                if (sub === "merge") {
+                    const fromIdx = args.indexOf("--from");
+                    const from = fromIdx !== -1 ? args[fromIdx + 1] : undefined;
+                    if (!from) {
+                        console.error("Error: --from <db-path> is required.\n  Usage: memos harness merge --from <db-path> [--dry-run] [--json]");
+                        process.exit(1);
+                    }
+                    const dryRun = args.includes("--dry-run");
+                    const result = await memos.mergeHarnessDb(from, { dryRun });
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(result, null, 2));
+                    }
+                    else {
+                        console.log(`Merge ${dryRun ? "(dry run) " : ""}from ${result.from}:`);
+                        console.log(`  source: ${result.sourceNodes} nodes, ${result.sourceEdges} edges`);
+                        console.log(`  nodes: ${result.nodesImported} imported (${result.nodesRemapped} id remapped)`);
+                        console.log(`  edges: ${result.edgesImported} imported (${result.edgesSkipped} skipped)`);
+                        for (const n of result.nodes) {
+                            if (n.remapped) {
+                                console.log(`  remapped ${n.sourceId} → ${n.targetId}`);
+                            }
+                        }
+                        if (dryRun) {
+                            console.log("  (dry run — nothing was written; run without --dry-run to merge)");
+                        }
+                    }
+                    break;
+                }
+                console.error("Error: subcommand is required.\n  Usage: memos harness <list|merge>  (list [--json], merge --from <db-path> [--dry-run] [--json])");
+                process.exit(1);
+            }
+            case "scope": {
+                const sub = args[1];
+                if (sub === "list") {
+                    const spaces = await memos.listNamespaceCounts();
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(spaces, null, 2));
+                    }
+                    else if (spaces.length === 0) {
+                        console.log("No memories stored.");
+                    }
+                    else {
+                        const total = spaces.reduce((n, s) => n + s.count, 0);
+                        console.log(`Memory scopes (${total} total):\n`);
+                        for (const s of spaces) {
+                            console.log(`  ${s.namespace.padEnd(28)} ${s.count}`);
+                        }
+                        console.log("\nScoped reads union the shared `default` scope with the requested scope(s).");
+                    }
+                    break;
+                }
+                console.error("Error: subcommand is required.\n  Usage: memos scope list [--json]\n" +
+                    "  Free-form scope names follow the convention project:<name> / harness:<name>.");
+                process.exit(1);
+            }
+            case "stats": {
+                const usage = memos.usageStats();
+                if (jsonFlag) {
+                    console.log(JSON.stringify(usage, null, 2));
+                }
+                else {
+                    console.log("Context-pack token telemetry (this process):");
+                    console.log(`  packs built:   ${usage.packsBuilt}`);
+                    console.log(`  tokens injected: ${usage.packTokens}`);
+                    console.log(`  naive baseline:  ${usage.naiveBaselineTokens} (raw node JSON, same candidates)`);
+                    console.log(`  saved:           ${usage.savedTokens} tok (${usage.savedPct}%)`);
+                }
+                break;
+            }
+            case "compact": {
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 ? args[nsIdx + 1] : undefined;
+                const limitIdx = args.indexOf("--limit");
+                const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : undefined;
+                const dryRun = args.includes("--dry-run");
+                const showStats = args.includes("--stats") || dryRun;
+                const result = await memos.compact({
+                    ...(namespace ? { namespace } : {}),
+                    ...(limit !== undefined && !Number.isNaN(limit) ? { limit } : {}),
+                    stats: showStats,
+                    dryRun,
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(result, null, 2));
+                }
+                else {
+                    if (showStats) {
+                        console.log(`Fidelity levels (${result.stats?.[0]?.count ?? 0} memories${namespace ? `, namespace ${namespace}` : ""}):`);
+                        for (const s of result.stats ?? []) {
+                            const saved = (s.savingsVsVerbatim * 100).toFixed(1);
+                            console.log(`  ${s.level}  ${s.label.padEnd(18)} avg ${s.avgTokens.toFixed(1).padStart(7)} tok   -${saved}% vs verbatim`);
+                        }
+                    }
+                    if (!args.includes("--stats")) {
+                        console.log(`compact: scanned ${result.scanned}, backfilled ${result.backfilled}, skipped ${result.skipped}${dryRun ? " (dry run)" : ""}`);
+                    }
+                }
+                break;
+            }
+            case "consolidate": {
+                const dryRun = args.includes("--dry-run");
+                const summarize = !args.includes("--no-summarize");
+                const decay = !args.includes("--no-decay");
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 ? args[nsIdx + 1] : undefined;
+                const halfLifeIdx = args.indexOf("--decay-half-life");
+                const decayHalfLifeDays = halfLifeIdx !== -1 ? Number(args[halfLifeIdx + 1]) : undefined;
+                const minRetentionIdx = args.indexOf("--min-retention");
+                const minRetentionScore = minRetentionIdx !== -1
+                    ? Number(args[minRetentionIdx + 1])
+                    : undefined;
+                const olderThanIdx = args.indexOf("--older-than");
+                const olderThanDays = olderThanIdx !== -1 ? Number(args[olderThanIdx + 1]) : undefined;
+                // Watch mode: self-maintaining memory. Runs the full consolidation
+                // immediately, then every interval until interrupted. Each cycle
+                // prints a one-line digest.
+                if (args.includes("--watch")) {
+                    const intervalIdx = args.indexOf("--interval-min");
+                    const intervalMin = Math.max(1, intervalIdx !== -1 ? parseInt(args[intervalIdx + 1], 10) || 30 : 30);
+                    const consolidateOpts = {
+                        ...(namespace ? { namespace } : {}),
+                        dryRun,
+                        summarize,
+                        decay,
+                        ...(decayHalfLifeDays !== undefined &&
+                            !Number.isNaN(decayHalfLifeDays)
+                            ? { decayHalfLifeDays }
+                            : {}),
+                        ...(minRetentionScore !== undefined &&
+                            !Number.isNaN(minRetentionScore)
+                            ? { minRetentionScore }
+                            : {}),
+                        ...(olderThanDays !== undefined && !Number.isNaN(olderThanDays)
+                            ? { olderThanDays }
+                            : {}),
+                    };
+                    console.log(`consolidation watch: every ${intervalMin} min — ctrl+c to stop`);
+                    for (;;) {
+                        const started = Date.now();
+                        try {
+                            const result = await memos.consolidate(consolidateOpts);
+                            const usage = memos.usageStats();
+                            console.log(`[${new Date().toISOString()}] merged ${result.merges.length} · archived ${result.moves.length} · decayed ${result.decayed.length} · notes ${result.clusters.length} · ${usage.packTokens} tok injected (${usage.savedPct}% saved) — ${Date.now() - started} ms`);
+                        }
+                        catch (error) {
+                            console.error("consolidation cycle failed:", error instanceof Error ? error.message : String(error));
+                        }
+                        await new Promise((resolve) => setTimeout(resolve, intervalMin * 60_000));
+                    }
+                }
+                // Consolidation defaults come from .memos.json; an explicit CLI
+                // flag still wins (each spread below is guarded by `=== undefined`).
+                const projectConsolidation = projectConfig?.consolidation;
+                const result = await memos.consolidate({
+                    ...(namespace ? { namespace } : {}),
+                    dryRun,
+                    summarize,
+                    decay,
+                    ...(projectConsolidation?.minRetentionScore !== undefined &&
+                        minRetentionScore === undefined
+                        ? { minRetentionScore: projectConsolidation.minRetentionScore }
+                        : {}),
+                    ...(projectConsolidation?.decayHalfLifeDays !== undefined &&
+                        decayHalfLifeDays === undefined
+                        ? { decayHalfLifeDays: projectConsolidation.decayHalfLifeDays }
+                        : {}),
+                    ...(projectConsolidation?.olderThanDays !== undefined &&
+                        olderThanDays === undefined
+                        ? { olderThanDays: projectConsolidation.olderThanDays }
+                        : {}),
+                    ...(decayHalfLifeDays !== undefined &&
+                        !Number.isNaN(decayHalfLifeDays)
+                        ? { decayHalfLifeDays }
+                        : {}),
+                    ...(minRetentionScore !== undefined &&
+                        !Number.isNaN(minRetentionScore)
+                        ? { minRetentionScore }
+                        : {}),
+                    ...(olderThanDays !== undefined && !Number.isNaN(olderThanDays)
+                        ? { olderThanDays }
+                        : {}),
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(result, null, 2));
+                }
+                else {
+                    console.log(`Consolidation ${dryRun ? "(dry run — nothing changed)" : "complete"} in ${result.durationMs} ms`);
+                    console.log(`  merged:   ${result.merges.length} duplicate cluster(s)`);
+                    console.log(`  archived: ${result.moves.length} memory(ies)`);
+                    console.log(`  decayed:  ${result.decayed.length} superseded (kept as history — queryable via searchTemporal)`);
+                    console.log(`  notes:    ${result.clusters.length} cluster summary(ies)`);
+                    for (const cluster of result.clusters) {
+                        if (cluster.summaryId) {
+                            console.log(`    - ${cluster.summaryId.slice(0, 8)}: ${cluster.summary.slice(0, 72)}`);
+                        }
+                    }
+                }
+                break;
+            }
+            case "digest": {
+                const result = await memos.consolidate({
+                    summarize: !args.includes("--no-summarize"),
+                });
+                const usage = memos.usageStats();
+                if (jsonFlag) {
+                    console.log(JSON.stringify({ result, usage }, null, 2));
+                }
+                else {
+                    console.log("Memory digest:");
+                    console.log(`  learned/merged:  ${result.merges.length} duplicate cluster(s) merged`);
+                    console.log(`  superseded:      ${result.decayed.length} decayed`);
+                    console.log(`  archived:        ${result.moves.length} moved aside`);
+                    console.log(`  new notes:       ${result.clusters.length} cluster summary(ies)`);
+                    console.log(`  context packs:   ${usage.packsBuilt} built · ${usage.savedPct}% tokens saved vs raw JSON`);
+                }
+                break;
+            }
+            case "history": {
+                const id = args[1];
+                if (!id) {
+                    console.error("Error: memory ID is required.\n  Usage: memos history <id>");
+                    process.exit(1);
+                }
+                const timeline = await memos.history(id);
+                if (jsonFlag) {
+                    console.log(JSON.stringify(timeline, null, 2));
+                    break;
+                }
+                const node = timeline.node;
+                const validity = node.validFrom || node.validTo
+                    ? `${node.validFrom ? new Date(node.validFrom).toISOString().slice(0, 10) : "…"} → ${node.validTo ? new Date(node.validTo).toISOString().slice(0, 10) : "present"}`
+                    : "always";
+                console.log(`Memory ${node.id}`);
+                console.log(`  type: ${node.type} · trust: ${node.trustScore.toFixed(2)} · valid: ${validity}`);
+                console.log(`  ${node.content}`);
+                if (timeline.supersedes.length > 0) {
+                    console.log(`\nSupersedes (older versions):`);
+                    for (const version of timeline.supersedes) {
+                        console.log(`  ← [${version.node.createdAt ? new Date(version.node.createdAt).toISOString().slice(0, 10) : "?"}] ${version.node.id.slice(0, 8)} — ${version.node.content.slice(0, 60)}`);
+                    }
+                }
+                if (timeline.supersededBy.length > 0) {
+                    console.log(`\nSuperseded by (newer versions):`);
+                    for (const version of timeline.supersededBy) {
+                        console.log(`  → [${new Date(version.node.createdAt).toISOString().slice(0, 10)}] ${version.node.id.slice(0, 8)} — ${version.node.content.slice(0, 60)}`);
+                    }
+                }
+                if (timeline.derivedNotes.length > 0) {
+                    console.log(`\nDerived notes: ${timeline.derivedNotes.length}`);
+                    for (const note of timeline.derivedNotes) {
+                        console.log(`  ¶ ${note.id.slice(0, 8)} — ${note.content.slice(0, 60)}`);
+                    }
+                }
+                if (timeline.supersedes.length === 0 &&
+                    timeline.supersededBy.length === 0) {
+                    console.log("\nNo related versions found (this is the only version).");
+                }
+                break;
+            }
+            case "revert": {
+                const parsed = parseRevertCliArgs(args.slice(1));
+                if (parsed.error) {
+                    console.error(`Error: ${parsed.error}`);
+                    process.exit(1);
+                }
+                try {
+                    const result = await memos.revert(parsed.scope, {
+                        dryRun: parsed.dryRun,
+                        ...(parsed.reason ? { reason: parsed.reason } : {}),
+                        ...(parsed.actor ? { actor: parsed.actor } : {}),
+                        ...(parsed.namespace ? { namespace: parsed.namespace } : {}),
+                    });
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(result, null, 2));
+                    }
+                    else if (result.dryRun) {
+                        console.log("Dry run — nothing was changed.");
+                        console.log(`  Would revert:  ${result.target.id.slice(0, 8)} — ${result.target.content.slice(0, 80)}`);
+                        console.log(`  Would restore: ${result.predecessor.id.slice(0, 8)} — ${result.predecessor.content.slice(0, 80)}`);
+                        if (result.alternatives.length > 0) {
+                            console.log("  Other candidates (not chosen):");
+                            for (const alt of result.alternatives) {
+                                console.log(`    ${alt.node.id.slice(0, 8)} — ${alt.node.content.slice(0, 60)}`);
+                            }
+                        }
+                    }
+                    else {
+                        console.log(`Reverted ${result.target.id.slice(0, 8)} — restored predecessor ${result.predecessor.id.slice(0, 8)}.`);
+                        console.log(`  Now believed: ${result.predecessor.content.slice(0, 100)}`);
+                        console.log(`  Audit event: ${result.auditId}`);
+                    }
+                }
+                catch (err) {
+                    console.error(`Error: ${err.message}`);
+                    process.exit(1);
+                }
+                break;
+            }
+            case "reminders": {
+                const dueOnly = args.includes("--due");
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 && args[nsIdx + 1] && !args[nsIdx + 1].startsWith("--")
+                    ? args[nsIdx + 1]
+                    : undefined;
+                const reminders = await listReminders(memos, {
+                    now: new Date(),
+                    dueOnly,
+                    ...(namespace !== undefined ? { namespace } : {}),
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(reminders, null, 2));
+                }
+                else if (reminders.length === 0) {
+                    console.log(dueOnly ? "No reminders due." : "No scheduled reminders.");
+                }
+                else {
+                    for (const r of reminders) {
+                        const when = new Date(r.reminderAt).toLocaleString();
+                        console.log(`• ${when} — ${r.label}${r.due && !dueOnly ? " (due)" : ""}`);
+                        console.log(`  ${r.content.slice(0, 100)}`);
+                    }
+                }
+                break;
+            }
+            case "remind": {
+                // Strip global flags before parsing the "<text> at <when>" shape.
+                const remindArgs = [];
+                const remindRaw = args.slice(1);
+                let remindNamespace;
+                for (let i = 0; i < remindRaw.length; i++) {
+                    const a = remindRaw[i];
+                    if (a === "--json")
+                        continue;
+                    if (a === "--db" || a === "--key") {
+                        i++;
+                        continue;
+                    }
+                    if (a === "--namespace") {
+                        remindNamespace = remindRaw[i + 1];
+                        i++;
+                        continue;
+                    }
+                    remindArgs.push(a);
+                }
+                const input = remindArgs.join(" ");
+                const split = splitRemindText(input);
+                if (!split) {
+                    console.error('Error: could not find a temporal expression.\n  Usage: memos remind "<text>" at <when>\n  Example: memos remind "call mom" at tomorrow 9am');
+                    process.exit(1);
+                }
+                const parsed = parseTemporal(split.temporal, new Date());
+                if (!parsed) {
+                    console.error(`Error: could not parse a time from "${split.temporal}".`);
+                    process.exit(1);
+                }
+                const at = parsed.at.toISOString();
+                const result = await memos.store(split.text, {
+                    ...(remindNamespace !== undefined
+                        ? { namespace: remindNamespace }
+                        : {}),
+                    metadata: {
+                        event: {
+                            kind: "reminder",
+                            label: split.text,
+                            at,
+                            grain: parsed.grain,
+                            status: "scheduled",
+                            reminder_at: at,
+                        },
+                    },
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(result.node, null, 2));
+                }
+                else {
+                    console.log(`Reminder set: "${split.text}" at ${parsed.at.toLocaleString()}`);
+                    console.log(`  Memory: ${result.node.id}`);
+                }
+                break;
+            }
+            case "link": {
+                const sourceId = args[1];
+                const targetId = args[2];
+                if (!sourceId || !targetId) {
+                    console.error("Error: source and target IDs are required.\n  Usage: memos link <source-id> <target-id>");
+                    process.exit(1);
+                }
+                const edge = await memos.link(sourceId, targetId);
+                if (jsonFlag) {
+                    console.log(JSON.stringify(edge, null, 2));
+                }
+                else {
+                    console.log(`Linked: ${sourceId.slice(0, 8)} --[${edge.relation}]--> ${targetId.slice(0, 8)}`);
+                }
+                break;
+            }
+            case "count": {
+                if (jsonFlag) {
+                    console.log(JSON.stringify({ count: memos.count }));
+                }
+                else {
+                    console.log(`${memos.count} memories stored.`);
+                }
+                break;
+            }
+            case "tag": {
+                const id = args[1];
+                const tags = nonFlagArgs(args, 2);
+                if (!id || tags.length === 0) {
+                    console.error("Error: ID and at least one tag are required.\n  Usage: memos tag <id> <tag1> [tag2...]");
+                    process.exit(1);
+                }
+                await memos.tag(id, tags);
+                if (jsonFlag) {
+                    console.log(JSON.stringify({ id, tags, tagged: true }));
+                }
+                else {
+                    console.log(`Tagged ${id.slice(0, 8)} with: ${tags.join(", ")}`);
+                }
+                break;
+            }
+            case "untag": {
+                const id = args[1];
+                const tags = nonFlagArgs(args, 2);
+                if (!id || tags.length === 0) {
+                    console.error("Error: ID and at least one tag are required.\n  Usage: memos untag <id> <tag1> [tag2...]");
+                    process.exit(1);
+                }
+                await memos.untag(id, tags);
+                if (jsonFlag) {
+                    console.log(JSON.stringify({ id, tags, untagged: true }));
+                }
+                else {
+                    console.log(`Removed tags from ${id.slice(0, 8)}: ${tags.join(", ")}`);
+                }
+                break;
+            }
+            case "list": {
+                const tagIdx = args.indexOf("--tag");
+                if (tagIdx === -1 || !args[tagIdx + 1]) {
+                    console.error("Error: --tag is required.\n  Usage: memos list --tag <tag>");
+                    process.exit(1);
+                }
+                const tag = args[tagIdx + 1];
+                const nodes = await memos.listByTag(tag);
+                if (jsonFlag) {
+                    console.log(JSON.stringify(nodes, null, 2));
+                }
+                else {
+                    if (nodes.length === 0) {
+                        console.log(`No memories with tag: ${tag}`);
+                    }
+                    else {
+                        console.log(`Found ${nodes.length} memories with tag "${tag}":\n`);
+                        for (const node of nodes) {
+                            console.log(`  [${node.type}] ${node.id.slice(0, 8)} — ${node.content.slice(0, 60)}`);
+                        }
+                    }
+                }
+                break;
+            }
+            case "export": {
+                const formatIdx = args.indexOf("--format");
+                const format = formatIdx !== -1 ? args[formatIdx + 1] : "json";
+                const outputIdx = args.indexOf("--output");
+                const output = outputIdx !== -1 ? args[outputIdx + 1] : undefined;
+                const tagIdx = args.indexOf("--tag");
+                const tag = tagIdx !== -1 ? args[tagIdx + 1] : undefined;
+                if (!["json", "markdown", "obsidian"].includes(format)) {
+                    console.error(`Error: Invalid format: ${format}. Use json, markdown, or obsidian.`);
+                    process.exit(1);
+                }
+                const result = await memos.export({
+                    format: format,
+                    output,
+                    tag,
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify(result, null, 2));
+                }
+                else {
+                    if (format === "json") {
+                        // Write to file
+                        const outPath = output ?? "./memos-export/memories.json";
+                        const dir = dirname(outPath);
+                        if (!existsSync(dir)) {
+                            const fs = await import("fs");
+                            fs.mkdirSync(dir, { recursive: true });
+                        }
+                        writeFileSync(outPath, result.data);
+                        console.log(`Exported ${result.count} memories to ${outPath}`);
+                    }
+                    else {
+                        console.log(`Exported ${result.count} memories to ${result.data}/`);
+                    }
+                }
+                break;
+            }
+            case "backup": {
+                const outputIdx = args.indexOf("--output");
+                const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+                const defaultPath = `./memos-backup-${timestamp}.db`;
+                const outputPath = outputIdx !== -1 ? args[outputIdx + 1] : defaultPath;
+                const resolvedDb = resolve(dbPath ??
+                    (await import("path")).join(process.env.HOME || process.env.USERPROFILE || ".", ".memos/memos.db"));
+                const resolvedOut = resolve(outputPath);
+                if (!existsSync(resolvedDb)) {
+                    console.error(`Error: Database not found at ${resolvedDb}`);
+                    console.error(`Run 'memos init' to create a database, or pass --db <path> to use a different one.`);
+                    process.exit(1);
+                }
+                // Close before copying
+                await memos.close();
+                copyFileSync(resolvedDb, resolvedOut);
+                // Get stats for manifest
+                const dbStat = statSync(resolvedDb);
+                // Re-open to get counts
+                const tmpMemos = new MemOS({ dbPath: resolvedDb });
+                await tmpMemos.init();
+                const graph = await tmpMemos.getGraph();
+                await tmpMemos.close();
+                const manifest = {
+                    timestamp: new Date().toISOString(),
+                    version: getSdkVersion(),
+                    nodeCount: graph.nodes.length,
+                    edgeCount: graph.edges.length,
+                    dbSizeBytes: dbStat.size,
+                };
+                const manifestPath = `${resolvedOut}.manifest.json`;
+                writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+                if (jsonFlag) {
+                    console.log(JSON.stringify({ backup: resolvedOut, manifest }, null, 2));
+                }
+                else {
+                    console.log(`Backup created: ${resolvedOut}`);
+                    console.log(`  Nodes: ${manifest.nodeCount}, Edges: ${manifest.edgeCount}`);
+                    console.log(`  DB size: ${(manifest.dbSizeBytes / 1024).toFixed(1)} KB`);
+                    console.log(`  Manifest: ${manifestPath}`);
+                }
+                break;
+            }
+            case "restore": {
+                const path = args[1];
+                if (!path) {
+                    console.error("Error: backup path is required.\n  Usage: memos restore <path>");
+                    process.exit(1);
+                }
+                const resolvedBackup = resolve(path);
+                const manifestPath = `${resolvedBackup}.manifest.json`;
+                if (!existsSync(resolvedBackup)) {
+                    console.error(`Error: Backup file not found: ${resolvedBackup}`);
+                    process.exit(1);
+                }
+                // Validate manifest
+                if (existsSync(manifestPath)) {
+                    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+                    if (jsonFlag) {
+                        console.log(JSON.stringify({ manifest }, null, 2));
+                    }
+                    else {
+                        console.log(`Backup manifest:`);
+                        console.log(`  Timestamp: ${manifest.timestamp}`);
+                        console.log(`  Version: ${manifest.version}`);
+                        console.log(`  Nodes: ${manifest.nodeCount}, Edges: ${manifest.edgeCount}`);
+                    }
+                }
+                // Stop sweep, close DB
+                await memos.close();
+                const resolvedDb = resolve(dbPath ??
+                    (await import("path")).join(process.env.HOME || process.env.USERPROFILE || ".", ".memos/memos.db"));
+                const dbDir = dirname(resolvedDb);
+                if (!existsSync(dbDir)) {
+                    const fs = await import("fs");
+                    fs.mkdirSync(dbDir, { recursive: true });
+                }
+                copyFileSync(resolvedBackup, resolvedDb);
+                // Re-open and report
+                const restored = new MemOS({ dbPath: resolvedDb });
+                await restored.init();
+                const graph = await restored.getGraph();
+                await restored.close();
+                if (!jsonFlag) {
+                    console.log(`\nRestored from: ${resolvedBackup}`);
+                    console.log(`  Nodes: ${graph.nodes.length}, Edges: ${graph.edges.length}`);
+                }
+                break;
+            }
+            case "doctor": {
+                const jsonOut = jsonFlag;
+                const report = {};
+                const problems = [];
+                const suggestions = [];
+                // Playbook anchors appended to suggestions below; the full
+                // Symptom → Diagnose → Fix entries live in docs/troubleshooting.md.
+                const PLAYBOOK = "https://github.com/Markgatcha/memos/blob/main/docs/troubleshooting.md";
+                // 1. Store health.
+                const diag = await memos.diagnostics();
+                report.store = {
+                    totalMemories: diag.totalNodes,
+                    totalEdges: diag.totalEdges,
+                    nodesWithEmbeddings: diag.nodesWithEmbeddings,
+                    dbSizeBytes: diag.dbSizeBytes ?? null,
+                };
+                if (jsonOut) {
+                    // detailed JSON path prints below
+                }
+                else {
+                    console.log(`Store: ${diag.totalNodes} memories, ${diag.totalEdges} edges, ` +
+                        `${diag.nodesWithEmbeddings} with embeddings.`);
+                }
+                // 2. Embedding coverage — partial coverage silently weakens the
+                //    semantic leg.
+                if (diag.totalNodes > 0 && diag.nodesWithEmbeddings < diag.totalNodes) {
+                    problems.push(`Only ${diag.nodesWithEmbeddings}/${diag.totalNodes} memories have embeddings.`);
+                    suggestions.push(`Run \`memos reindex-embeddings\` to backfill missing vectors. ` +
+                        `Playbook: ${PLAYBOOK}#search-returns-nothing-or-weak-results`);
+                }
+                // 3. Embedding model mix — mixed models mean the semantic leg is
+                //    comparing against a subset only.
+                const storage = memos
+                    .storage;
+                if (storage.getEmbeddingModelCounts) {
+                    const counts = (await storage.getEmbeddingModelCounts?.()) ?? [];
+                    report.embeddingModels = counts;
+                    if (counts.length > 1) {
+                        problems.push(`Embeddings from ${counts.length} different models: ` +
+                            counts
+                                .map((c) => `${c.model}×${c.count}`)
+                                .join(", ") +
+                            " — vectors from different models are never compared.");
+                        suggestions.push("Run `memos reindex-embeddings --purge-stale` after switching models. " +
+                            `Playbook: ${PLAYBOOK}#search-returns-nothing-or-weak-results`);
+                    }
+                    if (!jsonOut) {
+                        console.log("Embedding models: " +
+                            (counts.length
+                                ? counts
+                                    .map((c) => `${c.model} (${c.count})`)
+                                    .join(", ")
+                                : "none stored"));
+                    }
+                }
+                // 4. Provider probe — embed one query and report what actually loaded.
+                const embeddings = cliEmbeddingsConfig(projectConfig?.embeddings);
+                if (embeddings?.provider && embeddings.baseUrl) {
+                    const started = Date.now();
+                    try {
+                        const probe = await fetch(`${embeddings.baseUrl.replace(/\/+$/, "")}/models`, { signal: AbortSignal.timeout(4_000) });
+                        report.embeddingEndpoint = {
+                            url: embeddings.baseUrl,
+                            reachable: probe.ok,
+                            ms: Date.now() - started,
+                        };
+                        if (!jsonOut) {
+                            console.log(`Embedding endpoint ${embeddings.baseUrl}: reachable (${probe.status}) in ${Date.now() - started}ms.`);
+                        }
+                    }
+                    catch (err) {
+                        problems.push(`Embedding endpoint ${embeddings.baseUrl} unreachable: ` +
+                            `${err instanceof Error ? err.message : String(err)}`);
+                        suggestions.push("Start llama-server (--embedding) or unset MEMOS_EMBEDDING_* to fall back to the hash embedder. " +
+                            `Playbook: ${PLAYBOOK}#search-returns-nothing-or-weak-results`);
+                    }
+                }
+                else {
+                    // Default path (no MEMOS_EMBEDDING_*): the SDK resolves its
+                    // default provider during the semantic probe below; the
+                    // runtime-info report after step 5 shows what actually loaded.
+                }
+                // 5. Semantic probe — does a search actually come back?
+                const t0 = Date.now();
+                const probeResults = await memos.search({
+                    query: "doctor connectivity probe",
+                    limit: 1,
+                });
+                report.semanticProbe = {
+                    ok: true,
+                    ms: Date.now() - t0,
+                    hits: probeResults.length,
+                };
+                if (!jsonOut) {
+                    console.log(`Semantic search probe: ok (${Date.now() - t0}ms, ${probeResults.length} candidate).`);
+                }
+                // 5b. Provider runtime info — the semantic probe above forced the
+                // provider to resolve, so fallbackActive is accurate here.
+                if (!(embeddings?.provider && embeddings.baseUrl)) {
+                    const info = memos.getEmbeddingRuntimeInfo();
+                    report.embeddingProvider = info;
+                    if (!jsonOut) {
+                        if (!info) {
+                            console.log("Embeddings disabled — semantic search falls back to keyword scoring.");
+                        }
+                        else if (info.fallbackActive) {
+                            problems.push(`Embedding fallback active: ${info.fallbackReason}.`);
+                            suggestions.push("Install @huggingface/transformers for real local embeddings: pnpm add @huggingface/transformers. " +
+                                `Playbook: ${PLAYBOOK}#embeddings-silently-fell-back-to-local-hash`);
+                            console.log(`Embedding provider: ${info.resolvedProvider} (fallback — ${info.fallbackReason}).`);
+                        }
+                        else {
+                            console.log(`Embedding provider: ${info.resolvedProvider} (${info.resolvedModel}, ${info.requestedDimensions}d).`);
+                        }
+                    }
+                }
+                // 6. Rerank endpoint probe (when configured).
+                const rerankUrl = process.env.MEMOS_RERANK_URL;
+                if (rerankUrl) {
+                    try {
+                        const started = Date.now();
+                        await fetch(`${rerankUrl.replace(/\/+$/, "")}/health`, {
+                            signal: AbortSignal.timeout(4_000),
+                        });
+                        report.rerank = {
+                            url: rerankUrl,
+                            reachable: true,
+                            ms: Date.now() - started,
+                        };
+                        if (!jsonOut) {
+                            console.log(`Rerank endpoint ${rerankUrl}: reachable.`);
+                        }
+                    }
+                    catch {
+                        problems.push(`Rerank endpoint ${rerankUrl} unreachable — reranking will silently fall back.`);
+                        suggestions.push(`Rerank is optional — an unreachable endpoint means reranking silently falls back to the base ranking. ` +
+                            `Playbook: ${PLAYBOOK}#search-returns-nothing-or-weak-results`);
+                    }
+                }
+                report.problems = problems;
+                report.suggestions = suggestions;
+                if (jsonOut) {
+                    console.log(JSON.stringify(report, null, 2));
+                }
+                else {
+                    if (problems.length === 0) {
+                        console.log("Doctor: no problems found.");
+                    }
+                    else {
+                        console.log(`Doctor: ${problems.length} problem(s):`);
+                        for (const problem of problems)
+                            console.log(`  - ${problem}`);
+                        for (const suggestion of suggestions)
+                            console.log(`  → ${suggestion}`);
+                    }
+                }
+                break;
+            }
+            case "reindex-embeddings": {
+                const purgeStale = args.includes("--purge-stale");
+                try {
+                    const result = await memos.reindexEmbeddings({ purgeStale });
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(result));
+                    }
+                    else {
+                        console.log(`Re-embedded ${result.reembedded} memories with "${result.model}"` +
+                            `${result.purged ? `, purged ${result.purged} stale vectors` : ""}` +
+                            `${result.failed ? `, ${result.failed} FAILED` : ""}.`);
+                    }
+                }
+                catch (err) {
+                    console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+                    process.exit(1);
+                }
+                break;
+            }
+            case "init": {
+                await runInitWizard(args);
+                break;
+            }
+            case "connect": {
+                const target = (args[1] ?? "").toLowerCase();
+                const write = args.includes("--write");
+                const force = args.includes("--force");
+                const { getMcpTools } = await import("./mcp.js");
+                const result = connectTarget(target, {
+                    dbPath,
+                    toolNames: getMcpTools().map((t) => t.name),
+                });
+                if (!result)
+                    break;
+                if (!write) {
+                    console.log(result.instructions);
+                    console.log("\nRe-run with --write to write the config file directly " +
+                        "(add --force to overwrite an existing file).");
+                    break;
+                }
+                if (!result.configPath) {
+                    console.log(result.instructions);
+                    break;
+                }
+                if (existsSyncSafe(result.configPath) && !force) {
+                    console.error(`Error: ${result.configPath} already exists. Re-run with --force to overwrite.`);
+                    process.exit(1);
+                }
+                try {
+                    writeFileSafe(result.configPath, result.fileContents ?? "");
+                    console.log(`Wrote ${result.configPath}.`);
+                    console.log("Restart the harness so it picks up the new MCP server. " +
+                        "All data stays in the local SQLite store.");
+                }
+                catch (err) {
+                    console.error(`Error writing ${result.configPath}: ${err instanceof Error ? err.message : String(err)}`);
+                    process.exit(1);
+                }
+                break;
+            }
+            case "extract-facts": {
+                // `memos extract-facts --transcript <path>` — extract durable facts
+                // from a session transcript and store them.
+                const transcriptIdx = args.indexOf("--transcript");
+                const transcriptPath = transcriptIdx !== -1 ? args[transcriptIdx + 1] : undefined;
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 ? args[nsIdx + 1] : "default";
+                const confIdx = args.indexOf("--min-confidence");
+                const minConfidence = confIdx !== -1 ? parseFloat(args[confIdx + 1]) : 0.6;
+                const dryRun = args.includes("--dry-run");
+                if (!transcriptPath) {
+                    console.error("Error: --transcript <path> is required.\n" +
+                        "  Usage: memos extract-facts --transcript <path> [--namespace <ns>] [--min-confidence <n>] [--dry-run]");
+                    process.exit(1);
+                }
+                const { parseTranscriptFile } = await import("./session-hooks.js");
+                let messages;
+                try {
+                    // Claude Code JSONL first; falls back to plain text when the
+                    // JSONL parse yields no messages (parseTranscriptFile).
+                    messages = parseTranscriptFile(transcriptPath);
+                }
+                catch (err) {
+                    console.error(`Error reading transcript: ${err instanceof Error ? err.message : String(err)}`);
+                    process.exit(1);
+                }
+                if (messages.length === 0) {
+                    console.log("No messages found in transcript.");
+                    break;
+                }
+                const result = await memos.extractFacts(messages, {
+                    autoStore: !dryRun,
+                    minConfidence,
+                    namespace,
+                });
+                if (jsonFlag) {
+                    console.log(JSON.stringify({
+                        facts: result.facts.length,
+                        stored: result.storedIds.length,
+                        duplicates: result.duplicates,
+                        dryRun,
+                    }));
+                }
+                else {
+                    console.log(`Extracted ${result.facts.length} fact(s)` +
+                        (dryRun
+                            ? " (dry run, not stored)."
+                            : `, stored ${result.storedIds.length} (${result.duplicates} duplicates skipped).`));
+                }
+                break;
+            }
+            case "session-hook": {
+                // `memos session-hook` — session-end hook entrypoint.
+                // Claude Code: reads hook JSON from stdin, extracts the transcript
+                // path. OpenCode: the generated plugin passes --opencode-session
+                // <id>. Stores durable facts. Fail-open: never break teardown.
+                if (process.env.MEMOS_SKIP_SESSION_HOOK === "1") {
+                    if (!jsonFlag)
+                        console.log("Session hook skipped (MEMOS_SKIP_SESSION_HOOK=1).");
+                    break;
+                }
+                const { parseTranscriptFile, findOpenCodeSessionMessages } = await import("./session-hooks.js");
+                const { readFileSync } = await import("node:fs");
+                const ocIdx = args.indexOf("--opencode-session");
+                const openCodeSessionId = ocIdx !== -1 ? args[ocIdx + 1] : undefined;
+                const nsIdx = args.indexOf("--namespace");
+                const namespace = nsIdx !== -1 ? args[nsIdx + 1] : "default";
+                try {
+                    let messages;
+                    if (openCodeSessionId) {
+                        // OpenCode path: look the ended session up in OpenCode's
+                        // data dir ($XDG_DATA_HOME/opencode or the platform default).
+                        messages = findOpenCodeSessionMessages(openCodeSessionId);
+                        if (messages.length === 0) {
+                            // Fail-open: session data not found (custom location,
+                            // already cleaned up, …) — nothing to extract.
+                            if (!jsonFlag)
+                                console.log("Session hook: OpenCode session not found, nothing to extract.");
+                            break;
+                        }
+                    }
+                    else {
+                        // Read hook input from stdin (Claude Code passes JSON).
+                        let input = {};
+                        try {
+                            const stdin = readFileSync(0, "utf-8").trim();
+                            if (stdin)
+                                input = JSON.parse(stdin);
+                        }
+                        catch {
+                            // No stdin or invalid JSON — try --transcript flag instead.
+                        }
+                        const transcriptIdx = args.indexOf("--transcript");
+                        const transcriptPath = (transcriptIdx !== -1 ? args[transcriptIdx + 1] : undefined) ??
+                            input.transcript_path;
+                        if (!transcriptPath) {
+                            // Fail-open: no transcript available, nothing to do.
+                            if (!jsonFlag)
+                                console.log("Session hook: no transcript path, nothing to extract.");
+                            break;
+                        }
+                        // Claude JSONL first, plain-text fallback when it yields nothing.
+                        messages = parseTranscriptFile(transcriptPath);
+                    }
+                    if (messages.length === 0)
+                        break;
+                    const result = await memos.extractFacts(messages, {
+                        autoStore: true,
+                        minConfidence: 0.6,
+                        namespace,
+                    });
+                    if (jsonFlag) {
+                        console.log(JSON.stringify({
+                            ok: true,
+                            facts: result.facts.length,
+                            stored: result.storedIds.length,
+                            duplicates: result.duplicates,
+                        }));
+                    }
+                    else {
+                        console.log(`Session hook: extracted ${result.facts.length} fact(s), stored ${result.storedIds.length}.`);
+                    }
+                }
+                catch (err) {
+                    // Fail-open: log but don't break session teardown.
+                    console.error(`Session hook failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case "dashboard": {
+                // `memos dashboard` — start a local web dashboard.
+                const portIdx = args.indexOf("--port");
+                const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : undefined;
+                const noOpen = args.includes("--no-open");
+                const { startDashboard } = await import("./dashboard.js");
+                const { url, close } = await startDashboard(memos, {
+                    ...(port !== undefined && !Number.isNaN(port) ? { port } : {}),
+                });
+                console.log(`\nMemOS dashboard running at ${url}`);
+                console.log("Press Ctrl+C to stop.\n");
+                if (!noOpen) {
+                    // Try to open the browser (fail silently if unavailable).
+                    const { exec } = await import("node:child_process");
+                    const openCmd = process.platform === "darwin"
+                        ? "open"
+                        : process.platform === "win32"
+                            ? "start"
+                            : "xdg-open";
+                    exec(`${openCmd} "${url}"`, () => { });
+                }
+                // Keep running until interrupted.
+                await new Promise((resolve) => {
+                    const shutdown = async () => {
+                        await close();
+                        resolve();
+                    };
+                    process.once("SIGINT", shutdown);
+                    process.once("SIGTERM", shutdown);
+                });
+                break;
+            }
+            case "log": {
+                // `memos log verify|show|checkpoint` — tamper-evident mutation log.
+                const subcommand = args[1];
+                const getFlag = (name) => {
+                    const idx = args.indexOf(name);
+                    return idx !== -1 ? args[idx + 1] : undefined;
+                };
+                if (subcommand === "verify") {
+                    const result = await memos.verifyTamperLog({
+                        expectTip: getFlag("--expect"),
+                    });
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(result, null, 2));
+                        break;
+                    }
+                    if (!result.supported) {
+                        console.log("Tamper log not supported by this storage backend.");
+                        break;
+                    }
+                    console.log(`Tamper log: ${result.entriesChecked} entries checked, ${result.unloggedNodes} pre-log node(s).`);
+                    if (result.legacyEntries > 0) {
+                        console.log(`${result.legacyEntries} ${result.legacyEntries === 1 ? "entry predates" : "entries predate"} the full-state format: chain linkage verified, content cross-checked.`);
+                    }
+                    if (result.ok) {
+                        console.log("OK — chain intact, all nodes match their log entries.");
+                    }
+                    else {
+                        console.log("FAILED — tampering detected:");
+                        for (const issue of result.issues) {
+                            console.log(`  [${issue.kind}] ${issue.detail}`);
+                        }
+                        process.exit(1);
+                    }
+                    break;
+                }
+                if (subcommand === "show") {
+                    const entries = await memos.readTamperLog();
+                    if (entries.length === 0) {
+                        console.log("Tamper log is empty or not supported by this storage backend.");
+                        break;
+                    }
+                    const limit = Math.max(1, parseInt(getFlag("--limit") ?? "20", 10));
+                    const tail = entries.slice(-limit);
+                    if (jsonFlag) {
+                        console.log(JSON.stringify(tail, null, 2));
+                        break;
+                    }
+                    for (const e of tail) {
+                        console.log(`#${e.seq} [${new Date(e.ts).toISOString()}] ${e.op} ${e.nodeId.slice(0, 8)} state:${e.nodeHash.slice(0, 12)} entry:${e.entryHash.slice(0, 12)}`);
+                    }
+                    break;
+                }
+                if (subcommand === "checkpoint") {
+                    const result = await memos.verifyTamperLog();
+                    if (!result.supported) {
+                        console.log("Tamper log not supported by this storage backend.");
+                        break;
+                    }
+                    if (jsonFlag) {
+                        console.log(JSON.stringify({ tipHash: result.tipHash }, null, 2));
+                        break;
+                    }
+                    if (!result.ok) {
+                        console.error("Refusing to checkpoint a broken chain — run `memos log verify` first.");
+                        process.exit(1);
+                    }
+                    console.log(result.tipHash ?? "(empty log — nothing to anchor yet)");
+                    console.log("Write this hash down somewhere the DB writer can't reach (paper, another machine, a signed commit).");
+                    console.log("Later: `memos log verify --expect <hash>` proves the chain still ends here.");
+                    break;
+                }
+                console.error("Error: unknown log subcommand.\n  Usage: memos log <verify [--expect <hash>]|show [--limit N]|checkpoint>");
+                process.exit(1);
+            }
+            case "sync": {
+                // `memos sync export|import|status` — encrypted cross-machine sync.
+                const subcommand = args[1];
+                const { createBundle, decryptBundle, writeBundle, readBundle, importRecords, } = await import("./sync.js");
+                const getFlag = (name) => {
+                    const idx = args.indexOf(name);
+                    return idx !== -1 ? args[idx + 1] : undefined;
+                };
+                if (subcommand === "export") {
+                    const output = getFlag("--output");
+                    if (!output) {
+                        console.error("Error: --output <file> is required.\n  Usage: memos sync export --output <file> [--passphrase <passphrase>|--passphrase-file <path>]");
+                        process.exit(1);
+                    }
+                    const key = await resolveSyncKeyInteractive({
+                        passphrase: getFlag("--passphrase"),
+                        passphraseFile: getFlag("--passphrase-file"),
+                    });
+                    const graph = await memos.getGraph();
+                    // Export the full record: everything lands inside the
+                    // encrypted payload (v2 bundle) — no plaintext IDs/timestamps.
+                    const records = (graph.nodes ?? []).map((n) => ({
+                        id: n.id,
+                        content: n.content,
+                        summary: n.summary,
+                        type: n.type,
+                        tags: n.tags ?? [],
+                        importance: n.importance ?? 0.5,
+                        createdAt: n.createdAt,
+                        updatedAt: n.updatedAt,
+                        namespace: n.namespace ?? "default",
+                        metadata: n.metadata ?? {},
+                        source: n.source,
+                        provenance: n.provenance,
+                        pool: n.pool,
+                        expiresAt: n.expiresAt ?? null,
+                        validFrom: n.validFrom ?? null,
+                        validTo: n.validTo ?? null,
+                        harness: n.harness,
+                    }));
+                    const bundle = createBundle(records, key);
+                    writeBundle(output, bundle);
+                    console.log(`Exported ${records.length} memories to ${output} (encrypted).`);
+                    break;
+                }
+                if (subcommand === "import") {
+                    const input = getFlag("--input");
+                    if (!input) {
+                        console.error("Error: --input <file> is required.\n  Usage: memos sync import --input <file> [--strategy skip-existing|last-write-wins]");
+                        process.exit(1);
+                    }
+                    const strategy = (getFlag("--strategy") ?? "skip-existing");
+                    if (strategy !== "skip-existing" && strategy !== "last-write-wins") {
+                        console.error("Error: --strategy must be skip-existing or last-write-wins");
+                        process.exit(1);
+                    }
+                    const key = await resolveSyncKeyInteractive({
+                        passphrase: getFlag("--passphrase"),
+                        passphraseFile: getFlag("--passphrase-file"),
+                    });
+                    const bundle = readBundle(input);
+                    let records;
+                    try {
+                        records = decryptBundle(bundle, key);
+                    }
+                    catch (err) {
+                        console.error(`Error: failed to decrypt bundle (wrong key?): ${err instanceof Error ? err.message : String(err)}`);
+                        process.exit(1);
+                    }
+                    const { imported, skipped, updated, errors } = await importRecords(memos, records, strategy);
+                    if (jsonFlag) {
+                        console.log(JSON.stringify({ imported, skipped, updated, errors }));
+                    }
+                    else {
+                        console.log(`Import complete: ${imported} imported, ${skipped} skipped, ${updated} updated.`);
+                        if (errors.length > 0) {
+                            console.log(`Errors: ${errors.length}`);
+                            errors.slice(0, 5).forEach((e) => console.log(`  ${e}`));
+                        }
+                    }
+                    break;
+                }
+                if (subcommand === "status") {
+                    const input = getFlag("--input");
+                    if (!input) {
+                        console.error("Error: --input <file> is required.\n  Usage: memos sync status --input <file>");
+                        process.exit(1);
+                    }
+                    const bundle = readBundle(input);
+                    console.log(`Bundle: ${bundle.records.length} records, exported ${bundle.exportedAt}`);
+                    console.log(`Version: ${bundle.version}`);
+                    // Don't decrypt — just show metadata (key not required for status)
+                    break;
+                }
+                console.error("Error: subcommand required.\n" +
+                    "  Usage: memos sync <export|import|status> [options]\n" +
+                    "  See: memos sync --help");
+                process.exit(1);
+                break;
+            }
+            case "trio": {
+                // Boot the full AI Trio: MemOS (this process, memory) + LLM-Guardian
+                // (optimization) + Universal-MCP-Toolkit (tools). With `--up` the
+                // command locates the sibling repos and spawns Guardian + UMT from
+                // their entrypoints; without it, it prints the compose plan.
+                const up = args.includes("--up");
+                const flagIdx = (name) => args.indexOf(name) !== -1 ? args[args.indexOf(name) + 1] : undefined;
+                const home = process.env.HOME || process.env.USERPROFILE || ".";
+                const candidates = [
+                    flagIdx("--guardian"),
+                    flagIdx("--umt"),
+                    join(home, "llm-guardian"),
+                    join(home, "universal-mcp-toolkit"),
+                    resolve(process.cwd(), "..", "llm-guardian"),
+                    resolve(process.cwd(), "..", "universal-mcp-toolkit"),
+                ].filter(Boolean);
+                const findRepo = (name) => candidates.find((c) => existsSync(join(c, "package.json")) && c.includes(name));
+                const guardian = findRepo("llm-guardian");
+                const umt = findRepo("universal-mcp-toolkit");
+                if (!jsonFlag) {
+                    console.log("AI Trio — compose plan:");
+                    console.log(`  [memory]     memos   (this process)  db=${dbPath ?? join(home, ".memos/memos.db")}`);
+                    console.log(`  [optimize]   llm-guardian  ${guardian ? `→ ${guardian}` : "(not found; pass --guardian <path>)"}`);
+                    console.log(`  [tools]      universal-mcp-toolkit  ${umt ? `→ ${umt}` : "(not found; pass --umt <path>)"}`);
+                }
+                if (!up) {
+                    if (!jsonFlag)
+                        console.log("\nRun with --up to launch Guardian + UMT alongside this MemOS instance.");
+                    break;
+                }
+                const children = [];
+                const spawn = async (cmd, cwd, env) => {
+                    const { spawn: _spawn } = await import("child_process");
+                    const child = _spawn(cmd, ["run", "start"], {
+                        cwd,
+                        env: { ...process.env, ...env },
+                        stdio: "inherit",
+                        shell: true,
+                    });
+                    child.on("error", (err) => {
+                        console.error(`Failed to launch ${cmd} in ${cwd}: ${err.message}`);
+                    });
+                    children.push(child);
+                    return child;
+                };
+                // Guardian must run under Node (not Bun) when MemOS memory is enabled,
+                // because MemOS uses better-sqlite3 — a native Node module Bun cannot
+                // load. If the user has not set MemOS env vars (standalone Guardian),
+                // Bun is fine and faster to start.
+                const memosEnabled = !!process.env.MEMOS_NAMESPACE ||
+                    !!process.env.MEMOS_STORAGE_PATH ||
+                    !!dbPath;
+                if (guardian) {
+                    const guardianEnv = {};
+                    if (memosEnabled) {
+                        guardianEnv.MEMOS_NAMESPACE =
+                            process.env.MEMOS_NAMESPACE || "default";
+                        guardianEnv.MEMOS_STORAGE_PATH =
+                            process.env.MEMOS_STORAGE_PATH ||
+                                dbPath ||
+                                join(home, ".memos/memos.db");
+                    }
+                    await spawn(memosEnabled ? "node" : "bun", guardian, guardianEnv);
+                    if (!jsonFlag)
+                        console.log(`  → llm-guardian via ${memosEnabled ? "node" : "bun"}${memosEnabled ? " (MemOS memory enabled)" : ""}`);
+                }
+                else if (!jsonFlag) {
+                    console.warn("  ⚠ skipping llm-guardian: not found. Pass --guardian <path> or clone it next to memos.");
+                }
+                if (umt) {
+                    await spawn("npx", umt, {});
+                }
+                else if (!jsonFlag) {
+                    console.warn("  ⚠ skipping universal-mcp-toolkit: not found. Pass --umt <path> or clone it next to memos.");
+                }
+                if (!guardian && !umt) {
+                    console.error("Error: no sibling repos located. Clone llm-guardian and/or universal-mcp-toolkit next to memos, or pass --guardian / --umt.");
+                    process.exit(1);
+                }
+                if (!jsonFlag && (guardian || umt))
+                    console.log("\nAI Trio is starting. MemOS is live (this process); Guardian + UMT launching above.");
+                const shutdown = () => {
+                    for (const c of children)
+                        c.kill();
+                    process.exit(0);
+                };
+                process.on("SIGINT", shutdown);
+                process.on("SIGTERM", shutdown);
+                // Keep the parent alive while children run.
+                await new Promise(() => { });
+                break;
+            }
+            default:
+                console.error(`Unknown command: ${command}`);
+                const suggestion = suggestCommand(command);
+                if (suggestion) {
+                    console.error(`Did you mean "memos ${suggestion}"?`);
+                }
+                printHelp();
+                process.exit(1);
+        }
+    }
+    finally {
+        // Only close if we haven't already (backup/restore handle their own close)
+        if (command !== "backup" && command !== "restore") {
+            await memos.close();
+        }
+    }
+}
+main().catch((err) => {
+    // err.message can echo key material from a failing operation — redact
+    // before it hits stderr (CodeQL js/clear-text-logging).
+    console.error("Fatal:", redactSecrets(err instanceof Error ? err.message : String(err)));
+    process.exit(1);
+});
+//# sourceMappingURL=cli.js.map

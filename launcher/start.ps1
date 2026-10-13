@@ -56,8 +56,9 @@ if ($Step -eq 'check') {
         $node = Get-NodeOrInstall
         Write-Host "Node.js: $node"
         # Install the pinned upstream MemOS SDK directly into the application.
-        $sdk = Join-Path $root 'node_modules\@mem-os\sdk\package.json'
+        $sdk = Join-Path $root 'node_modules\@mem-os\sdk\dist\index.js'
         if (-not (Test-Path -LiteralPath $sdk)) {
+            if (-not (Test-Path -LiteralPath (Join-Path $root 'vendor\memos\dist\index.js'))) { throw 'Не найдена локальная сборка MemOS. Скачайте актуальную версию проекта с GitHub.' }
             Write-Host 'Устанавливаю встроенную память MemOS...'
             $localNpm = Join-Path $root 'runtime\node\node_modules\npm\bin\npm-cli.js'
             if (Test-Path -LiteralPath $localNpm) {

@@ -1,0 +1,270 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Lockfile drift: fail fast if pnpm-lock.yaml
+  # is out of sync with package.json (catches the
+  # class of break that previously wasted full runs).
+  # ──────────────────────────────────────────────
+  verify-lockfile:
+    name: Verify lockfile
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node.js 26
+        uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+      - name: Verify pnpm-lock.yaml is in sync
+        run: |
+          # --frozen-lockfile makes pnpm fail (instead of updating) when
+          # package.json and pnpm-lock.yaml disagree — the real failure
+          # mode. --lockfile-only avoids a full install for this check.
+          pnpm install --frozen-lockfile --lockfile-only
+
+  # ──────────────────────────────────────────────
+  # One-line installer: exercise scripts/install.sh
+  # end to end. Deliberately does NOT set up Node:
+  # on ubuntu the runner has no node on PATH, so the
+  # script's download-a-Node path is tested; macOS
+  # runners ship node, testing the system-node path.
+  # ──────────────────────────────────────────────
+  install-script:
+    name: Install script (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # show results for both OSes even if one fails
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Record PATH before toolchain setup
+        # The installer must exercise its OWN node handling (download a
+        # Node on ubuntu, use the system node on macOS), so the PATH it
+        # sees must not include the toolchain we set up just for packing.
+        run: echo "ORIG_PATH=$PATH" >> "$GITHUB_ENV"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node.js 26
+        uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          cache: pnpm
+      - name: Build and pack the local SDK
+        run: |
+          # Install the SDK packed from THIS commit, not npm @latest:
+          # npm's published version lags the repo, so installing @latest
+          # would test a stale SDK while the repo's own code goes
+          # unexercised.
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm build
+          pnpm pack --pack-destination "$RUNNER_TEMP"
+          echo "SDK_TARBALL=$RUNNER_TEMP/mem-os-sdk-$(node -p "require('./package.json').version").tgz" >> "$GITHUB_ENV"
+      - name: Run installer into a temp HOME
+        run: |
+          export MEMOS_HOME="$RUNNER_TEMP/memos-home"
+          export MEMOS_NPM_TAG="file://$SDK_TARBALL"
+          export PATH="$ORIG_PATH"
+          sh scripts/install.sh
+          test -x "$MEMOS_HOME/bin/memos"
+          "$MEMOS_HOME/bin/memos" --help >/dev/null
+          "$MEMOS_HOME/bin/memos" init --help >/dev/null
+      - name: Re-run is idempotent
+        run: |
+          export MEMOS_HOME="$RUNNER_TEMP/memos-home"
+          export MEMOS_NPM_TAG="file://$SDK_TARBALL"
+          export PATH="$ORIG_PATH"
+          sh scripts/install.sh
+          "$MEMOS_HOME/bin/memos" --help >/dev/null
+
+  # ──────────────────────────────────────────────
+  # TypeScript: Lint + Format + Build + Test
+  # Matrix: Node 26 (recommended) plus Node 22 and 24 (LTS) across
+  # ubuntu/macOS/windows. Node 20 dropped (EOL Apr 2025).
+  # ──────────────────────────────────────────────
+  typescript:
+    name: TypeScript (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
+    needs: [verify-lockfile]
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24, 26]
+        os: [ubuntu-26.04, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      # NOTE: do NOT cache node_modules itself. pnpm's node_modules is a
+      # symlink tree; actions/cache materializes it as real files on
+      # restore (notably on Windows), breaking bins like tsc. The
+      # setup-node pnpm cache above already keeps installs fast via the
+      # content-addressable store.
+      - name: Install dependencies
+        # --ignore-scripts: better-sqlite3 v13 ships binding.gyp, so the
+        # installer auto-detects it as a node-gyp package and runs a pointless
+        # `node-gyp rebuild` (its prebuild loads via lib/binding.js, no build
+        # needed). The dep sets gypfile:false but the npm lockfile dropped it.
+        # On Windows runners with VS 2026 the bundled node-gyp can't detect the
+        # toolchain and the install fails. Repo + deps have no install hooks,
+        # so ignoring scripts is safe.
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Cache Hugging Face models
+        uses: actions/cache@v6
+        with:
+          path: node_modules/@huggingface/transformers/.cache
+          key: ${{ runner.os }}-huggingface-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Verify plugin manifest versions match the SDK
+        run: node scripts/check-plugin-version.mjs
+      - name: TypeScript version
+        run: pnpm exec tsc --version
+      - name: Lint
+        run: pnpm lint
+      - name: Format check
+        run: pnpm format:check
+      - name: Build
+        run: pnpm build
+      - name: Test
+        run: pnpm test --ci --coverage
+
+  # ──────────────────────────────────────────────
+  # Native deps smoke across major Linux distro
+  # families (dnf/apt/pacman). Reduced from 6 to 3
+  # to save CI minutes while covering all package
+  # manager families.
+  # Retrieval regression eval: the golden corpus (scripts/eval/corpus.json)
+  # runs through the real hybrid pipeline on the deterministic local-hash
+  # embedder; recall@5 / MRR must stay within tolerance of the committed
+  # baseline. Catches ranking regressions (fusion, pools, expansion) before
+  # they ship.
+  retrieval-eval:
+    name: Retrieval regression eval
+    runs-on: ubuntu-26.04
+    needs: [verify-lockfile]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node 26
+        uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run retrieval eval against committed baseline
+        run: pnpm exec tsx scripts/eval-retrieval.ts --check
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: retrieval-eval-results
+          path: scripts/eval/retrieval-results.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ──────────────────────────────────────────────
+  linux-distro-native-smoke:
+    name: Native deps (${{ matrix.name }})
+    runs-on: ubuntu-26.04
+    needs: [verify-lockfile]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Fedora
+            image: fedora:latest
+            bootstrap: dnf install -y nodejs npm python3 make gcc-c++ && npm install -g pnpm@12.8.1 --ignore-scripts
+          - name: Debian
+            image: debian:trixie
+            # Debian trixie ships Node 20, but better-sqlite3 v13 requires
+            # Node >= 22 — install the NodeSource Node 24 LTS instead.
+            bootstrap: apt-get update && apt-get install -y curl ca-certificates gnupg && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && apt-get install -y nodejs python3 make g++ && npm install -g pnpm@12.8.1 --ignore-scripts
+          - name: Arch
+            image: archlinux:latest
+            bootstrap: pacman -Sy --noconfirm nodejs npm python base-devel && npm install -g pnpm@12.8.1 --ignore-scripts
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache pnpm store for in-docker install
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: better-sqlite3 install/build/test smoke
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            -v "${{ runner.temp }}/pnpm-store:/root/.local/share/pnpm/store" \
+            -w /repo ${{ matrix.image }} bash -lc '${{ matrix.bootstrap }} && bash /repo/scripts/smoke-native.sh'
+
+  # ──────────────────────────────────────────────
+  # Python: Lint + Test
+  # Matrix: 3.11, 3.12 (LTS), 3.13, 3.14. Dropped 3.10
+  # (EOL Oct 2026) to save CI minutes; 3.11 is kept
+  # since it receives updates until Mar 2027.
+  # ──────────────────────────────────────────────
+  python:
+    name: Python (${{ matrix.python-version }})
+    runs-on: ubuntu-26.04
+    needs: [verify-lockfile]
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format check (ruff)
+        run: ruff format --check .
+      - name: Test
+        run: pytest tests/ -v --tb=short
+
+  # ──────────────────────────────────────────────
+  # Docker build
+  # ──────────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-26.04
+    needs: [verify-lockfile]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build Docker image
+        run: docker build -t memos:ci .
+      - name: Verify container starts
+        run: |
+          docker run -d --name memos-test -p 7400:7400 memos:ci
+          sleep 5
+          curl -f http://localhost:7400/health
+          docker stop memos-test

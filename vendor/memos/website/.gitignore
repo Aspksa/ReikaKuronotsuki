@@ -1,0 +1,14 @@
+# Build output
+out/
+.next/
+dist/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript build info
+tsconfig.tsbuildinfo

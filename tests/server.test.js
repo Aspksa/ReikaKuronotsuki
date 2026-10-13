@@ -101,7 +101,10 @@ test('MemOS is connected directly in the chat pipeline, without an adapter modul
  const src=fs.readFileSync(path.join(__dirname,'..','server','server.js'),'utf8');
  const launcher=fs.readFileSync(path.join(__dirname,'..','launcher','start.ps1'),'utf8');
  const pkg=JSON.parse(fs.readFileSync(path.join(__dirname,'..','package.json'),'utf8'));
- assert.equal(pkg.dependencies['@mem-os/sdk'],'1.6.26');
+ assert.equal(pkg.dependencies['@mem-os/sdk'],'file:vendor/memos');
+ assert.equal(fs.existsSync(path.join(__dirname,'..','vendor','memos','src','memory.ts')),true);
+ assert.equal(fs.existsSync(path.join(__dirname,'..','vendor','memos','LICENSE')),true);
+ assert.equal(fs.existsSync(path.join(__dirname,'..','vendor','memos','dist','index.js')),true);
  assert.match(src,/import\('@mem-os\/sdk'\)/);
  assert.match(src,/reika-memory\.sqlite/);
  assert.match(src,/await recall\(text\)/);
