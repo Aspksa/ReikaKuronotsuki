@@ -513,7 +513,10 @@ class ProjectUpdater {
           if (!bytes || gitHash(bytes) !== e.sha) throw new Error('Файл в подготовке повреждён: ' + e.path);
         }
       });
-      await this.step('test', () => this.run(staging, process.execPath, ['tests/run.js']));
+      // ZIP content is not authenticated by GitHub: never execute tests supplied by
+      // an untrusted archive during preparation. Check syntax and file hashes
+      // using the currently installed (trusted) installer instead.
+      await this.step('test', () => require('./installer').defaultHealthCheck(staging, entries));
       this.throwIfCancelled();
       await this.writeJson('ready.json', { sha, files: entries.map((e) => ({ path: e.path, sha: e.sha })), removals, description: 'Установка из файла: ' + label, notes: [{ title: 'Файл ' + label }], createdAt: new Date().toISOString() });
       await this.emit('update_prepared', '', 'ready', { sha });
