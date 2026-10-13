@@ -46,11 +46,11 @@ test('statistics are their own section below the update controls, with accessibl
   assert.match(css, /@media \(max-width:\s*1100px\)/);
   assert.match(js, /stats-icon/);
   assert.match(js, /aria-hidden/);
-  assert.match(js, /toneFor\(key,index\)/);
+  assert.match(js, /V\.tone\(g,i,key\)/);
   assert.doesNotMatch(html, /100 фактов, которые никто не просил/);
   assert.match(html, /id="up-stats-tabs"/);
   assert.match(html, /id="up-stats-highlights"/);
-  assert.match(js, /function sparkline\(/);
+  assert.match(js, /V\.chart\(c\.kind/);
   assert.match(css, /stats-explorer/);
   assert.match(css, /stats-content-head/);
   assert.doesNotMatch(html, /100 фактов/);
