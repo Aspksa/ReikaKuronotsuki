@@ -32,6 +32,10 @@
 
     <div class="side-bottom">
       <div class="side-foot">
+        <a href="#/settings" id="nav-settings" class="nav-item" data-route="settings" data-tip="Настройки" hidden>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V20a2 2 0 11-4 0v-.1A1.6 1.6 0 008 18.4a1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H2a2 2 0 110-4h.1A1.6 1.6 0 003.6 8a1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H8a1.6 1.6 0 001-1.5V2a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V8a1.6 1.6 0 001.5 1H22a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>
+          <span class="label">Настройки</span>
+        </a>
         <div class="update-card" id="update-card" data-state="idle" hidden>
           <a href="#/update" id="nav-update" class="nav-item update-entry" data-route="update" data-tip="Обновления">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path id="update-ico-path" d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5"/></svg>
@@ -65,6 +69,45 @@
           <li class="card"><span class="card__label">Версия</span><b class="card__value" id="card-version">—</b></li>
           <li class="card"><span class="card__label">Обновления</span><b class="card__value" id="card-update">—</b></li>
         </ul>
+      </div>
+    </section>
+
+    <section class="page" id="page-settings" data-page="settings" aria-labelledby="settings-title" hidden>
+      <header class="page-head"><h2 id="settings-title">Настройки</h2></header>
+      <div class="settings">
+        <section class="panel set-card" aria-labelledby="set-server-title">
+          <h3 id="set-server-title">Сервер</h3>
+          <p class="text-muted">Рэйка работает только на этом компьютере по адресу <b id="set-address">—</b>. Если порт занят, при запуске берётся соседний свободный.</p>
+          <label class="form-row">Порт <input id="set-port" class="field" type="number" min="1024" max="65535" step="1" inputmode="numeric"></label>
+          <p id="set-port-note" class="text-muted" hidden></p>
+          <div class="set-actions"><button id="set-save" class="btn btn--primary" type="button">Сохранить</button><span id="set-saved" class="set-hint" hidden>Сохранено. Применится при следующем запуске Рэйки.</span></div>
+        </section>
+
+        <section class="panel set-card" aria-labelledby="set-chat-title">
+          <h3 id="set-chat-title">Чат</h3>
+          <label class="form-row set-switch"><span>Тихий звук, когда Рэйка отвечает</span><input id="set-sound" class="set-check" type="checkbox"></label>
+          <p class="text-muted">В памяти сейчас <b id="set-count">—</b> сообщений. Хранится не больше 500 последних.</p>
+          <div class="set-actions"><button id="set-clear" class="btn btn--outline" type="button">Очистить историю чата</button></div>
+        </section>
+
+        <section class="panel set-card set-card--wide" aria-labelledby="set-data-title">
+          <h3 id="set-data-title">Данные и копия</h3>
+          <p class="text-muted">Переписка и настройки лежат в папке <b id="set-datadir" class="set-path">—</b>. Обновление их не трогает, но флешку легко потерять: сохраните копию.</p>
+          <div class="set-actions">
+            <a id="set-export" class="btn btn--primary" href="api/backup" download>Сохранить копию</a>
+            <label class="btn btn--outline file-btn">Восстановить из копии<input id="set-import" class="sr" type="file" accept=".json,application/json"></label>
+          </div>
+          <p class="text-muted">Восстановление заменяет всю переписку содержимым файла. Настройки из копии не применяются: порт задаётся выше.</p>
+          <p id="set-error" class="callout callout--warn" hidden></p>
+        </section>
+
+        <section class="panel set-card set-card--wide" aria-labelledby="set-more-title">
+          <h3 id="set-more-title">Ещё</h3>
+          <ul class="set-links">
+            <li><a href="#/update" id="set-to-update">Обновления</a> — канал, автопроверка и установка из файла.</li>
+            <li><button id="set-about" class="set-linkbtn" type="button">О проекте</button> — версия, режим и ссылка на репозиторий.</li>
+          </ul>
+        </section>
       </div>
     </section>
 
@@ -216,6 +259,7 @@
 <script src="stats-visual.js"></script>
 <script src="update-stats.js"></script>
 <script src="sky.js"></script>
+<script src="settings.js"></script>
 <script src="shell.js"></script>
 <script src="orb.js"></script>
 </body>

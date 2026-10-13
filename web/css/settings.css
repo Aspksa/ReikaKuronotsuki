@@ -1,0 +1,14 @@
+/* "Настройки": a few plain cards, the same ones the update page uses. */
+.settings { max-width: var(--page-max); margin: 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.set-card { min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.set-card--wide { grid-column: 1 / -1; }
+.set-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.set-hint { color: var(--ok); font-size: var(--text-sm); }
+.set-path { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-weight: 600; overflow-wrap: anywhere; }
+.set-switch { cursor: pointer; }
+.set-check { width: 18px; height: 18px; flex: none; accent-color: var(--crimson-hi); cursor: pointer; }
+.settings .form-row .field { width: 140px; }
+.set-links { margin: 0; padding-left: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-muted); }
+.set-links a, .set-linkbtn { color: var(--text); }
+.set-linkbtn { padding: 0; border: 0; background: none; font: inherit; color: var(--text); text-decoration: underline; }
+@media (max-width: 860px) { .settings { grid-template-columns: minmax(0, 1fr); } }

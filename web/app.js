@@ -106,6 +106,7 @@
       render(user);
       render(reika);
       setMood(reika.emotion);
+      if (window.ReikaSound) window.ReikaSound.play();
     } catch (error) {
       render({ role: 'reika', text: `⚠ ${error.message}`, at: new Date().toISOString() });
     } finally {
@@ -128,10 +129,16 @@
     setMood('neutral');
   });
 
-  ready.then((b) => b.history()).then(({ messages }) => {
+  function showHistory({ messages }) {
+    log.textContent = '';
     if (!messages.length) render({ role: 'reika', text: 'Здравствуй. Я Рэйка. О чём поговорим?', at: new Date().toISOString() });
     for (const m of messages) render(m);
     const last = messages.filter((m) => m.role === 'reika').pop();
-    if (last) setMood(last.emotion);
-  }).catch(() => render({ role: 'reika', text: '⚠ Не удалось загрузить историю.', at: new Date().toISOString() }));
+    setMood(last ? last.emotion : 'neutral');
+  }
+  const reload = () => ready.then((b) => b.history()).then(showHistory).catch(() => render({ role: 'reika', text: '⚠ Не удалось загрузить историю.', at: new Date().toISOString() }));
+  // The settings page can clear the history or restore it from a copy: show what is in store now.
+  window.addEventListener('reika:history-cleared', reload);
+  window.addEventListener('reika:history-restored', reload);
+  reload();
 })();

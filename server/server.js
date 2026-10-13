@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const core = require('../core/reika-core');
+const settings = require('../core/settings');
 const { collect: collectStats } = require('../update/stats');
 
 const MIME = {
@@ -15,9 +16,12 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.jpg': 'image/jpeg',
 };
 const MAX_BODY = 16 * 1024;
 const MAX_ARCHIVE = 60_000_000;
+const MAX_BACKUP = 4 * 1024 * 1024; // a copy of the chat history: 500 messages at most, so 4 MB is plenty
 
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), 'utf8');
@@ -64,7 +68,7 @@ function readBuffer(req, max) {
   });
 }
 
-function createApp({ webRoot, dataDir, updater = null, restart = () => false }) {
+function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..'), port = null, updater = null, restart = () => false }) {
   const store = core.createStore(dataDir);
   const root = path.resolve(webRoot);
 
@@ -132,6 +136,34 @@ function createApp({ webRoot, dataDir, updater = null, restart = () => false }) 
     try {
       if (url.pathname === '/api/health' && req.method === 'GET') return sendJson(res, 200, { ok: true, name: 'Reika Kuronotsuki', version: updater ? updater.localVersion() : null });
       if (url.pathname.startsWith('/api/update/')) return handleUpdate(req, res, url);
+      if (url.pathname === '/api/settings') {
+        if (req.method === 'GET') return sendJson(res, 200, { ...settings.read(projectRoot), activePort: port, dataDir, messages: store.all().length, limits: { minPort: settings.MIN_PORT, maxPort: settings.MAX_PORT } });
+        if (req.method === 'POST') {
+          let patch;
+          try { patch = JSON.parse((await readBody(req)) || '{}'); } catch { return sendJson(res, 400, { error: 'Некорректный JSON' }); }
+          try { return sendJson(res, 200, { ...settings.write(projectRoot, patch), activePort: port, dataDir, messages: store.all().length }); }
+          catch (error) { return sendJson(res, error.status || 400, { error: error.message }); }
+        }
+        return sendJson(res, 405, { error: 'method not allowed' });
+      }
+      // A copy of everything of yours: the chat history and the settings, in one file you can keep anywhere.
+      if (url.pathname === '/api/backup') {
+        if (req.method === 'GET') {
+          const body = Buffer.from(JSON.stringify({ kind: 'reika-backup', version: 1, createdAt: new Date().toISOString(), settings: settings.read(projectRoot), messages: store.all() }, null, 2), 'utf8');
+          const name = `reika-backup-${new Date().toISOString().slice(0, 10)}.json`;
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length, 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' });
+          return res.end(body);
+        }
+        if (req.method === 'POST') {
+          let payload;
+          try { payload = JSON.parse((await readBuffer(req, MAX_BACKUP)).toString('utf8')); }
+          catch (error) { return sendJson(res, error.status || 400, { error: error.status === 413 ? 'Файл слишком большой' : 'Это не похоже на файл копии' }); }
+          if (!payload || payload.kind !== 'reika-backup' || !Array.isArray(payload.messages)) return sendJson(res, 400, { error: 'Это не копия Рэйки: нет списка сообщений' });
+          const restored = store.replace(payload.messages);
+          return sendJson(res, 200, { ok: true, messages: restored, skipped: payload.messages.length - restored });
+        }
+        return sendJson(res, 405, { error: 'method not allowed' });
+      }
       if (url.pathname === '/api/history') {
         if (req.method === 'GET') return sendJson(res, 200, { messages: store.all() });
         if (req.method === 'DELETE') { store.clear(); return sendJson(res, 200, { ok: true }); }

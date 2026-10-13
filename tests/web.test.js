@@ -43,7 +43,10 @@ test('page loads the engine before the app and uses relative URLs (works under a
 
 test('every file the page references exists', () => {
   const html = read('index.html');
-  for (const [, ref] of html.matchAll(/(?:src|href)="([^"#:]+)"/g)) assert.ok(fs.existsSync(path.join(web, ref)), `${ref} is missing`);
+  for (const [, ref] of html.matchAll(/(?:src|href)="([^"#:]+)"/g)) {
+    if (ref.startsWith('api/')) continue; // a server route, not a file on disk
+    assert.ok(fs.existsSync(path.join(web, ref)), `${ref} is missing`);
+  }
 });
 
 test('every element id used by the page scripts exists in index.html (sidebar, orb, chat, update page)', () => {
@@ -86,16 +89,16 @@ test('the chat opens from the floating logo: hidden panel, draggable orb with ke
   assert.ok(html.indexOf('orb.js') > html.indexOf('app.js'));
 });
 
-test('the home page has no names/titles and no picture; the artwork is only the chat avatar', () => {
+test('the home page has no names/titles and no picture; the chat avatar is the logo, the old artwork is gone', () => {
   const html = read('index.html');
-  const home = html.slice(html.indexOf('id="page-home"'), html.indexOf('id="page-update"'));
+  const home = html.slice(html.indexOf('id="page-home"'), html.indexOf('id="page-settings"'));
   assert.ok(!/<img\b/.test(home), 'no picture on the home page');
   assert.ok(!/eyebrow|class="lead"|class="art/.test(home), 'no visible names or taglines on the home page');
   assert.match(home, /<h1 class="sr">/, 'the page keeps a heading for screen readers only');
-  assert.ok(!/assets\/reika\.jpg/.test(html), 'index.html no longer shows the artwork');
-  const file = path.join(web, 'assets', 'reika.jpg');
-  assert.ok(fs.existsSync(file) && fs.statSync(file).size < 1_500_000, 'the avatar image exists and stays light');
-  assert.match(allCss(), /assets\/reika\.jpg/);
+  const all = html + allCss();
+  assert.ok(!/reika\.jpg/.test(all), 'the artwork is not used anywhere any more');
+  assert.ok(!fs.existsSync(path.join(web, 'assets', 'reika.jpg')), 'the artwork file is removed');
+  assert.match(allCss(), /\.face \{[^}]*assets\/logo\/logo-256\.webp/, 'the chat avatar uses the logo');
 });
 
 test('the supplied logo set is used everywhere: menu, floating logo, favicon and the Windows tray', () => {
@@ -146,4 +149,27 @@ test('collapsed menu: every icon of the bottom block sits on the same vertical a
   assert.match(css, /\.collapsed \.update-card \{[^}]*display: flex;[^}]*justify-content: center/, 'the update entry is centred like its neighbours');
   assert.match(css, /\.collapsed \.nav-item, \.collapsed \.side-about \{[^}]*width: var\(--control-h\)/);
   assert.match(css, /\.collapsed \.side-foot \{[^}]*align-items: center/);
+});
+
+test('settings page: its own route, hidden in the menu until a server answers, and every control is wired', () => {
+  const html = read('index.html');
+  const side = html.slice(html.indexOf('<aside'), html.indexOf('</aside>'));
+  assert.match(side, /id="nav-settings"[^>]*data-route="settings"[^>]*hidden/, 'the entry waits for the local server');
+  assert.ok(side.indexOf('id="nav-settings"') < side.indexOf('id="update-card"'), 'settings sit above the update entry');
+  assert.match(html, /id="page-settings"[^>]*data-page="settings"[^>]*hidden/);
+  const page = html.slice(html.indexOf('id="page-settings"'), html.indexOf('id="page-update"'));
+  for (const id of ['set-port', 'set-save', 'set-address', 'set-sound', 'set-count', 'set-clear', 'set-datadir', 'set-export', 'set-import', 'set-error']) {
+    assert.ok(page.includes(`id="${id}"`), `#${id} is missing on the settings page`);
+  }
+  assert.match(page, /id="set-export"[^>]*href="api\/backup"[^>]*download/);
+  assert.match(page, /id="set-import"[^>]*type="file"[^>]*accept="[^"]*json/);
+  const js = read('settings.js');
+  assert.match(js, /api\/settings/); assert.match(js, /api\/backup/); assert.match(js, /api\/history/);
+  assert.match(js, /reika\.sound\.v1/);
+  assert.match(js, /window\.ReikaSound/);
+  assert.match(js, /confirm\(/, 'clearing and restoring ask first');
+  assert.ok(html.indexOf('src="settings.js"') < html.indexOf('src="shell.js"'), 'settings.js defines ReikaSound before the shell runs');
+  assert.match(read('app.js'), /window\.ReikaSound\.play\(\)/, 'the chat plays the sound of an answer');
+  assert.match(read('app.js'), /reika:history-cleared/, 'the chat reloads when the settings page clears the history');
+  assert.match(read('shell.js'), /needsServer/, 'routes that need the server fall back to the home page without it');
 });
