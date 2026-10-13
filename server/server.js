@@ -83,11 +83,26 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
     }).catch(error => { console.warn('MemOS недоступен:', error.message); return null; });
     return memoryPromise;
   }
+  // Persist only explicit, meaningful first-person statements; questions and commands
+  // stay in chat history, not in the long-term fact graph.
+  function memoryCandidate(text) {
+    const value = String(text || '').trim();
+    if (value.length < 12 || value.length > 350 || /[?？]/.test(value)) return null;
+    if (/^(?:привет|пока|спасибо|окей|хорошо|да|нет|сделай|покажи|найди|объясни|расскажи|помоги|проверь|переведи|напиши|запусти|открой|удали|поставь|установи)\\b/i.test(value)) return null;
+    if (!/(?:\\bя\\s+(?:люблю|предпочитаю|хочу|живу|работаю|учусь|ненавижу|использую|увлекаюсь|не люблю)\\b|\\bмне\\s+(?:нравится|не нравится|важно|нужно)\\b|\\bмой\\s+(?:любимый|адрес|город|проект|питомец)\\b|\\bмоя\\s+(?:любимая|работа|цель)\\b|\\bменя зовут\\b|\\bзапомни\\s*[:：,]?\\s+)/i.test(value)) return null;
+    return value.replace(/^запомни\\s*[:：,]?\\s*/i, '').trim() || null;
+  }
   async function remember(text) {
+    const content = memoryCandidate(text);
+    if (!content) return { skipped: true };
     const mem = await memory();
-    if (!mem) return false;
-    try { await mem.store(text, { type: 'fact', tags: ['reika-chat'], source: 'user_input' }); return true; }
-    catch (error) { console.warn('MemOS store:', error.message); return false; }
+    if (!mem) return { unavailable: true };
+    try {
+      const hits = await mem.search({ query: content, limit: 5 });
+      if (hits.some(hit => String(hit.node?.content || '').trim().toLocaleLowerCase('ru') === content.toLocaleLowerCase('ru'))) return { duplicate: true };
+      await mem.store(content, { type: /(?:люблю|предпочитаю|нравится|любим)/i.test(content) ? 'preference' : 'fact', tags: ['reika-chat'], source: 'user_input' });
+      return { saved: true };
+    } catch (error) { console.warn('MemOS store:', error.message); return { unavailable: true }; }
   }
   async function recall(text) {
     const mem = await memory();
@@ -299,9 +314,9 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         const provider = stored.aiProvider;
         const key = ai.providerInfo(provider) ? secrets.get(dataDir, 'cloudru') : null;
         let answer = null, warning = null, source = 'reika';
+        const memories = await recall(text);
         if (ai.providerInfo(provider) && key) {
           try {
-            const memories = await recall(text);
             const result = await aiClient.reply({ provider, key, model: stored.aiModel, text, history: store.all(), memories });
             answer = { text: result.text, emotion: core.detectEmotion(result.text) };
             source = provider;
@@ -310,11 +325,17 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
             warning = error.message;
           }
         }
-        if (!answer) answer = core.reply(text);
+        if (!answer) {
+          // Rules-based offline Reika has no LLM: expose relevant memories
+          // transparently rather than pretending to perform semantic reasoning.
+          if (/\\b(?:помнишь|запомнила|вспомни|что ты знаешь обо мне|мои предпочтения)\\b/i.test(text)) {
+            answer = { text: memories.length ? 'Вот что я нашла в своей памяти:\\n' + memories.map(x => '• ' + x).join('\\n') : 'Пока не нашла подходящих воспоминаний. Можешь сказать «Запомни: …».', emotion: 'neutral' };
+          } else answer = core.reply(text);
+        }
         const user = store.add('user', text, core.detectEmotion(text));
         const reika = store.add('reika', answer.text, answer.emotion);
         const remembered = await remember(text);
-        if (!remembered) warning = [warning, 'Долговременная память MemOS недоступна: сообщение сохранено только в истории чата'].filter(Boolean).join('. ');
+        if (remembered.unavailable) warning = [warning, 'Долговременная память MemOS недоступна: сообщение сохранено только в истории чата'].filter(Boolean).join('. ');
         return sendJson(res, 200, { user, reika, source, ...(warning ? { warning } : {}) });
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
