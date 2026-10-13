@@ -6,9 +6,7 @@ const {DatabaseSync}=require('node:sqlite');
 const DATABASE='metrics.sqlite';
 const MAX_POINTS=10080; // one week at one sample per minute
 const INTERVAL=60000;
-const connections=new Map();
 function open(root){
-  if(connections.has(root))return connections.get(root);
   const dir=path.join(root,'.updates');
   fs.mkdirSync(dir,{recursive:true});
   const db=new DatabaseSync(path.join(dir,DATABASE));
@@ -31,14 +29,14 @@ function open(root){
     }catch{/* No old history, or unreadable: begin a new isolated history. */}
     db.prepare("INSERT OR REPLACE INTO metadata(key,value) VALUES ('history_migrated','1')").run();
   }
-  connections.set(root,db);
   return db;
 }
+function withDb(root,action){const db=open(root);try{return action(db);}finally{db.close();}}
 function readSamples(root){
-  return open(root).prepare('SELECT at,version,bytes,files,lines,rss,freeDiskBytes,installs,failures,downloads FROM (SELECT * FROM samples ORDER BY at DESC LIMIT ?) ORDER BY at ASC').all(MAX_POINTS);
+  return withDb(root,db=>db.prepare('SELECT at,version,bytes,files,lines,rss,freeDiskBytes,installs,failures,downloads FROM (SELECT * FROM samples ORDER BY at DESC LIMIT ?) ORDER BY at ASC').all(MAX_POINTS));
 }
 function appendSample(root,sample){
-  const db=open(root);
+  return withDb(root,db=>{
   const prev=db.prepare('SELECT at FROM samples ORDER BY at DESC LIMIT 1').get();
   if(prev && sample.at-prev.at<INTERVAL)return false;
   db.prepare('INSERT OR IGNORE INTO samples(at,version,bytes,files,lines,rss,freeDiskBytes,installs,failures,downloads) VALUES(?,?,?,?,?,?,?,?,?,?)')
@@ -47,9 +45,10 @@ function appendSample(root,sample){
   // Also guard against corrupt clocks or unusually high sampling rates.
   db.prepare('DELETE FROM samples WHERE at NOT IN (SELECT at FROM samples ORDER BY at DESC LIMIT ?)').run(MAX_POINTS);
   return true;
+  });
 }
 function getBaseline(root,scan){
-  const db=open(root);
+  return withDb(root,db=>{
   const existing=db.prepare("SELECT value FROM metadata WHERE key='baseline'").get();
   if(existing){try{const parsed=JSON.parse(existing.value);if(Number.isFinite(parsed.bytes)&&Number.isFinite(parsed.files))return parsed;}catch{}}
   let baseline=null;
@@ -57,6 +56,8 @@ function getBaseline(root,scan){
   baseline=baseline||{bytes:scan.bytes,files:scan.files,lines:scan.lines,at:Date.now()};
   db.prepare("INSERT OR REPLACE INTO metadata(key,value) VALUES ('baseline',?)").run(JSON.stringify(baseline));
   return baseline;
+  });
 }
-function close(root){const db=connections.get(root);if(db){connections.delete(root);db.close();}}
+// Connections are short-lived; provided for compatibility with callers/tests.
+function close(){ /* no persistent SQLite handle */ }
 module.exports={open,readSamples,appendSample,getBaseline,close,DATABASE,MAX_POINTS};
