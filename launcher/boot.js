@@ -41,10 +41,11 @@ function runServer({ updateApplied, port }) {
     let settled = false, confirmed = false, serverUrl = null;
     const finish = (result) => { if (!settled) { settled = true; resolve(result); } };
     child = spawn(process.execPath, [path.join(root, 'server', 'main.js')], {
-      cwd: root, stdio: ['pipe', 'pipe', 'inherit'], // stdin stays open: the server quits when it closes (supervisor died)
+      cwd: root, stdio: ['pipe', 'pipe', 'pipe'], // stdin stays open: the server quits when it closes (supervisor died); stderr is passed on and its tail kept
       env: { ...process.env, REIKA_SUPERVISED: '1', ...(port ? { REIKA_PORT: String(port) } : {}) },
     });
-    let buffer = '';
+    let buffer = '', errTail = '';
+    child.stderr.on('data', (chunk) => { process.stderr.write(chunk); errTail = (errTail + chunk.toString('utf8')).slice(-4000); });
     child.stdout.on('data', (chunk) => {
       buffer += chunk.toString('utf8');
       const lines = buffer.split(/\r?\n/);
@@ -73,7 +74,7 @@ function runServer({ updateApplied, port }) {
     const result = { port: null };
     child.on('exit', (code) => {
       if (code === RESTART_CODE) return finish({ restart: true, port: result.port });
-      if (updateApplied && !confirmed) return finish({ failedStart: true, message: `Новая версия завершилась с кодом ${code}`, code });
+      if (updateApplied && !confirmed) return finish({ failedStart: true, message: startFailure(`Новая версия завершилась с кодом ${code}`, errTail), code });
       finish({ code: code ?? 0 });
     });
     child.on('error', (e) => finish({ failedStart: true, message: e.message }));
@@ -84,6 +85,11 @@ async function waitHealthy(url) {
   const end = Date.now() + HEALTH_WAIT_MS;
   do { if (await healthy(url)) return true; await new Promise((r) => setTimeout(r, 250)); } while (Date.now() < end);
   return false;
+}
+// An update may need a newer Node.js than the one running (e.g. the built-in SQLite): say so instead of a bare exit code.
+function startFailure(message, errTail) {
+  if (/node:sqlite|ERR_UNKNOWN_BUILTIN_MODULE|experimental-sqlite/i.test(errTail || '')) return `Нужен Node.js 22.13 или новее (сейчас ${process.version}). ${message}`;
+  return message;
 }
 function killChild() { try { child?.kill(); } catch { /* gone */ } }
 

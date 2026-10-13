@@ -94,3 +94,14 @@ test('when the launcher is killed, its server does not stay behind holding the p
   }
   assert.equal(alive, false, 'the orphaned server is still answering');
 });
+
+test('a release that needs a newer Node.js is rolled back with a message that says so', async () => {
+  const root = copyProject(39500);
+  prepareUpdate(root, { 'server/main.js': "require('node:sqlite-from-the-future'); // needs a newer Node.js\n" }, { sha: SHA_B });
+  const b = boot(root);
+  try {
+    await b.until(/Нужен Node\.js 22\.13 или новее \(сейчас v[\d.]+\)/);
+    await b.until(/REIKA_READY/);
+    assert.match(fs.readFileSync(path.join(root, '.updates', 'history.jsonl'), 'utf8'), /Нужен Node\.js 22\.13/);
+  } finally { await b.stop(); }
+});

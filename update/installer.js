@@ -31,20 +31,28 @@ function pidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
 
+// The owner touches the lock file while it installs, so a long install is never taken over, while a lock whose
+// owner died (even if its PID was reused by an unrelated program) goes stale: nobody refreshes it any more.
+const LOCK_HEARTBEAT_MS = 5_000;
+const lockStaleMs = () => Number(process.env.REIKA_LOCK_STALE_MS) || 120_000;
+
 async function acquireLock(folder) {
   await fs.mkdir(folder, { recursive: true });
   const file = path.join(folder, 'install.lock');
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       await fs.writeFile(file, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: 'wx' });
-      return () => fs.rm(file, { force: true });
+      const beat = setInterval(() => { const now = new Date(); fs.utimes(file, now, now).catch(() => {}); }, LOCK_HEARTBEAT_MS);
+      beat.unref?.();
+      return () => { clearInterval(beat); return fs.rm(file, { force: true }); };
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
       const info = await fs.readFile(file, 'utf8').then(JSON.parse, () => null);
-      if (info && Number.isInteger(info.pid) && info.pid > 0 && pidAlive(info.pid)) {
+      const age = await fs.stat(file).then((st) => Date.now() - st.mtimeMs, () => Infinity);
+      if (info && Number.isInteger(info.pid) && info.pid > 0 && pidAlive(info.pid) && age < lockStaleMs()) {
         throw Object.assign(new Error('Установка уже выполняется другим процессом'), { code: 'EBUSY_UPDATE' });
       }
-      await fs.rm(file, { force: true }); // the owner is gone: a stale lock
+      await fs.rm(file, { force: true }); // the owner is gone or silent: a stale lock
     }
   }
   throw Object.assign(new Error('Не удалось получить блокировку установки'), { code: 'EBUSY_UPDATE' });
@@ -334,4 +342,4 @@ function installNote(manifest) {
   return typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : '';
 }
 
-module.exports = { applyPreparedUpdate, applyRollbackRequest, rollbackInstall, rollbackFailedStart, confirmUpdate, recoverInterrupted, defaultHealthCheck, pruneUpdateFolder, installNote };
+module.exports = { acquireLock, applyPreparedUpdate, applyRollbackRequest, rollbackInstall, rollbackFailedStart, confirmUpdate, recoverInterrupted, defaultHealthCheck, pruneUpdateFolder, installNote };
