@@ -231,3 +231,12 @@ test('dashboard does not show verbose diagnostics or automatic commentary',async
   assert.doesNotMatch(js,/Необычных изменений пока не обнаружено/);
   assert.match(html,/up-stats-highlights/);
 });
+
+test('Windows launcher rejects pre-22.13 portable Node without SQLite and upgrades it',async()=>{
+  const ps=await fs.readFile(path.join(__dirname,'..','launcher','start.ps1'),'utf8');
+  assert.match(ps,/\$nodeVersion = 'v22\.16\.0'/);
+  assert.match(ps,/function Test-NodeRuntime/);
+  assert.match(ps,/\[version\]'22\.13\.0'/);
+  assert.match(ps,/Test-NodeRuntime -Candidate \$local/);
+  assert.match(ps,/Install-PortableNode/);
+});
