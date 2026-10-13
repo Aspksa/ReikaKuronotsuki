@@ -151,3 +151,16 @@ test('new metric interactions expose keyboard-accessible controls and dialog', a
   assert.match(css,/\.stats-detail::backdrop/);
   assert.match(css,/\.stats-open:focus-visible/);
 });
+
+test('crimson dashboard retains usable controls and mobile accessibility', async () => {
+  const css=await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
+  const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
+  assert.match(css,/--stat-pro-accent:var\(--crimson-hi\)/);
+  assert.match(css,/\.stats-tile--hero:focus-within/);
+  assert.match(css,/\.stats-tab\[aria-pressed="true"\]/);
+  assert.match(css,/\.stats-star:focus-visible/);
+  assert.match(css,/@media\(max-width:670px\)/);
+  assert.match(css,/prefers-reduced-motion:reduce/);
+  for(const id of ['up-stats-search','up-stats-favorites-toggle','up-stats-period','up-stats-detail'])assert.ok(html.includes('id="'+id+'"'));
+  assert.doesNotMatch(html, /<h3>Статистика<\/h3>/);
+});
