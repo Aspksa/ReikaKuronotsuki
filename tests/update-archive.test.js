@@ -62,7 +62,7 @@ test('an archive becomes a ready update: top folder stripped, user files skipped
   await u.startFromArchive(zipOf(files), 'Рэйка main.zip');
   const st = u.status();
   assert.equal(st.phase, 'ready', st.error);
-  assert.deepEqual(ran, [path.join(root, '.updates', 'staging')], 'tests run in the staging folder');
+  assert.deepEqual(ran, [], 'archive-supplied scripts must never execute during preparation');
   const ready = JSON.parse(read(root, '.updates/ready.json'));
   assert.deepEqual(ready.files.map((f) => f.path).sort(), Object.keys(PROJECT_FILES).sort(), 'user files and secrets from the archive are skipped');
   assert.match(ready.sha, /^[0-9a-f]{40}$/);
@@ -89,7 +89,7 @@ test('an archive without the top folder works too, and the same content always g
   assert.notEqual(c.latest.sha, a.latest.sha);
 });
 
-test('bad archives are clean errors: unsafe paths, not this project, damaged, too little disk, failing tests', async () => {
+test('bad archives are clean errors: unsafe paths, not this project, damaged, too little disk, bad syntax', async () => {
   const check = async (buffer, message, extra) => {
     const root = tmpProject();
     const u = make(root, extra);
@@ -105,7 +105,7 @@ test('bad archives are clean errors: unsafe paths, not this project, damaged, to
   await check(zipOf({ 'readme.txt': 'just some other project' }), /не архив проекта Рэйки/);
   await check(Buffer.from('definitely not a zip file, sorry about that'), /не ZIP/);
   await check(zipOf(PROJECT_FILES), /Недостаточно места/, { freeBytes: () => 1000 });
-  await check(zipOf(PROJECT_FILES), /Тесты завершились/, { runner: async () => { throw new Error('Тесты завершились с кодом 1'); } });
+  await check(zipOf({ ...PROJECT_FILES, 'config.default.json': '{ invalid json' }), /JSON|Unexpected|property name|Expected/);
   await check(Buffer.alloc(0), /больше|пуст/);
 });
 

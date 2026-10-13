@@ -19,11 +19,12 @@ const say = (text) => console.log(text);
 
 function getJson(url) {
   return new Promise((resolve) => {
-    http.get(url, (res) => {
+    const request = http.get(url, (res) => {
       let body = '';
       res.on('data', (c) => { body += c; });
       res.on('end', () => { try { resolve({ status: res.statusCode, json: JSON.parse(body) }); } catch { resolve({ status: res.statusCode, json: null }); } });
     }).on('error', () => resolve(null));
+    request.setTimeout(3000, () => request.destroy(new Error('Health check timeout')));
   });
 }
 // Healthy = HTTP 2xx and {ok:true}. Any other answer (even a quick 500) is NOT a working version.
@@ -56,7 +57,17 @@ function runServer({ updateApplied, port }) {
       serverUrl = info.url;
       if (!(await waitHealthy(serverUrl))) { killChild(); return finish({ failedStart: true, message: 'Сервер не ответил на проверку состояния' }); }
       if (!readyPrinted) { readyPrinted = true; say(line); } // the tray reads the first READY line only
-      if (updateApplied) setTimeout(() => { if (!settled && child) { confirmed = true; confirmUpdate(root).then(() => say('Новая версия подтверждена.')); } }, STABLE_MS).unref?.();
+      if (updateApplied) setTimeout(async () => {
+        if (settled || !child || child.exitCode !== null) return;
+        try {
+          await confirmUpdate(root);
+          confirmed = true;
+          say('Новая версия подтверждена.');
+        } catch (e) {
+          say('Не удалось подтвердить новую версию: ' + e.message);
+          killChild();
+        }
+      }, STABLE_MS).unref?.();
       result.port = info.port;
     }
     const result = { port: null };
@@ -92,6 +103,9 @@ async function main() {
         try { fs.renameSync(path.join(root, '.updates', 'ready.json'), path.join(root, '.updates', `ready.failed-${Date.now()}.json`)); } catch { /* keep going */ }
       }
     }
+    // A power loss may happen after install() wrote pending-confirm.json but before
+    // boot.js could confirm startup. Treat that version as unconfirmed on every launch.
+    if (!updateApplied && fs.existsSync(path.join(root, '.updates', 'pending-confirm.json'))) updateApplied = true;
     const result = await runServer({ updateApplied, port });
     port = result.port || port;
     if (result.restart) continue;

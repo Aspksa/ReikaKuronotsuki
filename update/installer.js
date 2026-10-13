@@ -10,6 +10,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
+const { resolveDataDir } = require('../core/reika-core');
 const { SHA, BACKUP_NAME, pathKey, safeUpdatePath, gitHash, readOrNull, atomicWrite, assertNoLinks } = require('./shared');
 
 const KEEP_BACKUPS = 3;
@@ -40,7 +41,7 @@ async function acquireLock(folder) {
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
       const info = await fs.readFile(file, 'utf8').then(JSON.parse, () => null);
-      if (info && pidAlive(info.pid) && Date.now() - info.at < 10 * 60_000) {
+      if (info && Number.isInteger(info.pid) && info.pid > 0 && pidAlive(info.pid)) {
         throw Object.assign(new Error('Установка уже выполняется другим процессом'), { code: 'EBUSY_UPDATE' });
       }
       await fs.rm(file, { force: true }); // the owner is gone: a stale lock
@@ -61,7 +62,7 @@ const skipTemporary = (src) => !/\.(tmp|lock)$|\.write-test-/.test(src);
 
 // Copy of data/ taken before an install. Returns true when a snapshot exists.
 async function snapshotData(root, backup) {
-  const data = path.join(root, 'data');
+  const data = resolveDataDir(root);
   if (!existsSync(data)) return false;
   if (await dirSize(data) > MAX_DATA_SNAPSHOT_BYTES) return false;
   await fs.cp(data, path.join(backup, 'data-snapshot'), { recursive: true, filter: skipTemporary });
@@ -69,7 +70,7 @@ async function snapshotData(root, backup) {
 }
 async function restoreDataSnapshot(root, backup) {
   const snap = path.join(backup, 'data-snapshot');
-  if (existsSync(snap)) await fs.cp(snap, path.join(root, 'data'), { recursive: true, force: true });
+  if (existsSync(snap)) await fs.cp(snap, resolveDataDir(root), { recursive: true, force: true });
 }
 
 /** Post-install smoke test: bytes on disk match the manifest and every .js file parses. */
