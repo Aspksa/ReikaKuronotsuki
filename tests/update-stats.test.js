@@ -85,3 +85,13 @@ test('refined dashboard has no redundant headings and supports searching all met
   assert.match(css, /stats-tile--hero:nth-child\(2\)/);
   assert.match(css, /prefers-reduced-motion/);
 });
+
+test('dashboard CSS uses one canonical declaration per base selector and breakpoint', async () => {
+  const css = await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'update.css'), 'utf8');
+  for (const selector of ['.stats-highlights', '.stats-tile--hero', '.stats-live', '.stats-tab[aria-pressed="true"]']) {
+    const hits = css.split('\\n').filter(line => line.startsWith(selector + ' {'));
+    assert.equal(hits.length, 1, selector + ' must have one base declaration');
+  }
+  assert.equal((css.match(/@media \\(max-width:1180px\\)/g) || []).length, 1);
+  assert.doesNotMatch(css, /\\.stats-heading/);
+});
