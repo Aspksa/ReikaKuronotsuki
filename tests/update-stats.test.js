@@ -116,10 +116,10 @@ test('metric history stays on disk and repeated requests reuse scans', async () 
 test('comparison and findings are based on persisted samples', async () => {
   const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
   const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
-  assert.match(html,/up-stats-comparison/);
-  assert.match(html,/up-stats-insights/);
+  assert.doesNotMatch(html,/up-stats-comparison/);
+  assert.doesNotMatch(html,/up-stats-insights/);
   assert.match(js,/replaySamples\(data\)/);
-  assert.match(js,/function showContext\(data\)/);
+  assert.doesNotMatch(js,/function showContext\(data\)/);
 });
 
 test('dashboard provides hour, day and week histories with truthful trend context', async () => {
@@ -128,7 +128,7 @@ test('dashboard provides hour, day and week histories with truthful trend contex
   assert.match(html,/id="up-stats-period"/);
   for(const ms of ['3600000','86400000','604800000'])assert.ok(html.includes('value="'+ms+'"'));
   assert.match(script,/const cutoff=now-Number\(period.value\)/);
-  assert.match(script,/Размер проекта:/);
+  assert.doesNotMatch(script,/Размер проекта:/);
   assert.doesNotMatch(script,/С прошлой записанной версии/);
 });
 
@@ -145,7 +145,7 @@ test('new metric interactions expose keyboard-accessible controls and dialog', a
   const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
   const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
   const css=await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
-  for(const id of ['up-stats-detail','up-stats-detail-close','up-stats-alerts','up-stats-gitdiff'])assert.ok(html.includes('id="'+id+'"'));
+  for(const id of ['up-stats-detail','up-stats-detail-close'])assert.ok(html.includes('id="'+id+'"'));
   assert.match(js,/function openDetail\(/);
   assert.match(js,/showModal\(\)/);
   assert.match(css,/\.stats-detail::backdrop/);
@@ -219,4 +219,15 @@ test('existing metric history migrates once and the SQLite timeline stays bounde
     metricsDb.close(root);
     assert.equal(metricsDb.readSamples(root).length,2);
   }finally{metricsDb.close(root);await fs.rm(root,{recursive:true,force:true});}
+});
+
+test('dashboard does not show verbose diagnostics or automatic commentary',async()=>{
+  const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
+  const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
+  for(const term of ['up-stats-note','up-stats-comparison','up-stats-gitdiff','up-stats-alerts','up-stats-insights','Антон Александрович']){
+    assert.equal(html.includes(term),false,term);
+    assert.equal(js.includes(term),false,term);
+  }
+  assert.doesNotMatch(js,/Необычных изменений пока не обнаружено/);
+  assert.match(html,/up-stats-highlights/);
 });

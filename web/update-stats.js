@@ -242,34 +242,6 @@
       if(series.length)traces.set(key,series);
     }
   }
-  function showContext(data) {
-    const comparison=$('up-stats-comparison');
-    const insights=$('up-stats-insights');
-    const baseline=data.versionComparison;
-    if(baseline){
-      const when=new Date(baseline.from).toLocaleDateString('ru-RU');
-      const signed=n=>(n>0?'+':'')+num(n);
-      const currentSize=data.scan?.bytes;
-      const previousSize=Number.isFinite(currentSize)?currentSize-baseline.bytes:null;
-      const percent=previousSize>0?100*baseline.bytes/previousSize:null;
-      comparison.textContent='Размер проекта: '+format(currentSize,'bytes')+' · изменение '+signed(baseline.bytes)+' Б'+(percent===null?'':' ('+(percent>0?'+':'')+num(percent)+'%)')+'. Файлы: '+signed(baseline.files)+' · строки: '+signed(baseline.lines)+'. Сравнение с измерением от '+when+'.';
-    }else comparison.textContent='Сравнение появится после первого сохранённого измерения.';
-    const git=$('up-stats-gitdiff');
-    const d=data.gitDiff;
-    git.textContent=d?'Последний коммит '+d.from+' → '+d.to+': файлов изменено '+d.changedFiles+', добавлено '+d.addedFiles+', удалено '+d.deletedFiles+'; строк +'+d.addedLines+' / −'+d.deletedLines+'.':'Сравнение коммитов недоступно: требуется локальная история Git с минимум двумя коммитами.';
-    const alerts=$('up-stats-alerts');alerts.replaceChildren();
-    for(const a of data.anomalies||[]){const p=document.createElement('p');p.textContent='Обратить внимание: '+a.title+' ('+(a.changePercent>0?'+':'')+a.changePercent+'% относительно последних пяти измерений)';alerts.appendChild(p);}
-    const sentences=[];
-    if(baseline){
-      if(baseline.bytes>0 && baseline.files===0)sentences.push('Размер проекта вырос без увеличения числа файлов — вероятно, изменилось содержимое существующих.');
-      if(baseline.files>0 && baseline.bytes<0)sentences.push('Файлов стало больше, но проект стал занимать меньше места.');
-      if(baseline.lines>0 && baseline.bytes<0)sentences.push('Строк стало больше, хотя общий размер уменьшился.');
-    }
-    if(data.history?.failures>0)sentences.push('В истории есть неудачные установки: '+data.history.failures+'.');
-    insights.replaceChildren();
-    if(!sentences.length){insights.textContent='Необычных изменений пока не обнаружено.';return;}
-    for(const msg of sentences.slice(0,3)){const p=document.createElement('p');p.textContent=msg;insights.appendChild(p);}
-  }
   function renderValue(c,data){
     const value=get(data,c.key);
     const previous=c.previous;
@@ -312,11 +284,10 @@
       if(!res.ok)throw Error('HTTP '+res.status);
       const data=expand(await res.json());lastData=data;lastFetch=Date.now();
       replaySamples(data);
-      showContext(data);
       for(const c of cards)renderValue(c,data);
       $('stats-live-time').textContent=new Date(data.capturedAt).toLocaleTimeString('ru-RU');
-      $('up-stats-note').textContent='Данные из файлов проекта и локальных журналов. Графики отражают измерения текущей сессии; история до начала записи может отсутствовать.';
-    }catch(e){$('up-stats-note').textContent='Статистика пока недоступна: '+e.message;}
+
+    }catch(e){console.warn('Не удалось получить статистику:',e);$('stats-live-time').textContent='Нет данных';}
     finally{busy=false;}
   }
   window.ReikaStats={load,count:cards.length};
