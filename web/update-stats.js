@@ -144,9 +144,12 @@
     const meta=document.createElement('div');meta.className='stats-meta';meta.append(value,trend);
     card.append(icon,name,meta,chart);
     const c={key,unit,value,trend,chart,card};
+    if(!compact){card.dataset.search=label.toLocaleLowerCase('ru-RU');card.dataset.metricLabel=label;}
     cards.push(c);
     return card;
   }
+  const search=$('up-stats-search');
+  const empty=$('up-stats-empty');
   const tabButtons=[];
   let ordinal=0;
   groups.forEach(([title,items],i)=>{
@@ -167,12 +170,31 @@
     for(const [label,key,unit] of items){grid.appendChild(createCard(label,key,unit,ordinal++));}
     section.appendChild(grid);root.appendChild(section);
   });
+  function filterMetrics(){
+    const query=search.value.trim().toLocaleLowerCase('ru-RU');
+    tabs.hidden=!!query;
+    let shown=0;
+    root.querySelectorAll('.stats-category').forEach((section,i)=>{
+      const visibleRows=Array.from(section.querySelectorAll('.stats-tile')).filter(tile=>{
+        const matched=!query || tile.dataset.search.includes(query);
+        tile.hidden=!matched;
+        if(matched)shown++;
+        return matched;
+      });
+      section.hidden=query?visibleRows.length===0:i!==selected.index;
+    });
+    empty.hidden=shown!==0;
+    $('up-stats-section-title').textContent=query?'Поиск: '+search.value.trim():groups[selected.index][0];
+    $('up-stats-section-count').textContent=query?shown+' найдено':groups[selected.index][1].length+' показателей';
+  }
+  search.addEventListener('input',filterMetrics);
   function activate(i){
     selected.index=i;
     $('up-stats-section-title').textContent=groups[i][0];
     $('up-stats-section-count').textContent=groups[i][1].length+' показателей';
     root.querySelectorAll('.stats-category').forEach((node,n)=>node.hidden=n!==i);
     tabButtons.forEach((tab,n)=>tab.setAttribute('aria-pressed',String(n===i)));
+    filterMetrics();
   }
   // Highlight six useful signals; duplicates share the same historic samples.
   const heroes=[
@@ -226,7 +248,8 @@
       if(!res.ok)throw Error('HTTP '+res.status);
       const data=expand(await res.json());lastFetch=Date.now();
       for(const c of cards)renderValue(c,data);
-      $('up-stats-note').textContent='Факты из проекта, процесса и журналов. Исторические данные доступны только с момента начала их записи. Обновлено: '+new Date(data.capturedAt).toLocaleTimeString('ru-RU');
+      $('stats-live-time').textContent=new Date(data.capturedAt).toLocaleTimeString('ru-RU');
+      $('up-stats-note').textContent='Данные из файлов проекта и локальных журналов. Графики отражают измерения текущей сессии; история до начала записи может отсутствовать.';
     }catch(e){$('up-stats-note').textContent='Статистика пока недоступна: '+e.message;}
     finally{busy=false;}
   }
