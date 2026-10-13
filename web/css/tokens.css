@@ -14,6 +14,16 @@
   --gold-rgb: 216 180 106; --crimson-rgb: 179 34 63; --pearl-rgb: 253 247 244; --blush-rgb: 229 198 195;
   --ok-rgb: 143 211 160; --warn-rgb: 242 162 139; --night-rgb: 11 12 22; --light-rgb: 255 236 178; --black-rgb: 0 0 0;
 
+  /* semantic accents for statistics (coordinated with existing dark palette) */
+  --stat-gold: #e3c27c; --stat-gold-rgb: 227 194 124;
+  --stat-blue: #83b9f3; --stat-blue-rgb: 131 185 243;
+  --stat-mint: #86d5b5; --stat-mint-rgb: 134 213 181;
+  --stat-violet: #b7a0ed; --stat-violet-rgb: 183 160 237;
+  --stat-rose: #ed9db8; --stat-rose-rgb: 237 157 184;
+  --stat-orange: #efb17e; --stat-orange-rgb: 239 177 126;
+  --stat-cyan: #7acfd7; --stat-cyan-rgb: 122 207 215;
+  --stat-silver: #c9cede; --stat-silver-rgb: 201 206 222;
+
   /* semantic */
   --bg: var(--night-900);
   --surface: rgb(22 20 38 / .78);
