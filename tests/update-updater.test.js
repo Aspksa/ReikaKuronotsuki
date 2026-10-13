@@ -201,6 +201,6 @@ test('MemOS upstream benchmark file larger than 10 MB can be staged and hash-ver
   const files = { 'vendor/memos/scripts/dataset/beam/data/beam_100k.json': benchmark };
   const u = make(root, { files, ci: passing });
   await u.start();
-  assert.equal(u.status().phase, 'ready', u.status().error);
+  assert.equal(u.status().phase, 'ready', JSON.stringify(u.status()));
   assert.equal(fs.statSync(path.join(root, '.updates/staging/vendor/memos/scripts/dataset/beam/data/beam_100k.json')).size, benchmark.length);
 });
