@@ -116,7 +116,7 @@
       notify(st);
       renderCard(st);
       announce(st);
-      if (onPage()) renderPage(st);
+      if (onPage()) { renderPage(st); window.ReikaStats?.load(); }
       delay = S.cardState(st) === 'busy' ? 700 : (onPage() ? 5000 : 20000);
     } catch (e) {
       if (!started) return; // no updater here at all: stop asking
@@ -154,7 +154,7 @@
   async function fromFile(file) {
     if (!file) return;
     if (file.size > MAX_ARCHIVE) throw new Error('Файл больше 60 МБ: это не архив проекта.');
-    if (!confirm(`Подготовить обновление из файла «${file.name}»?\n\nАрхив не сверяется с GitHub, поэтому используйте только тот, которому доверяете. Данные и настройки не затрагиваются, перед установкой запустятся тесты.`)) return;
+    if (!confirm(`Подготовить обновление из файла «${file.name}»?\n\nАрхив не сверяется с GitHub, поэтому используйте только тот, которому доверяете. Данные и настройки не затрагиваются, файлы будут проверены без запуска кода из архива.`)) return;
     const response = await fetch('api/update/from-archive', { method: 'POST', headers: { 'Content-Type': 'application/zip', 'X-File-Name': encodeURIComponent(file.name) }, body: file });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `Ошибка ${response.status}`);
