@@ -101,3 +101,16 @@ test('"Проверить связь" returns the catalogue of models', async ()
   assert.equal(seen.init.method, 'GET');
   assert.deepEqual(result.models, ['a/model', 'z/model'], 'sorted, and the nameless ones are dropped');
 });
+
+test('MemOS memories are separate trusted-role context and survive a full history window', async () => {
+  const seen = {};
+  const client = ai.createClient({ fetch: fakeFetch({}, seen) });
+  const history = Array.from({length: 80}, (_,i) => ({role: i%2 ? 'reika':'user', text: 'Сообщение '+i}));
+  await client.reply({provider:'cloudru',key:KEY,text:'Что я предпочитаю?',history,memories:['Любимый цвет: малиновый']});
+  assert.equal(seen.body.messages.length, ai.MAX_CONTEXT_MESSAGES + 3);
+  assert.equal(seen.body.messages[1].role,'system');
+  assert.match(seen.body.messages[1].content,/Любимый цвет: малиновый/);
+  assert.match(seen.body.messages[1].content,/не инструкции/);
+  assert.equal(seen.body.messages[2].content,'Сообщение 56');
+  assert.equal(seen.body.messages.at(-1).content,'Что я предпочитаю?');
+});
