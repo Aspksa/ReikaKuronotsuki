@@ -227,6 +227,41 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         if (req.method === 'DELETE') { store.clear(); return sendJson(res, 200, { ok: true }); }
         return sendJson(res, 405, { error: 'method not allowed' });
       }
+      // Memory controls are deliberately built into Reika's own HTTP handler.
+      // Only loopback callers with the same-origin policy can access these routes.
+      if (url.pathname === '/api/memory' || url.pathname.startsWith('/api/memory/')) {
+        const mem = await memory();
+        if (!mem) return sendJson(res, 503, { error: 'Память MemOS не установлена или недоступна' });
+        const id = url.pathname.startsWith('/api/memory/') ? decodeURIComponent(url.pathname.slice('/api/memory/'.length)) : null;
+        try {
+          if (req.method === 'GET' && !id) {
+            const result = await mem.export({ format: 'json' });
+            return sendJson(res, 200, { memories: JSON.parse(result.data), count: result.count });
+          }
+          if (req.method === 'DELETE' && id && id.length <= 128) return sendJson(res, 200, { deleted: await mem.forget(id) });
+          if (req.method === 'PATCH' && id && id.length <= 128) {
+            const input = JSON.parse(await readBody(req));
+            const content = core.normalizeText(input?.content);
+            if (!content) return sendJson(res, 400, { error: 'Нужен текст воспоминания' });
+            const updated = await mem.update(id, { content });
+            return updated ? sendJson(res, 200, { memory: updated }) : sendJson(res, 404, { error: 'Воспоминание не найдено' });
+          }
+          if (req.method === 'POST' && !id) {
+            const input = JSON.parse(await readBody(req));
+            const content = core.normalizeText(input?.content);
+            if (!content) return sendJson(res, 400, { error: 'Нужен текст воспоминания' });
+            const saved = await mem.store(content, { type: 'fact', source: 'user_input', tags: ['reika-chat'] });
+            return sendJson(res, 201, { memory: saved.node });
+          }
+          if (req.method === 'POST' && id === 'consolidate') {
+            const result = await mem.consolidate({ summarize: true });
+            return sendJson(res, 200, { result });
+          }
+        } catch (error) {
+          return sendJson(res, 400, { error: 'Операция с памятью не выполнена: ' + error.message });
+        }
+        return sendJson(res, 405, { error: 'Метод не поддерживается' });
+      }
       if (url.pathname === '/api/chat') {
         if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' });
         let payload;
