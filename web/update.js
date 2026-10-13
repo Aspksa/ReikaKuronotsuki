@@ -64,7 +64,9 @@
     const state = S.cardState(st);
     card.dataset.state = state;
     $('update-ico-path').setAttribute('d', S.ICONS[state]);
-    $('update-status').textContent = S.statusText(st, state);
+    const status = S.statusText(st, state);
+    $('update-status').textContent = status;
+    show($('update-status'), !!status);
     show($('update-dot'), state === 'available' || state === 'ready');
     const bar = $('update-mini');
     show(bar, state === 'busy' && st.phase === 'downloading');
@@ -77,7 +79,7 @@
     const pop = $('update-news');
     pop.textContent = '';
     if (n) {
-      const h = document.createElement('b'); h.textContent = `Что нового · ${n.version}`; pop.appendChild(h);
+      const h = document.createElement('b'); h.textContent = 'Что нового'; pop.appendChild(h);
       if (n.items.length) {
         const ul = document.createElement('ul');
         for (const t of n.items) { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); }
@@ -105,7 +107,7 @@
     }
     if (S.shouldNotifyNew(st, store.get())) {
       store.set(st.latest.sha);
-      toast({ key: 'update-new', title: 'Доступна новая версия', text: `Версия ${st.latest.version}. Её можно скачать и проверить, пока вы работаете.`, actions: [
+      toast({ key: 'update-new', title: 'Доступна новая версия', text: 'Её можно скачать и проверить, пока вы работаете.', actions: [
         { label: 'Скачать', run: () => call('download', 'POST', {}).then(poll).catch(() => { location.hash = '#/update'; }) },
         { label: 'Подробнее', run: () => { location.hash = '#/update'; } },
       ] });

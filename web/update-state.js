@@ -26,29 +26,24 @@
   }
 
   const ICONS = {
-    idle: 'M19 12a7 7 0 1 1-2.2-5.1M19 4v4.5h-4.5M12 9.6l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z', // circular arrow with a spark
+    idle: 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5',          // circular arrow
     busy: 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5',          // the same arrow, spinning (CSS)
     available: 'M12 4v11M7 11l5 5 5-5M5 20h14',            // arrow down into a tray
     ready: 'M5 12.5l4.5 4.5L19 7.5',                      // check mark
     error: 'M12 4l9 16H3zM12 10v4M12 17v.01',             // warning triangle
   };
 
-  function timeOf(ms) {
-    try { return new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
-  }
-
   /** The line under the entry's name. */
   function statusText(st, state = cardState(st)) {
     if (!st) return '';
-    const version = shortVersion(st.localVersion);
     switch (state) {
       case 'busy': return st.phase === 'testing' ? 'Проверка и тесты…' : `Скачивание… ${Math.max(0, Math.min(100, Math.round(st.percent || 0)))}%`;
       case 'ready':
         if (st.rollbackPending) return 'Откат ждёт перезапуска';
         return st.pendingRemovals && st.pendingRemovals.length && !st.removalsConfirmed ? 'Готово · подтвердите удаление файлов' : 'Готово к установке';
       case 'error': return 'Ошибка: ' + String(st.error || 'неизвестная').split('\n')[0].slice(0, 70);
-      case 'available': return st.blocked ? `Версия ${st.latest.version}: ждёт проверок CI` : `Доступна версия ${st.latest.version}`;
-      default: return `Версия ${version}` + (st.checkedAt ? ` · ${timeOf(st.checkedAt)}` : '');
+      case 'available': return st.blocked ? 'Ждёт проверок CI' : 'Есть новая версия';
+      default: return ''; // nothing to say: the entry is just its name
     }
   }
 
