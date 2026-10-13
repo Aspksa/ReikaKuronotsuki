@@ -75,48 +75,87 @@
     <section class="page" id="page-settings" data-page="settings" aria-labelledby="settings-title" hidden>
       <header class="page-head"><h2 id="settings-title">Настройки</h2></header>
       <div class="settings">
-        <section class="panel set-card" aria-labelledby="set-server-title">
-          <h3 id="set-server-title">Сервер</h3>
-          <p class="text-muted">Рэйка работает только на этом компьютере по адресу <b id="set-address">—</b>. Если порт занят, при запуске берётся соседний свободный.</p>
-          <label class="form-row">Порт <input id="set-port" class="field" type="number" min="1024" max="65535" step="1" inputmode="numeric"></label>
-          <p id="set-port-note" class="text-muted" hidden></p>
-          <div class="set-actions"><button id="set-save" class="btn btn--primary" type="button">Сохранить</button><span id="set-saved" class="set-hint" hidden>Сохранено. Применится при следующем запуске Рэйки.</span></div>
-        </section>
 
-        <section class="panel set-card" aria-labelledby="set-chat-title">
-          <h3 id="set-chat-title">Чат</h3>
-          <label class="form-row set-switch"><span>Тихий звук, когда Рэйка отвечает</span><input id="set-sound" class="set-check" type="checkbox"></label>
-          <p class="text-muted">В памяти сейчас <b id="set-count">—</b> сообщений. Хранится не больше 500 последних.</p>
-          <div class="set-actions"><button id="set-clear" class="btn btn--outline" type="button">Очистить историю чата</button></div>
-        </section>
+        <section class="panel set-card set-card--wide" aria-labelledby="set-chat-title">
+          <div class="set-head">
+            <h3 id="set-chat-title">Чат</h3>
+            <span class="set-badge" id="set-ai-badge" data-state="offline">Отвечает сама Рэйка</span>
+          </div>
 
-        <section class="panel set-card set-card--wide" aria-labelledby="set-ai-title">
-          <h3 id="set-ai-title">Кто отвечает в чате</h3>
-          <label class="form-row">Собеседник <select id="set-ai-provider" class="field"><option value="reika">Рэйка сама — без интернета и ключей</option></select></label>
+          <div class="set-row">
+            <div class="set-row__text"><b>Кто отвечает</b><small>Рэйка сама работает без интернета и ключей. Внешняя модель отвечает живее, но по вашему ключу.</small></div>
+            <div class="set-row__control"><select id="set-ai-provider" class="field"><option value="reika">Рэйка сама</option></select></div>
+          </div>
+
           <div id="set-ai-cloud" hidden>
-            <label class="form-row">Ключ <span class="set-key"><input id="set-ai-key" class="field" type="password" autocomplete="off" spellcheck="false" placeholder="вставьте ключ"><button id="set-ai-key-clear" class="btn btn--ghost" type="button" hidden>Убрать</button></span></label>
-            <p id="set-ai-key-state" class="text-muted"></p>
-            <label class="form-row">Модель <input id="set-ai-model" class="field" type="text" list="set-ai-models" autocomplete="off" spellcheck="false" placeholder="openai/gpt-oss-120b"></label>
-            <datalist id="set-ai-models"></datalist>
-            <div class="set-actions">
-              <button id="set-ai-check" class="btn btn--outline" type="button">Проверить связь</button>
-              <span id="set-ai-result" class="set-hint" hidden></span>
+            <div class="set-row">
+              <div class="set-row__text"><b>Ключ</b><small id="set-ai-key-state">Вставьте ключ и нажмите «Сохранить».</small></div>
+              <div class="set-row__control">
+                <input id="set-ai-key" class="field" type="password" autocomplete="off" spellcheck="false" placeholder="вставьте ключ" aria-label="Ключ провайдера">
+                <button id="set-ai-key-clear" class="btn btn--ghost" type="button" hidden>Убрать</button>
+              </div>
             </div>
-            <p class="callout">Ваши сообщения и ответы Рэйки уходят на серверы Cloud.ru. Ключ хранится только на этом компьютере, в папке данных, и не попадает ни в копию данных, ни в git. Если ключа нет или связи нет, Рэйка отвечает сама.</p>
-            <p class="text-muted">Ключ создаётся в консоли Cloud.ru: сервисный аккаунт → API-ключ. <a id="set-ai-help" href="https://cloud.ru/docs/foundation-models/ug/topics/quickstart" target="_blank" rel="noopener noreferrer">Как его получить</a>.</p>
+
+            <div class="set-row">
+              <div class="set-row__text"><b>Модель</b><small>Пусто — модель по умолчанию. «Проверить связь» подскажет, что доступно по вашему ключу.</small></div>
+              <div class="set-row__control">
+                <input id="set-ai-model" class="field" type="text" list="set-ai-models" autocomplete="off" spellcheck="false" placeholder="openai/gpt-oss-120b" aria-label="Модель">
+                <datalist id="set-ai-models"></datalist>
+                <button id="set-ai-check" class="btn btn--outline" type="button">Проверить связь</button>
+              </div>
+            </div>
+
+            <p id="set-ai-result" class="set-note set-note--ok" hidden></p>
+            <p class="set-note">Ваши сообщения и ответы Рэйки уходят на серверы провайдера. Ключ хранится только на этом компьютере, в папке данных, и не попадает ни в копию данных, ни в git. Если ключа или связи нет, Рэйка отвечает сама. Ключ создаётся в консоли Cloud.ru: сервисный аккаунт → API-ключ, <a id="set-ai-help" href="https://cloud.ru/docs/foundation-models/ug/topics/quickstart" target="_blank" rel="noopener noreferrer">как его получить</a>.</p>
           </div>
+
+          <div class="set-row">
+            <div class="set-row__text"><b>Тихий звук ответа</b><small>Только в этом браузере, применяется сразу.</small></div>
+            <div class="set-row__control"><input id="set-sound" class="set-check" type="checkbox" aria-label="Тихий звук, когда Рэйка отвечает"></div>
+          </div>
+
           <p id="set-ai-error" class="callout callout--warn" hidden></p>
+          <div class="set-foot">
+            <button id="set-ai-save" class="btn btn--primary" type="button" disabled>Сохранить</button>
+            <span id="set-ai-saved" class="set-hint" hidden>Сохранено</span>
+          </div>
         </section>
 
-        <section class="panel set-card set-card--wide" aria-labelledby="set-data-title">
-          <h3 id="set-data-title">Данные и копия</h3>
-          <p class="text-muted">Переписка и настройки лежат в папке <b id="set-datadir" class="set-path">—</b>. Обновление их не трогает, но флешку легко потерять: сохраните копию.</p>
-          <div class="set-actions">
-            <a id="set-export" class="btn btn--primary" href="api/backup" download>Сохранить копию</a>
-            <label class="btn btn--outline file-btn">Восстановить из копии<input id="set-import" class="sr" type="file" accept=".json,application/json"></label>
+        <section class="panel set-card" aria-labelledby="set-data-title">
+          <div class="set-head"><h3 id="set-data-title">Переписка</h3><span class="set-badge" id="set-count-badge">—</span></div>
+
+          <div class="set-row">
+            <div class="set-row__text"><b>Копия данных</b><small>Переписка и настройки одним файлом. Полезно, если проект живёт на флешке.</small></div>
+            <div class="set-row__control"><a id="set-export" class="btn btn--outline" href="api/backup" download>Скачать</a></div>
           </div>
-          <p class="text-muted">Восстановление заменяет всю переписку содержимым файла. Настройки из копии не применяются: порт задаётся выше.</p>
+
+          <div class="set-row">
+            <div class="set-row__text"><b>Восстановить из копии</b><small>Заменит всю переписку содержимым файла. Настройки из копии не применяются.</small></div>
+            <div class="set-row__control"><label class="btn btn--outline file-btn">Выбрать файл<input id="set-import" class="sr" type="file" accept=".json,application/json"></label></div>
+          </div>
+
+          <div class="set-row">
+            <div class="set-row__text"><b>Очистить переписку</b><small>Удалит <b id="set-count">—</b> сообщений без возможности вернуть. Сохранённая копия не изменится.</small></div>
+            <div class="set-row__control"><button id="set-clear" class="btn btn--outline" type="button">Очистить</button></div>
+          </div>
+
+          <p class="set-note">Папка с данными: <span id="set-datadir" class="set-path">—</span></p>
           <p id="set-error" class="callout callout--warn" hidden></p>
+        </section>
+
+        <section class="panel set-card" aria-labelledby="set-server-title">
+          <div class="set-head"><h3 id="set-server-title">Сервер</h3><span class="set-badge" id="set-address">—</span></div>
+
+          <div class="set-row">
+            <div class="set-row__text"><b>Порт</b><small>Рэйка слушает только этот компьютер. Если порт занят, при запуске берётся соседний свободный.</small></div>
+            <div class="set-row__control"><input id="set-port" class="field" type="number" min="1024" max="65535" step="1" inputmode="numeric" aria-label="Порт"></div>
+          </div>
+
+          <p id="set-port-note" class="set-note" hidden></p>
+          <div class="set-foot">
+            <button id="set-save" class="btn btn--primary" type="button" disabled>Сохранить</button>
+            <span id="set-saved" class="set-hint" hidden>Сохранено. Применится при следующем запуске Рэйки.</span>
+          </div>
         </section>
 
         <section class="panel set-card set-card--wide" aria-labelledby="set-more-title">

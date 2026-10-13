@@ -1,12 +1,11 @@
 'use strict';
-// "Настройки": the port, the chat sound, clearing the history and a copy of your data.
+// "Настройки": who answers in the chat, the key for the provider, the port, the history and a copy of your data.
 // Needs the local server; in a plain browser build the page stays hidden (shell.js decides by the route).
 (function () {
   const $ = (id) => document.getElementById(id);
   const page = $('page-settings');
   if (!page) return;
   const SOUND_KEY = 'reika.sound.v1';
-  let current = null;
 
   // ---- the quiet sound of an answer (no files: one short tone from the browser itself) ----
   const sound = {
@@ -36,6 +35,7 @@
 
   if (location.protocol === 'file:') return; // no server: nothing below can work
   const show = (el, on) => { el.hidden = !on; };
+  const clearError = () => { for (const id of ['set-error', 'set-ai-error']) { $(id).hidden = true; $(id).textContent = ''; } };
   // Problems with the provider belong next to its settings; everything else to the data card.
   const fail = (e) => {
     const text = e.message || String(e);
@@ -43,7 +43,6 @@
     box.hidden = false;
     box.textContent = text;
   };
-  const clearError = () => { for (const id of ['set-error', 'set-ai-error']) { $(id).hidden = true; $(id).textContent = ''; } };
 
   async function call(path, options) {
     const response = await fetch(path, options);
@@ -51,74 +50,106 @@
     if (!response.ok) throw new Error(data.error || `Ошибка ${response.status}`);
     return data;
   }
+  const save = (patch) => call('api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+
+  // ---- what is on screen versus what is stored: the Save buttons wake up only on a real change ----
+  let saved = { port: '', provider: 'reika', model: '' };
+  const form = () => ({ port: $('set-port').value.trim(), provider: $('set-ai-provider').value, model: $('set-ai-model').value.trim() });
+  function refreshButtons() {
+    const now = form();
+    $('set-save').disabled = now.port === saved.port;
+    $('set-ai-save').disabled = now.provider === saved.provider && now.model === saved.model && !$('set-ai-key').value.trim();
+  }
 
   function renderAi(s) {
-    const info = s.ai || { provider: 'reika', providers: [], key: { has: false, tail: '' } };
+    const info = s.ai;
     const select = $('set-ai-provider');
     if (select.options.length <= 1) {
       for (const p of info.providers) {
         const option = document.createElement('option');
         option.value = p.id;
-        option.textContent = `${p.title} — по вашему ключу`;
+        option.textContent = p.title;
         option.dataset.model = p.defaultModel || '';
         if (p.keyUrl) $('set-ai-help').href = p.keyUrl;
         select.appendChild(option);
       }
     }
     select.value = info.provider;
-    const cloud = info.provider !== 'reika';
-    show($('set-ai-cloud'), cloud);
-    const chosen = select.selectedOptions[0];
-    $('set-ai-model').placeholder = (chosen && chosen.dataset.model) || 'openai/gpt-oss-120b';
     $('set-ai-model').value = info.model || '';
     $('set-ai-key').value = '';
     $('set-ai-key').placeholder = info.key.has ? `сохранён ···${info.key.tail}` : 'вставьте ключ';
     show($('set-ai-key-clear'), info.key.has);
     $('set-ai-key-state').textContent = info.key.has
-      ? 'Ключ сохранён на этом компьютере. Чтобы заменить его, вставьте новый и нажмите «Сохранить».'
-      : 'Ключа пока нет: вставьте его и нажмите «Сохранить». Без ключа отвечает сама Рэйка.';
+      ? 'Ключ сохранён на этом компьютере. Чтобы заменить, вставьте новый и сохраните.'
+      : 'Вставьте ключ и нажмите «Сохранить». Без ключа отвечает сама Рэйка.';
+    showProvider();
+  }
+
+  // The badge at the top of the card always says who will actually answer the next message.
+  function showProvider() {
+    const select = $('set-ai-provider');
+    const chosen = select.selectedOptions[0];
+    const cloud = select.value !== 'reika';
+    show($('set-ai-cloud'), cloud);
+    $('set-ai-model').placeholder = (chosen && chosen.dataset.model) || 'openai/gpt-oss-120b';
+    const badge = $('set-ai-badge');
+    const ready = cloud && (saved.provider !== 'reika' ? $('set-ai-key').placeholder.startsWith('сохранён') : false);
+    badge.dataset.state = ready ? 'cloud' : 'offline';
+    badge.textContent = ready ? `Отвечает ${chosen ? chosen.textContent : 'внешняя модель'}` : 'Отвечает сама Рэйка';
+    refreshButtons();
   }
 
   function render(s) {
-    current = s;
-    renderAi(s);
     $('set-port').value = s.port;
     $('set-port').min = s.limits ? s.limits.minPort : 1024;
     $('set-port').max = s.limits ? s.limits.maxPort : 65535;
     $('set-address').textContent = `127.0.0.1:${s.activePort || s.port}`;
     $('set-count').textContent = s.messages;
+    $('set-count-badge').textContent = `${s.messages} из 500`;
     $('set-datadir').textContent = s.dataDir || '—';
     const other = s.activePort && s.activePort !== s.port;
     show($('set-port-note'), !!other);
     if (other) $('set-port-note').textContent = `Сейчас занят другой порт: ${s.activePort}. Значит, порт ${s.port} был занят при запуске.`;
+    saved = { port: String(s.port), provider: s.ai.provider, model: s.ai.model || '' };
+    renderAi(s);
   }
 
   async function load() {
     try { render(await call('api/settings')); } catch { /* no server with this API: the page is not reachable anyway */ }
   }
 
-  const save = (patch) => call('api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
-
-  $('set-save').addEventListener('click', async () => {
+  // ---- saving ----
+  async function saveServer() {
     clearError();
     show($('set-saved'), false);
+    try { render(await save({ port: Number($('set-port').value) })); show($('set-saved'), true); }
+    catch (e) { fail(e); }
+  }
+  async function saveChat() {
+    clearError();
+    show($('set-ai-saved'), false);
     show($('set-ai-result'), false);
-    const patch = { port: Number($('set-port').value), aiProvider: $('set-ai-provider').value, aiModel: $('set-ai-model').value };
     const key = $('set-ai-key').value.trim();
+    const patch = { aiProvider: $('set-ai-provider').value, aiModel: $('set-ai-model').value };
     if (key) patch.apiKey = key; // an empty field means "keep the stored key", not "remove it"
-    try {
-      render(await save(patch));
-      show($('set-saved'), true);
-    } catch (e) { fail(e); }
-  });
+    try { render(await save(patch)); show($('set-ai-saved'), true); }
+    catch (e) { fail(e); }
+  }
 
-  // ---- the AI provider ----
-  $('set-ai-provider').addEventListener('change', () => {
-    const cloud = $('set-ai-provider').value !== 'reika';
-    show($('set-ai-cloud'), cloud);
-    show($('set-ai-result'), false);
-    const chosen = $('set-ai-provider').selectedOptions[0];
-    if (chosen) $('set-ai-model').placeholder = chosen.dataset.model || 'openai/gpt-oss-120b';
+  $('set-save').addEventListener('click', saveServer);
+  $('set-ai-save').addEventListener('click', saveChat);
+  $('set-port').addEventListener('input', refreshButtons);
+  $('set-ai-model').addEventListener('input', refreshButtons);
+  $('set-ai-key').addEventListener('input', refreshButtons);
+  $('set-ai-provider').addEventListener('change', () => { show($('set-ai-result'), false); showProvider(); });
+  for (const [id, run] of [['set-port', saveServer], ['set-ai-model', saveChat], ['set-ai-key', saveChat]]) {
+    $(id).addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); run(); } });
+  }
+
+  $('set-sound').checked = sound.on();
+  $('set-sound').addEventListener('change', (event) => {
+    sound.set(event.target.checked);
+    if (event.target.checked) sound.play(); // so you hear at once what you turned on
   });
 
   $('set-ai-key-clear').addEventListener('click', async () => {
@@ -142,7 +173,7 @@
       const list = $('set-ai-models');
       list.textContent = '';
       for (const id of answer.models) { const option = document.createElement('option'); option.value = id; list.appendChild(option); }
-      result.textContent = answer.models.length ? `Связь есть. Доступно моделей: ${answer.models.length} — список подсказок в поле «Модель».` : 'Связь есть, но список моделей пуст.';
+      result.textContent = answer.models.length ? `Связь есть, ключ принят. Доступно моделей: ${answer.models.length} — выберите в поле «Модель».` : 'Связь есть, но список моделей пуст.';
       render(await call('api/settings'));
       show($('set-ai-result'), true);
     } catch (e) {
@@ -150,12 +181,6 @@
       fail(e);
       try { render(await call('api/settings')); } catch { /* the saved key is still shown on the next visit */ }
     } finally { button.disabled = false; }
-  });
-
-  $('set-sound').checked = sound.on();
-  $('set-sound').addEventListener('change', (event) => {
-    sound.set(event.target.checked);
-    if (event.target.checked) sound.play(); // so you hear at once what you turned on
   });
 
   $('set-clear').addEventListener('click', async () => {
@@ -185,6 +210,11 @@
 
   $('set-about').addEventListener('click', () => { if (window.ReikaShell) window.ReikaShell.about(); });
 
-  window.addEventListener('reika:route', (event) => { if (event.detail === 'settings') { clearError(); show($('set-saved'), false); load(); } });
+  window.addEventListener('reika:route', (event) => {
+    if (event.detail !== 'settings') return;
+    clearError();
+    for (const id of ['set-saved', 'set-ai-saved', 'set-ai-result']) show($(id), false);
+    load();
+  });
   load();
 })();

@@ -1,19 +1,37 @@
-/* "Настройки": a few plain cards, the same ones the update page uses. */
+/* "Настройки": cards of plain rows — name and explanation on the left, the control on the right. */
 .settings { max-width: var(--page-max); margin: 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
-.set-card { min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.set-card { min-width: 0; display: flex; flex-direction: column; gap: 0; }
 .set-card--wide { grid-column: 1 / -1; }
-.set-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-.set-hint { color: var(--ok); font-size: var(--text-sm); }
-.set-path { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-weight: 600; overflow-wrap: anywhere; }
-.set-switch { cursor: pointer; }
+.set-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; padding-bottom: var(--space-3); }
+.set-badge { padding: 2px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.set-badge[data-state="cloud"] { border-color: rgb(var(--ok-rgb) / .45); color: var(--ok); }
+
+/* one setting = one row */
+.set-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.set-row__text b { display: block; font-size: var(--text-sm); font-weight: 600; }
+.set-row__text small { display: block; margin-top: 2px; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.4; }
+.set-row__text small b { display: inline; font-weight: 600; color: var(--text); }
+.set-row__control { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
+.set-row__control .field { width: 220px; }
+#set-port { width: 120px; }
+#set-ai-key, #set-ai-model { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--text-xs); }
+#set-ai-cloud { display: contents; }
 .set-check { width: 18px; height: 18px; flex: none; accent-color: var(--crimson-hi); cursor: pointer; }
-.settings .form-row .field { width: 140px; }
+
+.set-note { margin: var(--space-3) 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5; }
+.set-note--ok { color: var(--ok); }
+.set-note a { color: var(--text); }
+.set-path { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+.set-foot { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; padding-top: var(--space-4); }
+.set-hint { color: var(--ok); font-size: var(--text-sm); }
+.set-card .callout { margin-top: var(--space-3); }
 .set-links { margin: 0; padding-left: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-muted); }
 .set-links a, .set-linkbtn { color: var(--text); }
 .set-linkbtn { padding: 0; border: 0; background: none; font: inherit; color: var(--text); text-decoration: underline; }
+
 @media (max-width: 860px) { .settings { grid-template-columns: minmax(0, 1fr); } }
-.set-key { display: flex; align-items: center; gap: var(--space-2); }
-.settings .set-key .field { width: 260px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
-.settings #set-ai-model.field, .settings #set-ai-provider.field { width: 280px; }
-#set-ai-cloud { display: flex; flex-direction: column; gap: var(--space-3); }
-@media (max-width: 640px) { .settings .set-key .field, .settings #set-ai-model.field, .settings #set-ai-provider.field { width: 100%; } }
+@media (max-width: 560px) {
+  .set-row { grid-template-columns: minmax(0, 1fr); }
+  .set-row__control { justify-content: flex-start; }
+  .set-row__control .field, #set-port { flex: 1 1 180px; width: auto; }
+}
