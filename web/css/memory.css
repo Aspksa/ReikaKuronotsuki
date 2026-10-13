@@ -1,5 +1,5 @@
 /* Compact memory manager inside the existing floating chat; no new route. */
-.chat-panel { position: relative; }
+/* The chat must remain fixed: orb.js positions it with viewport coordinates. */
 .memory-panel {
   position: absolute;
   z-index: var(--z-overlay);
