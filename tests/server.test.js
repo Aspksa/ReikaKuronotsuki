@@ -135,3 +135,30 @@ test('portable Windows launcher upgrades existing npm MemOS to bundled source',(
  assert.match(script,/\$currentStamp -ne \$requiredStamp/);
  assert.match(script,/Set-Content -LiteralPath \$installedStamp/);
 });
+
+test('full backup saves and restores MemOS records, not only chat JSON',()=>withServer(async(base)=>{
+  const jsonHeaders={'Content-Type':'application/json'};
+  const create=async content=> {
+    const res=await fetch(base+'/api/memory',{method:'POST',headers:jsonHeaders,body:JSON.stringify({content})});
+    assert.equal(res.status,201);
+    return (await res.json()).memory;
+  };
+  const first=await create('Секретная любимая звезда: Вега');
+  const exported=await fetch(base+'/api/backup');
+  assert.equal(exported.status,200);
+  const backup=await exported.json();
+  assert.equal(backup.version,2);
+  assert.ok(backup.memory.nodes.some(x=>x.id===first.id));
+  assert.ok(Array.isArray(backup.memory.edges));
+  const temporary=await create('Это временный факт, который удалится при восстановлении');
+  const restore=await fetch(base+'/api/backup',{method:'POST',headers:jsonHeaders,body:JSON.stringify(backup)});
+  assert.equal(restore.status,200,JSON.stringify(await restore.clone().json()));
+  assert.equal((await restore.json()).memoryRestored,true);
+  const current=(await (await fetch(base+'/api/memory')).json()).memories;
+  assert.ok(current.some(x=>x.id===first.id));
+  assert.equal(current.some(x=>x.id===temporary.id),false);
+  const corrupted={...backup,memory:{nodes:backup.memory.nodes,edges:[{sourceId:'missing',targetId:first.id,relation:'relates_to',weight:0.5}]}};
+  const rejected=await fetch(base+'/api/backup',{method:'POST',headers:jsonHeaders,body:JSON.stringify(corrupted)});
+  assert.equal(rejected.status,400);
+  assert.ok((await (await fetch(base+'/api/memory')).json()).memories.some(x=>x.id===first.id));
+}));
