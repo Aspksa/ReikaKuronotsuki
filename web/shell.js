@@ -1,5 +1,5 @@
 'use strict';
-// Page shell: left menu (routes, collapse), status line, home cards and the falling-petal sky.
+// Page shell: left menu (routes, collapse), status line and the home cards. (The night scene lives in sky.js.)
 (function () {
   const $ = (id) => document.getElementById(id);
   const shell = $('shell');
@@ -68,22 +68,6 @@
     $('card-update').textContent = d.available ? (d.phase === 'ready' ? 'Готово к установке' : 'Доступна новая версия') : 'Установлена последняя';
     if (d.version && /^[0-9a-f]{40}$/.test(d.version)) $('card-version').textContent = d.version.slice(0, 8);
   });
-
-  // ---- sky: petals (skipped when the user prefers reduced motion) ----
-  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!reduce) {
-    const box = $('petals');
-    for (let i = 0; i < 16; i++) {
-      const p = document.createElement('span');
-      p.className = 'petal';
-      p.style.left = `${Math.round(Math.random() * 100)}%`;
-      p.style.animationDuration = `${14 + Math.random() * 14}s`;
-      p.style.animationDelay = `${-Math.random() * 28}s`;
-      p.style.setProperty('--sway', `${20 + Math.random() * 50}px`);
-      p.style.setProperty('--size', `${7 + Math.random() * 8}px`);
-      box.appendChild(p);
-    }
-  }
 
   route();
 })();
