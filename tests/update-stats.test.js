@@ -25,15 +25,19 @@ test('statistics scan excludes user data and maintains project growth baseline',
     assert.equal(second.events.downloadedFiles, 0);
   } finally { await fs.rm(root, { recursive:true, force:true }); }
 });
-test('150 named statistics are present in the browser catalog', async () => {
-  const source = await fs.readFile(path.join(__dirname, '..', 'web', 'update-stats.js'), 'utf8');
-  const start = source.indexOf('const groups = ');
-  assert.ok(start !== -1);
-  const end = source.indexOf(';', start);
-  const catalog = JSON.parse(source.slice(start + 'const groups = '.length, end));
-  assert.equal(catalog.length, 15);
-  assert.equal(catalog.reduce((n,g)=>n+g[1].length,0),150);
-  assert.equal(new Set(catalog.flatMap(g=>g[1].map(x=>x[0]))).size, 150);
+test('150 named statistics are present in the browser catalog, in seven sections of titled groups', async () => {
+  const { sections, flat } = require('../web/stats-catalog.js');
+  assert.equal(sections.length, 7);
+  assert.equal(flat.length, 150);
+  assert.equal(new Set(flat.map((x) => x.label)).size, 150, 'every name is different');
+  assert.equal(new Set(flat.map((x) => x.key)).size, 150, 'every metric has its own source');
+  for (const sec of sections) {
+    const n = sec.groups.reduce((c, g) => c + g.items.length, 0);
+    assert.ok(n >= 15 && n <= 30, `${sec.title}: ${n} metrics, neither a pile nor a stub`);
+    assert.ok(sec.groups.length >= 2 && sec.groups.length <= 3, `${sec.title}: split into small titled groups`);
+    assert.ok(sec.hint.length > 10);
+    for (const g of sec.groups) assert.ok(g.items.length >= 2 && g.items.length <= 15, `${sec.title} / ${g.title}`);
+  }
 });
 
 test('statistics are their own section below the update controls, with accessible icon decorations', async () => {
@@ -88,7 +92,7 @@ test('refined dashboard has no redundant headings and supports searching all met
 
 test('dashboard CSS uses one canonical declaration per base selector and breakpoint', async () => {
   const css = await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'stats.css'), 'utf8');
-  for (const selector of ['.stats-highlights', '.stats-tile--hero', '.stats-live', '.stats-tab[aria-pressed="true"]']) {
+  for (const selector of ['.stats-highlights', '.stats-tile--hero', '.stats-live', '.stats-tab[aria-selected="true"]']) {
     const hits = css.split('\n').filter(line => line.startsWith(selector + ' {'));
     assert.equal(hits.length, 1, selector + ' must have one base declaration');
   }
@@ -155,7 +159,7 @@ test('crimson dashboard retains usable controls and mobile accessibility', async
   const css=await fs.readFile(path.join(__dirname,'..','web','css','stats.css'),'utf8');
   const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
   assert.match(css,/\.stats-tile:focus-within/);
-  assert.match(css,/\.stats-tab\[aria-pressed="true"\]/);
+  assert.match(css,/\.stats-tab\[aria-selected="true"\]/);
   assert.match(css,/\.stats-open:focus-visible/);
   assert.match(css,/@media \(max-width: 780px\)/);
   for(const id of ['up-stats-period','up-stats-detail'])assert.ok(html.includes('id="'+id+'"'));
@@ -166,9 +170,7 @@ test('every metric has a distinct value source and removed controls cannot retur
   const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
   const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
   const css=await fs.readFile(path.join(__dirname,'..','web','css','stats.css'),'utf8');
-  const begin=js.indexOf('const groups = '),end=js.indexOf(';',begin);
-  const groups=JSON.parse(js.slice(begin+'const groups = '.length,end));
-  const keys=groups.flatMap(g=>g[1].map(x=>x[1]));
+  const keys=require('../web/stats-catalog.js').flat.map(x=>x.key);
   assert.equal(keys.length,150);
   assert.equal(new Set(keys).size,150);
   for(const word of ['up-stats-search','up-stats-favorites-toggle','up-stats-favorites-count','stats-star','toggleFavorite','favoriteStore']){

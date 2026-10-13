@@ -1,7 +1,7 @@
 'use strict';
 // 150 read-only metrics. A dash means not captured, never an invented zero.
 (function () {
-  const groups = [["Прямо сейчас",[["Сколько мы тут уже сидим?","uptimeMs","duration"],["Режим паники","status.phase","text"],["Всё под контролем. Наверное","status.percent","percent"],["Байты на свободе","status.downloadedBytes","bytes"],["Байты в розыске","status.totalBytes","bytes"],["Файлы в деле","status.downloadedFiles","number"],["Очередь на вход","status.totalFiles","number"],["Без повторной загрузки","status.reusedFiles","number"],["Проект на весах","scan.bytes","bytes"],["Свободная территория","freeDiskBytes","bytes"]]],["Файловый переполох",[["Файловый мегаполис","scan.files","number"],["Комнаты в лабиринте","scan.directories","number"],["Самый толстый файл","scan.largest","bytes"],["Самый скромный файл","scan.smallest","bytes"],["Глубина кроличьей норы","scan.deepest","number"],["Заклинатели JavaScript","scan.js","number"],["Портные интерфейса","scan.css","number"],["Сцены браузера","scan.html","number"],["Коробки с данными","scan.json","number"],["Картинки и иконки","scan.images","number"]]],["Код и его последствия",[["Армия строчек","scan.lines","number"],["Пустые, но важные строки","scan.blank","number"],["Шёпот в комментариях","scan.comments","number"],["Файлы, готовые говорить","scan.text","number"],["Строки не пустуют","derived.nonblank","number"],["Код без комментариев","derived.noncomment","number"],["Плотность пустоты","derived.blankRatio","percent"],["Разговорчивость комментариев","derived.commentRatio","percent"],["Средняя длина файла","derived.avgFileBytes","bytes"],["Среднее число строк","derived.avgLines","number"]]],["Хроники обновлений",[["Сколько всего пережито","history.count","number"],["Удивительно, но работает","history.installs","number"],["Это было близко","history.failures","number"],["Назад в прошлое","history.rollbacks","number"],["Запасные планы","history.backups","number"],["Непохожие версии","history.uniqueVersions","number"],["Файлы, прошедшие перерождение","history.installedFiles","number"],["Последняя победа обновлятора","history.lastInstall","date"],["Последний сюжетный поворот","history.lastFailure","date"],["Последний билет назад","history.lastRollback","date"]]],["Интернет пострадал",[["Файлов скачано по журналу","events.downloadedFiles","number"],["Байтов скачано по журналу","events.downloadedBytes","bytes"],["Уникальных файлов скачано","events.uniqueFiles","number"],["Попыток загрузки файлов","events.downloadsStarted","number"],["Суровые ревизоры","events.verifyCount","number"],["Разведывательных вылазок","events.starts","number"],["Подготовлено обновлений","events.preparations","number"],["Случилось ошибок","events.errorCount","number"],["Отменено обновлений","events.cancellations","number"],["Летопись происшествий","events.count","number"]]],["Git и временная машина",[["Сколько раз передумали","git.commitCount","number"],["День большого начала","git.firstCommit","date"],["Последний росчерк Git","git.lastCommit","date"],["Совет создателей","git.authors","number"],["Возраст со старта Git","derived.gitAgeDays","days"],["Сколько прожила версия","derived.versionAgeDays","days"],["Последняя проверка GitHub","status.checkedAt","date"],["Свежий отпечаток Git","status.latest.sha","short"],["То, что сейчас работает","status.localVersion","short"],["Что нового вообще","status.latest.changesTotal","number"]]],["Ресурсы компьютера",[["Байтов в среднем на имя","derived.avgNameBytes","number"],["Аппетит оперативки","memoryRss","bytes"],["Мозги движка","memoryHeap","bytes"],["CPU занимается делом","cpuUserMs","duration"],["CPU работает на систему","cpuSystemMs","duration"],["Ядер в распоряжении","cores","number"],["Двигатель под капотом","node","text"],["На какой планете запущено","platform","text"],["Жильцов на каждую папку","derived.filesPerDirectory","number"],["Когда всё запустилось","processStartedAt","date"]]],["Контроль и спокойствие",[["Статус CI","status.latest.ci","text"],["Доступный канал","status.config.channel","text"],["Частота автопроверки","status.config.autoCheck","text"],["Ограничение GitHub","status.rateLimitedUntil","date"],["Установка заблокирована?","derived.blocked","yesno"],["Готовность к установке","derived.ready","yesno"],["Отложен откат?","status.rollbackPending","yesno"],["Подтверждённых удалений","derived.removalsConfirmed","yesno"],["Удалений в очереди","derived.pendingRemovals","number"],["Проверок пройдено","derived.checkDone","number"]]],["Время — деньги",[["Время с последней проверки","derived.sinceCheck","duration"],["Время с последней установки","derived.sinceInstall","duration"],["Время с последней ошибки","derived.sinceFailure","duration"],["Время с последнего отката","derived.sinceRollback","duration"],["Возраст первого события","derived.sinceFirstEvent","duration"],["Возраст последнего события","derived.sinceLastEvent","duration"],["Промежуток истории","derived.historySpan","duration"],["Время с первого коммита","derived.gitAgeDuration","duration"],["Новорождённый файл","scan.newest","date"],["Ветеран файловой системы","scan.oldest","date"]]],["Интересности",[["Доля JS среди файлов","derived.jsRatio","percent"],["Доля CSS среди файлов","derived.cssRatio","percent"],["Доля картинок","derived.imageRatio","percent"],["Файлы без этих расширений","derived.otherFiles","number"],["Насколько потолстел проект","growth.bytes","bytes"],["Прирост файлов проекта","growth.files","number"],["Ошибок на успешную установку","derived.errorPerInstall","number"],["Процент удачных установок","derived.successRatio","percent"],["Прибавление в строках","growth.lines","number"],["Уровень экономии скачивания","derived.reuseRatio","percent"]]],["Подозрительные файлы",[["Файлы-призраки","scan.emptyFiles","number"],["Гиганты среди нас","scan.largeFiles","number"],["Мелочь пузатая","scan.tinyFiles","number"],["Имена длиннее биографии","scan.longNames","number"],["Фанаты подчёркиваний","scan.underscoreNames","number"],["С БОЛЬШОЙ БУКВЫ","scan.uppercaseNames","number"],["Самое длинное имя","scan.maxNameBytes","number"],["Самое короткое имя","scan.minNameBytes","number"],["Анонимы без расширения","derived.extensionless","number"],["Мода на разнообразие","derived.extensionKinds","number"]]],["Секреты исходников",[["Забытые обещания","scan.todoLines","number"],["Разговоры с консолью","scan.consoleLines","number"],["Фабрика функций","scan.functionLines","number"],["Зависимости зовут","scan.importLines","number"],["Файлы с переносами","scan.newlineFiles","number"],["Аккуратный последний Enter","scan.trailingNewlineFiles","number"],["TODO на тысячу строк","derived.todoPerKLines","number"],["Консольные признания на тысячу строк","derived.consolePerKLines","number"],["Функций на файл","derived.functionsPerText","number"],["Импорты на файл","derived.importsPerText","number"]]],["Анатомия проекта",[["Призрачная доля","derived.emptyRatio","percent"],["Доля гигантов","derived.largeRatio","percent"],["Процент малышей","derived.tinyRatio","percent"],["Доля длинных названий","derived.longRatio","percent"],["Подчёркнутый характер","derived.underscoreRatio","percent"],["Любители CAPS LOCK","derived.uppercaseRatio","percent"],["Код к общему весу","derived.codeWeightRatio","percent"],["Мегабайт на папку","derived.bytesPerDir","bytes"],["Строк на килобайт","derived.linesPerKb","number"],["Файлов на ядро","derived.filesPerCore","number"]]],["Хроники без прикрас",[["Ошибки против успехов","derived.failToSuccess","percent"],["Откаты против установок","derived.rollbackRatio","percent"],["Сколько жизней у версии","derived.installsPerVersion","number"],["Файлов на установку","derived.filesPerInstall","number"],["Событий на установку","derived.eventsPerInstall","number"],["Шанс встретить неприятность","derived.eventErrorRatio","percent"],["Успехи против всех попыток","derived.installSuccessRate","percent"],["Последняя история помнит","history.last","date"],["Первая запись в летописи","history.first","date"],["Сколько записей на версию","derived.historyPerVersion","number"]]],["Математика подозрений",[["Байтов на скачанный файл","derived.bytesPerDownload","bytes"],["Скачиваний на установку","derived.downloadsPerInstall","number"],["Загрузок больше, чем файлов?","derived.downloadToFiles","percent"],["Повторы экономят нервы","derived.reusedVsDownloaded","percent"],["Проверок на скачивание","derived.verifiesPerDownload","number"],["Событий на скачивание","derived.eventsPerDownload","number"],["Сколько раз Git рос за день","derived.commitsPerGitDay","number"],["Чернила на коммит","derived.linesPerCommit","number"],["Сколько весит один коммит","derived.bytesPerCommit","bytes"],["Обновлений на тысячу строк","derived.installsPerKLines","number"]]]];
+  const sections = window.ReikaStatsCatalog.sections;
   const $ = id => document.getElementById(id);
   const root = $('up-stats');
   if (!root) return;
@@ -93,14 +93,14 @@
   const numeric=value=>typeof value==='number'&&Number.isFinite(value);
   // Every metric: its own icon (matches the name), its own colour, and a diagram of the kind that fits what it measures.
   const positions=new Map();
-  groups.forEach(([,items],g)=>items.forEach(([,key],i)=>positions.set(key,[g,i])));
+  sections.forEach((sec,g)=>{let n=0;for(const grp of sec.groups)for(const [,key] of grp.items)positions.set(key,[g,n++]);});
   function createCard(label,key,unit,index,compact=false){
-    const [g,i]=positions.get(key)||[index%groups.length,index%10];
+    const [g,i]=positions.get(key)||[index%sections.length,index];
     const tone=V.tone(g,i,key);
     const card=document.createElement('div');card.className='stats-tile'+(compact?' stats-tile--hero':'');
     card.style.setProperty('--tone',tone.color);
     const kind=V.chartKind(key,unit);
-    card.dataset.kind=kind;
+    card.dataset.kind=kind;card.dataset.unit=unit;
     const icon=document.createElement('span');icon.className='stats-icon';icon.setAttribute('aria-hidden','true');icon.innerHTML=V.iconSvg(V.iconName(key,unit));
     const name=document.createElement('span');name.className='stats-name';name.textContent=label;
     const value=document.createElement('strong');value.className='stats-number';value.textContent='—';
@@ -117,23 +117,36 @@
   }
   const tabButtons=[];
   let ordinal=0;
-  groups.forEach(([title,items],i)=>{
+  const STORE='reika.stats.section.v1';
+  const saved=()=>{try{return localStorage.getItem(STORE);}catch{return null;}};
+  const remember=id=>{try{localStorage.setItem(STORE,id);}catch{/* private mode */}};
+  sections.forEach((sec,i)=>{
+    const count=sec.groups.reduce((n,g)=>n+g.items.length,0);
     const tab=document.createElement('button');
-    tab.type='button';tab.className='stats-tab';tab.style.setProperty('--tone',V.groupColor(i));
-    const titleSpan=document.createElement('span');titleSpan.textContent=title;
-    const countSpan=document.createElement('small');countSpan.textContent=String(items.length).padStart(2,'0');
+    tab.type='button';tab.className='stats-tab';tab.id='up-stats-tab-'+sec.id;tab.setAttribute('role','tab');tab.style.setProperty('--tone',V.groupColor(i));
+    const titleSpan=document.createElement('span');titleSpan.textContent=sec.title;
+    const countSpan=document.createElement('small');countSpan.textContent=String(count);
     tab.append(titleSpan,countSpan);
-    tab.setAttribute('aria-controls',i===0?'up-stats-category':'up-stats-category-'+i);
-    tab.setAttribute('aria-pressed',String(i===0));
+    tab.setAttribute('aria-controls','up-stats-section-'+sec.id);
     tab.addEventListener('click',()=>activate(i));
+    tab.addEventListener('keydown',e=>{
+      const next={ArrowRight:1,ArrowDown:1,ArrowLeft:-1,ArrowUp:-1}[e.key];
+      if(e.key==='Home'||e.key==='End'||next){e.preventDefault();const to=e.key==='Home'?0:e.key==='End'?sections.length-1:(i+next+sections.length)%sections.length;activate(to);tabButtons[to].focus();}
+    });
     tabs.appendChild(tab);tabButtons.push(tab);
     const section=document.createElement('section');
-    section.className='stats-category';section.hidden=i!==0;
-    section.setAttribute('aria-label',title);
-    section.id=i===0?'up-stats-category':'up-stats-category-'+i;
-    const grid=document.createElement('div');grid.className='stats-grid';
-    for(const [label,key,unit] of items){grid.appendChild(createCard(label,key,unit,ordinal++));}
-    section.appendChild(grid);root.appendChild(section);
+    section.className='stats-category';section.hidden=true;section.id='up-stats-section-'+sec.id;
+    section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby',tab.id);
+    for(const grp of sec.groups){
+      const part=document.createElement('div');part.className='stats-part';
+      const head=document.createElement('h4');head.className='stats-part-title';
+      const ht=document.createElement('span');ht.textContent=grp.title;const hc=document.createElement('small');hc.textContent=grp.items.length;
+      head.append(ht,hc);
+      const grid=document.createElement('div');grid.className='stats-grid';
+      for(const [label,key,unit] of grp.items)grid.appendChild(createCard(label,key,unit,ordinal++));
+      part.append(head,grid);section.appendChild(part);
+    }
+    root.appendChild(section);
   });
   const dialog=$('up-stats-detail');
   $('up-stats-detail-close').addEventListener('click',()=>dialog.close());
@@ -173,12 +186,14 @@
   }
   function activate(i){
     selected.index=i;
-    $('up-stats-section-title').textContent=groups[i][0];
-    $('up-stats-section-count').textContent=groups[i][1].length+' показателей';
+    const sec=sections[i];
+    $('up-stats-section-title').textContent=sec.title;
+    $('up-stats-section-count').textContent=sec.hint;
     root.querySelectorAll('.stats-category').forEach((node,n)=>node.hidden=n!==i);
-    tabButtons.forEach((tab,n)=>tab.setAttribute('aria-pressed',String(n===i)));
-
+    tabButtons.forEach((tab,n)=>{tab.setAttribute('aria-selected',String(n===i));tab.tabIndex=n===i?0:-1;});
+    remember(sec.id);
   }
+  { const start=sections.findIndex(sec=>sec.id===saved()); activate(start>=0?start:0); }
   // Highlight six useful signals; duplicates share the same historic samples.
   const heroes=[
     ['Время работы','uptimeMs','duration'],
@@ -219,7 +234,7 @@
       const arr=traces.get(c.key)||[];
       // A fresh poll with the same value is still a real sample, not fake chart data.
       if(c.sampleAt!==data.capturedAt && !persisted[c.key]){arr.push(value);if(arr.length>24)arr.shift();traces.set(c.key,arr);c.sampleAt=data.capturedAt;}
-      if(arr.length<2){c.trend.textContent='';c.card.dataset.direction='unknown';}
+      if(arr.length<2||c.unit==='date'||c.unit==='days'){c.trend.textContent='';c.card.dataset.direction='unknown';}
       else{
         const change=arr.at(-1)-arr[0];
         const direction=change>0?'up':change<0?'down':'flat';

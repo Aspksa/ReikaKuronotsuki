@@ -102,12 +102,12 @@
   const iconSvg = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.dot}</svg>`;
 
   // ---------- colour: one calm family per category, every metric its own shade ----------
-  const GROUP_HUES = [205, 38, 268, 150, 238, 22, 296, 176, 58, 335, 12, 118, 218, 164, 282];
-  const hueOf = (g, i) => (((GROUP_HUES[g % GROUP_HUES.length] + (i - 4.5) * 5) % 360) + 360) % 360;
+  const GROUP_HUES = [200, 38, 335, 268, 150, 235, 22]; // one per section: now, files, quirks, code, updates, downloads, versions
+  const hueOf = (g, i) => (((GROUP_HUES[g % GROUP_HUES.length] + (((i * 7) % 11) - 5) * 4.4) % 360) + 360) % 360;
   const shadeOf = (i) => [0.8, 0.74, 0.77, 0.71, 0.83][i % 5];
   const chromaOf = (i) => [0.095, 0.11, 0.085, 0.105, 0.09][(i * 3) % 5];
 
-  /** { hue, color } of a metric: category hue spread over its ten items; failures lean warm, successes lean green. */
+  /** { hue, color } of a metric: section hue spread over its items; failures lean warm, successes lean green. */
   function tone(group, index, key = '') {
     let hue = hueOf(group, index);
     if (/error|failure|fail|warning|blocked|cancel/i.test(key)) hue = 22 + ((index * 7) % 14);

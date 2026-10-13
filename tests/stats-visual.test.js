@@ -6,9 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const V = require('../web/stats-visual.js');
 
-const source = fs.readFileSync(path.join(__dirname, '..', 'web', 'update-stats.js'), 'utf8');
-const groups = new Function('return ' + source.match(/const groups = (\[\[.*?\]\]);\n/s)[1])();
-const metrics = groups.flatMap(([, items], g) => items.map(([label, key, unit], i) => ({ label, key, unit, g, i })));
+const catalog = require('../web/stats-catalog.js');
+const metrics = catalog.sections.flatMap((sec, g) => { let i = 0; return sec.groups.flatMap((grp) => grp.items.map(([label, key, unit]) => ({ label, key, unit, g, i: i++ }))); });
 
 test('there are 150 metrics and every one gets an icon that exists', () => {
   assert.equal(metrics.length, 150);
