@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm install --omit=dev --no-audit --no-fund
+      - run: node -e "import('@mem-os/sdk').then(async ({MemOS}) => { const {mkdtempSync,rmSync}=require('node:fs'); const {tmpdir}=require('node:os'); const {join}=require('node:path'); const dir=mkdtempSync(join(tmpdir(),'memos-ci-')); const db=new MemOS({dbPath:join(dir,'memory.sqlite')}); try {await db.init();await db.store('User prefers red',{type:'preference'}); const found=await db.search('red'); if (!found.length) throw Error('MemOS retrieval empty');} finally {await db.close();rmSync(dir,{recursive:true,force:true});} }).catch(e=>{console.error(e);process.exitCode=1})"
       - run: node tests/run.js
   # Run Windows tests with the exact bundled Node runtime, not only latest 22.x.
   tests-windows:
@@ -21,4 +23,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.16.0
+      - run: npm install --omit=dev --no-audit --no-fund
+      - run: node -e "import('@mem-os/sdk').then(async ({MemOS}) => { const {mkdtempSync,rmSync}=require('node:fs'); const {tmpdir}=require('node:os'); const {join}=require('node:path'); const dir=mkdtempSync(join(tmpdir(),'memos-ci-')); const db=new MemOS({dbPath:join(dir,'memory.sqlite')}); try {await db.init();await db.store('User prefers red',{type:'preference'}); const found=await db.search('red'); if (!found.length) throw Error('MemOS retrieval empty');} finally {await db.close();rmSync(dir,{recursive:true,force:true});} }).catch(e=>{console.error(e);process.exitCode=1})"
       - run: node tests/run.js
