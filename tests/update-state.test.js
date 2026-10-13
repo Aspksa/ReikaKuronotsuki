@@ -23,7 +23,7 @@ test('state of the entry: idle, available, busy, ready, error', () => {
 
 test('the status line says what is going on', () => {
   assert.match(S.statusText(base()), /^Версия aaaaaaaa$/);
-  assert.match(S.statusText(base({ checkedAt: Date.UTC(2026, 0, 1, 12, 40) })), /^Версия aaaaaaaa · проверено \d\d:\d\d$/);
+  assert.match(S.statusText(base({ checkedAt: Date.UTC(2026, 0, 1, 12, 40) })), /^Версия aaaaaaaa · \d\d:\d\d$/);
   assert.equal(S.statusText(base({ localVersion: 'не определена' })), 'Версия не определена');
   assert.equal(S.statusText(base({ latest: latest() })), 'Доступна версия bbbbbbbb');
   assert.match(S.statusText(base({ latest: latest(), blocked: 'CI' })), /ждёт проверок CI/);
