@@ -96,3 +96,15 @@ test('rejects foreign Host and cross-site Origin (CSRF / DNS rebinding) but allo
 test('update API answers 503 when no updater is attached', () => withServer(async (base) => {
   assert.equal((await fetch(`${base}/api/update/status`)).status, 503);
 }));
+
+test('MemOS is connected directly in the chat pipeline, without an adapter module',async()=>{
+ const src=fs.readFileSync(path.join(__dirname,'..','server','server.js'),'utf8');
+ const launcher=fs.readFileSync(path.join(__dirname,'..','launcher','start.ps1'),'utf8');
+ const pkg=JSON.parse(fs.readFileSync(path.join(__dirname,'..','package.json'),'utf8'));
+ assert.equal(pkg.dependencies['@mem-os/sdk'],'1.6.26');
+ assert.match(src,/import\('@mem-os\/sdk'\)/);
+ assert.match(src,/reika-memory\.sqlite/);
+ assert.match(src,/await recall\(text\)/);
+ assert.match(src,/await remember\(text\)/);
+ assert.match(launcher,/npm-cli\.js/);
+});
