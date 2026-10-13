@@ -100,9 +100,9 @@
         <button id="up-rollback" type="button" class="btn btn--ghost" hidden>Откатить последнюю установку</button>
       </div>
       <section class="stats-panel panel" aria-label="Статистика проекта">
-          <header class="stats-heading"><div><span class="stats-eyebrow">Состояние проекта</span><h3>Статистика</h3><p class="text-muted">Только реальные данные, без выдуманных графиков</p></div><span class="stats-live" aria-label="Данные обновляются автоматически"><i></i> На связи</span></header>
+          <div class="stats-toolbar"><label class="stats-search-wrap"><span class="sr">Найти показатель</span><input id="up-stats-search" class="stats-search" type="search" placeholder="Поиск по 150 показателям…" autocomplete="off"></label><span class="stats-live" aria-label="Данные обновляются автоматически"><i></i> <span id="stats-live-time">На связи</span></span></div>
           <div id="up-stats-highlights" class="stats-highlights" aria-label="Главные показатели"></div>
-          <div class="stats-explorer"><nav id="up-stats-tabs" class="stats-tabs" aria-label="Разделы статистики"></nav><div class="stats-content"><div class="stats-content-head"><span id="up-stats-section-title">Прямо сейчас</span><span id="up-stats-section-count">10 показателей</span></div><div id="up-stats"></div></div></div>
+          <div class="stats-explorer"><nav id="up-stats-tabs" class="stats-tabs" aria-label="Разделы статистики"></nav><div class="stats-content"><div class="stats-content-head"><span id="up-stats-section-title">Прямо сейчас</span><span id="up-stats-section-count">10 показателей</span></div><div id="up-stats"></div><p id="up-stats-empty" class="stats-empty" hidden>Ничего не найдено. Попробуйте другое слово.</p></div></div>
           <p id="up-stats-note" class="text-muted">Загрузка статистики…</p>
           </section>
       </div>
