@@ -72,3 +72,16 @@ test('new file curiosities reflect actual files, not mock counters', async () =>
     assert.equal(result.trailingNewlineFiles,1);
   } finally { await fs.rm(root,{recursive:true,force:true}); }
 });
+
+test('refined dashboard has no redundant headings and supports searching all metrics', async () => {
+  const html = await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
+  const js = await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
+  const css = await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
+  assert.doesNotMatch(html, /<h3>Статистика<\/h3>/);
+  assert.doesNotMatch(html, /Состояние проекта/);
+  assert.match(html, /id="up-stats-search"/);
+  assert.match(js, /function filterMetrics\(/);
+  assert.match(js, /search\.addEventListener\('input',filterMetrics\)/);
+  assert.match(css, /stats-tile--hero:nth-child\(2\)/);
+  assert.match(css, /prefers-reduced-motion/);
+});
