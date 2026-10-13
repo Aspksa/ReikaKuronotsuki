@@ -89,12 +89,15 @@
   });
 
   // Is there something new? One quiet request at start-up feeds the dot in the menu and the cards on the home page.
+  // The answers are kept in window.ReikaUpdaterPresent / window.ReikaUpdateSummary as well as announced by events: the answer can
+  // arrive before shell.js has even loaded, and a lost event would hide the menu item for good.
   const hasNewVersion = (st) => !!st.latest && /^[0-9a-f]{40}$/.test(st.localVersion || '') && st.latest.sha !== st.localVersion;
   async function summary() {
     try {
       const st = await call('status');
-      window.dispatchEvent(new CustomEvent('reika:update-summary', { detail: { available: hasNewVersion(st) || st.phase === 'ready', version: st.localVersion, phase: st.phase, latest: st.latest ? st.latest.version : null } }));
+      window.ReikaUpdateSummary = { available: hasNewVersion(st) || st.phase === 'ready', version: st.localVersion, phase: st.phase, latest: st.latest ? st.latest.version : null };
+      window.dispatchEvent(new CustomEvent('reika:update-summary', { detail: window.ReikaUpdateSummary }));
     } catch { /* the server (or its updater) is not there */ }
   }
-  fetch('api/update/status').then((r) => { if (r.ok) { window.dispatchEvent(new CustomEvent('reika:updater-present')); summary(); } }).catch(() => {});
+  fetch('api/update/status').then((r) => { if (r.ok) { window.ReikaUpdaterPresent = true; window.dispatchEvent(new CustomEvent('reika:updater-present')); summary(); } }).catch(() => {});
 })();

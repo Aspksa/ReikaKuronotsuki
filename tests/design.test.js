@@ -22,7 +22,7 @@ test('style.css imports every stylesheet in order, tokens first, and every file 
   assert.match(fs.readFileSync(path.join(web, 'index.html'), 'utf8'), /<link rel="stylesheet" href="style\.css">/);
 });
 
-test('raw colours live in tokens.css only (no #hex elsewhere; rgb() literals only in the sky scene)', () => {
+test('raw colours live in tokens.css only (no #hex elsewhere; rgb() literals only in the background layer)', () => {
   for (const [file, css] of Object.entries(files)) {
     if (file === 'css/tokens.css') continue;
     const noUrls = css.replace(/url\([^)]*\)/g, '');
@@ -34,7 +34,7 @@ test('raw colours live in tokens.css only (no #hex elsewhere; rgb() literals onl
 test('every var(--token) used is defined in CSS or set by a script', () => {
   const defined = new Set();
   for (const css of Object.values(files)) for (const m of css.matchAll(/(--[\w-]+)\s*:/g)) defined.add(m[1]);
-  const setByScripts = new Set(['--px', '--py', '--lx', '--ly', '--lit', '--s', '--c', '--d', '--delay', '--size', '--sway']);
+  const setByScripts = new Set(['--lx', '--ly', '--lit', '--size', '--sway']);
   for (const [file, css] of Object.entries(files)) {
     for (const m of css.matchAll(/var\((--[\w-]+)/g)) assert.ok(defined.has(m[1]) || setByScripts.has(m[1]), `${file} uses ${m[1]} which nothing defines`);
   }
@@ -71,15 +71,27 @@ test('text stays readable: contrast of the main pairs is at least 4.5:1', () => 
   for (const [fg, bg] of pairs) assert.ok(contrast(fg, bg) >= 4.5, `${fg} on ${bg}: ${contrast(fg, bg).toFixed(2)}:1`);
 });
 
-test('the night scene has all its layers, the moon asset is light, and the pointer light is wired', () => {
+test('the night scene (moon, sky, stars, clouds, sea) is gone; only petals, the vignette and the pointer light remain', () => {
   const html = read('index.html');
-  for (const cls of ['sky-stars', 'moon-stage', 'moon-glow', 'moon-rays', 'moon-halo', 'moon-disc', 'moon-bloom', 'cloud cloud--a', 'sky-water', 'moon-path', 'mist', 'sky-vignette']) assert.ok(html.includes(`class="${cls}"`), `layer ${cls}`);
-  const moon = path.join(web, 'assets', 'moon.webp');
-  assert.ok(fs.existsSync(moon) && fs.statSync(moon).size < 400_000);
-  assert.match(files['css/sky.css'], /assets\/moon\.webp/);
+  const sky = html.slice(html.indexOf('<div class="sky"'), html.indexOf('</div>', html.indexOf('class="sky-vignette"')) + 6);
+  assert.match(sky, /id="petals"/);
+  assert.match(sky, /class="sky-vignette"/);
+  assert.ok(!/moon|star|cloud|sparkle|wave|water|mist|horizon|ripple/.test(sky + files['css/sky.css'].replace(/\/\*[\s\S]*?\*\//g, '')), 'scene leftovers in the markup or sky.css');
+  assert.ok(!fs.existsSync(path.join(web, 'assets', 'scene')), 'scene images are removed');
+  assert.ok(!fs.existsSync(path.join(web, 'assets', 'moon.webp')));
+  const js = read('sky.js');
+  assert.ok(!/moon|ripple|sparkle|shooting|'stars'|water/.test(js), 'scene code left in sky.js');
+  assert.match(js, /className = 'petal'/);
+  assert.match(js, /--lx/);
+  assert.match(files['css/sky.css'], /\.sky \{[^}]*background: var\(--bg\)/, 'a plain dark backdrop');
   assert.ok((html.match(/\blit\b/g) || []).length >= 6, 'cards, panel, chat and menu items use the "lit" light');
-  assert.match(read('sky.js'), /--lx/);
   assert.match(files['css/components.css'], /\.lit::before/);
+  assert.ok(!/--moon-/.test(Object.values(files).join('')), 'no moon tokens are left');
+});
+
+test('the background markup is identical on the main page and in the style guide (no drift)', () => {
+  const sky = (f) => { const h = read(f); const a = h.indexOf('<div class="sky"'); return h.slice(a, h.indexOf('</div>', h.indexOf('class="sky-vignette"')) + 6).replace(/\s+/g, ' '); };
+  assert.equal(sky('styleguide.html'), sky('index.html'));
 });
 
 test('the style guide uses the same stylesheet and shows every component', () => {

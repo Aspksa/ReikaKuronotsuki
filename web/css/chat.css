@@ -1,7 +1,7 @@
 /* The floating logo (orb) and the chat window it opens. */
 .orb { position: fixed; z-index: var(--z-orb); width: var(--orb-size); height: var(--orb-size); padding: 0; border: 0; border-radius: 50%; background: none; touch-action: none; cursor: grab; user-select: none;
   filter: drop-shadow(0 6px 16px rgb(var(--black-rgb) / .55)); animation: orb-glow 3.2s ease-in-out infinite; transition: transform var(--dur-fast); }
-.orb svg { width: 100%; height: 100%; display: block; pointer-events: none; }
+.orb img { width: 100%; height: 100%; display: block; pointer-events: none; border-radius: 50%; }
 .orb:hover { transform: scale(1.06); }
 .orb.dragging { cursor: grabbing; transform: scale(1.12); animation: none; filter: drop-shadow(0 10px 24px rgb(var(--gold-rgb) / .5)); }
 .orb.open { animation: none; filter: drop-shadow(0 0 14px rgb(var(--crimson-rgb) / .6)); }

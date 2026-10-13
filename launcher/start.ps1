@@ -100,6 +100,9 @@ Set-Content -LiteralPath (Join-Path $env:TEMP 'reika-kuronotsuki.url') -Value $u
 # The server prints only a couple of lines at start-up, so the unread pipe can never fill up.
 
 function New-TrayIcon {
+    # The project's own icon (several sizes inside); if it is missing, a simple moon is drawn instead.
+    $ico = Join-Path $root 'web\assets\logo\windows.ico'
+    try { if (Test-Path -LiteralPath $ico) { return New-Object System.Drawing.Icon($ico, 32, 32) } } catch { }
     $bmp = New-Object System.Drawing.Bitmap 32, 32
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = 'AntiAlias'

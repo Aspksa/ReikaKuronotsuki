@@ -10,9 +10,9 @@
   --crimson: #b3223f; --crimson-hi: #c9304f; --crimson-lo: #8f1a33; --crimson-deep: #5b282e;
   --gold: #d8b46a; --gold-hi: #e3c27c; --gold-lo: #c39a4a; --gold-ink: #20150f;
   --eye: #6fb7ff; --sakura: #f3b8c8; --ok: #8fd3a0; --warn: #f2a28b;
-  --sky-top: #070813; --sky-mid: #10122a; --sky-low: #1b1428; --petal: #f7d9e2;
+  --petal: #f7d9e2;
   --gold-rgb: 216 180 106; --crimson-rgb: 179 34 63; --pearl-rgb: 253 247 244; --blush-rgb: 229 198 195;
-  --night-rgb: 11 12 22; --moon-rgb: 214 224 255; --black-rgb: 0 0 0;
+  --night-rgb: 11 12 22; --light-rgb: 255 236 178; --black-rgb: 0 0 0;
 
   /* semantic */
   --bg: var(--night-900);
@@ -42,7 +42,7 @@
   --shadow-1: 0 6px 20px rgb(var(--black-rgb) / .35);
   --shadow-2: 0 18px 50px rgb(var(--black-rgb) / .55);
   --shadow-glow-crimson: 0 6px 24px rgb(var(--crimson-rgb) / .4);
-  --rim-light: inset 0 1px 0 rgb(var(--moon-rgb) / .10);
+  --rim-light: inset 0 1px 0 rgb(var(--light-rgb) / .10);
 
   /* motion */
   --ease: cubic-bezier(.2, .7, .2, 1);
@@ -54,6 +54,4 @@
   /* layout */
   --sidebar-w: 248px; --sidebar-w-collapsed: 76px; --orb-size: 64px; --content-max: 760px;
 
-  /* the moon (shared by the sky layers and the water reflection) */
-  --moon-size: clamp(220px, 36vmin, 480px); --moon-top: 5vmin; --moon-right: 9vw;
 }
