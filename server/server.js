@@ -23,7 +23,7 @@ const MIME = {
 };
 const MAX_BODY = 16 * 1024;
 const MAX_ARCHIVE = 60_000_000;
-const MAX_BACKUP = 4 * 1024 * 1024; // a copy of the chat history: 500 messages at most, so 4 MB is plenty
+const MAX_BACKUP = 32 * 1024 * 1024; // chat and a bounded memory-graph restore
 
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), 'utf8');
@@ -207,7 +207,10 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
       // A copy of everything of yours: the chat history and the settings, in one file you can keep anywhere.
       if (url.pathname === '/api/backup') {
         if (req.method === 'GET') {
-          const body = Buffer.from(JSON.stringify({ kind: 'reika-backup', version: 1, createdAt: new Date().toISOString(), settings: settings.read(projectRoot), messages: store.all() }, null, 2), 'utf8');
+          const mem = await memory();
+          if (!mem) return sendJson(res, 503, { error: 'Невозможно создать полную копию: память MemOS недоступна' });
+          const memoryGraph = await mem.getGraph();
+          const body = Buffer.from(JSON.stringify({ kind: 'reika-backup', version: 2, createdAt: new Date().toISOString(), settings: settings.read(projectRoot), messages: store.all(), memory: memoryGraph }, null, 2), 'utf8');
           const name = `reika-backup-${new Date().toISOString().slice(0, 10)}.json`;
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length, 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' });
           return res.end(body);
@@ -217,8 +220,23 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
           try { payload = JSON.parse((await readBuffer(req, MAX_BACKUP)).toString('utf8')); }
           catch (error) { return sendJson(res, error.status || 400, { error: error.status === 413 ? 'Файл слишком большой' : 'Это не похоже на файл копии' }); }
           if (!payload || payload.kind !== 'reika-backup' || !Array.isArray(payload.messages)) return sendJson(res, 400, { error: 'Это не копия Рэйки: нет списка сообщений' });
+          const graph = payload.memory;
+          if (graph !== undefined) {
+            if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || graph.nodes.length > 50000 || graph.edges.length > 200000 ||
+                graph.nodes.some(n => !n || typeof n.id !== 'string' || n.id.length > 128 || typeof n.content !== 'string' || n.content.length > 10000 ||
+                  !['fact','preference','context','relationship','entity','custom'].includes(n.type) || !Number.isSafeInteger(n.createdAt) || !Number.isSafeInteger(n.updatedAt)) ||
+                graph.edges.some(e => !e || typeof e.sourceId !== 'string' || typeof e.targetId !== 'string')) {
+              return sendJson(res, 400, { error: 'В копии повреждены данные долговременной памяти' });
+            }
+            const mem = await memory();
+            if (!mem) return sendJson(res, 503, { error: 'Память MemOS недоступна, восстановление отменено' });
+            // Keep the old memory intact if the import is impossible to start.
+            await mem.clear();
+            for (const n of graph.nodes) await mem.importRecord(n);
+            for (const e of graph.edges) await mem.link(e.sourceId, e.targetId, e.relation, e.weight);
+          }
           const restored = store.replace(payload.messages);
-          return sendJson(res, 200, { ok: true, messages: restored, skipped: payload.messages.length - restored });
+          return sendJson(res, 200, { ok: true, messages: restored, skipped: payload.messages.length - restored, memoryRestored: graph !== undefined, memories: graph?.nodes.length ?? null });
         }
         return sendJson(res, 405, { error: 'method not allowed' });
       }
