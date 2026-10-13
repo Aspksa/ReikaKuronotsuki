@@ -109,6 +109,10 @@
   const tabs=$('up-stats-tabs');
   const highlights=$('up-stats-highlights');
   const cards=[];
+  const favoriteStore='reika-stats-favorites-v1';
+  let favorites=[];
+  try {const value=JSON.parse(localStorage.getItem(favoriteStore)||'[]');if(Array.isArray(value))favorites=value.filter(x=>typeof x==='string').slice(0,150);}catch{favorites=[];}
+  let favoritesOnly=false;
   const traces=new Map();
   const selected={index:0};
   const reduced=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -146,8 +150,14 @@
     const trend=document.createElement('span');trend.className='stats-trend';trend.textContent='Нет истории';
     const chart=document.createElement('div');chart.className='stats-chart';chart.setAttribute('aria-label','История изменения');
     const meta=document.createElement('div');meta.className='stats-meta';meta.append(value,trend);
-    card.append(icon,name,meta,chart);
-    const c={key,unit,value,trend,chart,card};
+    const star=document.createElement('button');star.type='button';star.className='stats-star';star.setAttribute('aria-label','Добавить в избранное');star.textContent='☆';
+    const detail=document.createElement('button');detail.type='button';detail.className='stats-open';detail.setAttribute('aria-label','Подробнее: '+label);detail.textContent='↗';
+    star.addEventListener('click',()=>toggleFavorite(key));
+    detail.addEventListener('click',()=>openDetail({key,unit,label}));
+    card.append(icon,name,meta,chart,star,detail);
+    const c={key,unit,value,trend,chart,card,star};
+    star.dataset.favoriteKey=key;
+    card.dataset.metricKey=key;
     if(!compact){card.dataset.search=label.toLocaleLowerCase('ru-RU');card.dataset.metricLabel=label;}
     cards.push(c);
     return card;
@@ -176,22 +186,70 @@
   });
   function filterMetrics(){
     const query=search.value.trim().toLocaleLowerCase('ru-RU');
-    tabs.hidden=!!query;
+    tabs.hidden=!!query||favoritesOnly;
     let shown=0;
     root.querySelectorAll('.stats-category').forEach((section,i)=>{
       const visibleRows=Array.from(section.querySelectorAll('.stats-tile')).filter(tile=>{
-        const matched=!query || tile.dataset.search.includes(query);
+        const matched=(!query || tile.dataset.search.includes(query))&&(!favoritesOnly || favorites.includes(tile.dataset.metricKey));
         tile.hidden=!matched;
         if(matched)shown++;
         return matched;
       });
-      section.hidden=query?visibleRows.length===0:i!==selected.index;
+      section.hidden=(query||favoritesOnly)?visibleRows.length===0:i!==selected.index;
     });
     empty.hidden=shown!==0;
-    $('up-stats-section-title').textContent=query?'Поиск: '+search.value.trim():groups[selected.index][0];
+    $('up-stats-section-title').textContent=favoritesOnly?'Избранное':query?'Поиск: '+search.value.trim():groups[selected.index][0];
     $('up-stats-section-count').textContent=query?shown+' найдено':groups[selected.index][1].length+' показателей';
   }
   search.addEventListener('input',filterMetrics);
+  const favoriteToggle=$('up-stats-favorites-toggle');
+  favoriteToggle.addEventListener('click',()=>{favoritesOnly=!favoritesOnly;favoriteToggle.setAttribute('aria-pressed',String(favoritesOnly));filterMetrics();});
+  function toggleFavorite(key) {
+    favorites=favorites.includes(key)?favorites.filter(x=>x!==key):[...favorites,key];
+    try{localStorage.setItem(favoriteStore,JSON.stringify(favorites));}catch{/* Private mode or quota */}
+    syncFavorites();filterMetrics();
+  }
+  function syncFavorites() {
+    for(const c of cards){const on=favorites.includes(c.key);c.star.textContent=on?'★':'☆';c.star.setAttribute('aria-pressed',String(on));c.star.setAttribute('aria-label',(on?'Убрать из избранного: ':'Добавить в избранное: ')+c.key);}
+    $('up-stats-favorites-count').textContent=favorites.length?'Закреплено: '+favorites.length:'';
+  }
+  const dialog=$('up-stats-detail');
+  $('up-stats-detail-close').addEventListener('click',()=>dialog.close());
+  function openDetail(item) {
+    $('up-stats-detail-title').textContent=item.label;
+    const value=lastData?get(lastData,item.key):null;
+    $('up-stats-detail-value').textContent=format(value,item.unit);
+    const rows=lastData?.samples||[];
+    const field=persisted[item.key];
+    const points=field?rows.filter(x=>Number.isFinite(x.at)&&numeric(x[field])).map(x=>({at:x.at,value:x[field]})).filter(x=>x.at>=Date.now()-Number(period.value)):[];
+    $('up-stats-detail-desc').textContent=points.length>=2?'Измерения из сохранённой истории за выбранный период.':'Недостаточно сохранённых измерений для подробного графика.';
+    const target=$('up-stats-detail-chart');target.replaceChildren();
+    const list=$('up-stats-detail-points');list.replaceChildren();
+    if(points.length>=2){
+      const sampled=points.length>80?points.filter((_,i)=>i%Math.ceil(points.length/80)===0).concat(points.at(-1)):points;
+      const lo=Math.min(0,...sampled.map(x=>x.value)),hi=Math.max(...sampled.map(x=>x.value)),span=hi-lo||1;
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('viewBox','0 0 500 145');svg.setAttribute('role','img');svg.setAttribute('aria-label','Исторический график '+item.label);
+      const path=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+      path.setAttribute('fill','none');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','2');
+      path.setAttribute('points',sampled.map((x,i)=>(8+i*484/(sampled.length-1)).toFixed(1)+','+(135-(x.value-lo)*120/span).toFixed(1)).join(' '));
+      svg.appendChild(path);
+      for(const [i,x] of sampled.entries()){
+        const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        dot.setAttribute('cx',String(8+i*484/(sampled.length-1)));
+        dot.setAttribute('cy',String(135-(x.value-lo)*120/span));dot.setAttribute('r','3');
+        const tip=document.createElementNS('http://www.w3.org/2000/svg','title');
+        tip.textContent=new Date(x.at).toLocaleString('ru-RU')+' · '+format(x.value,item.unit);
+        dot.appendChild(tip);svg.appendChild(dot);
+      }
+      target.appendChild(svg);
+      for(const x of [points[0],points.at(-1)]){
+        const row=document.createElement('p');row.textContent=new Date(x.at).toLocaleString('ru-RU')+' — '+format(x.value,item.unit);list.appendChild(row);
+      }
+    }
+    if(typeof dialog.showModal==='function')dialog.showModal();else dialog.open=true;
+  }
+  syncFavorites();
   function activate(i){
     selected.index=i;
     $('up-stats-section-title').textContent=groups[i][0];
@@ -233,6 +291,11 @@
       const signed=n=>(n>0?'+':'')+num(n);
       comparison.textContent=(baseline.baseline==='previous-recorded-version'?'С прошлой записанной версии, ': 'С первой записи, ')+when+': '+signed(baseline.files)+' файлов · '+signed(baseline.lines)+' строк · '+signed(baseline.bytes)+' байт. Сравнение с первой сохранённой точкой, не с первой версией.';
     }else comparison.textContent='Сравнение появится после первого сохранённого измерения.';
+    const git=$('up-stats-gitdiff');
+    const d=data.gitDiff;
+    git.textContent=d?'Последний коммит '+d.from+' → '+d.to+': файлов изменено '+d.changedFiles+', добавлено '+d.addedFiles+', удалено '+d.deletedFiles+'; строк +'+d.addedLines+' / −'+d.deletedLines+'.':'Сравнение коммитов недоступно: требуется локальная история Git с минимум двумя коммитами.';
+    const alerts=$('up-stats-alerts');alerts.replaceChildren();
+    for(const a of data.anomalies||[]){const p=document.createElement('p');p.textContent='Обратить внимание: '+a.title+' ('+(a.changePercent>0?'+':'')+a.changePercent+'% относительно последних пяти измерений)';alerts.appendChild(p);}
     const sentences=[];
     if(baseline){
       if(baseline.bytes>0 && baseline.files===0)sentences.push('Размер проекта вырос без увеличения числа файлов — вероятно, изменилось содержимое существующих.');
