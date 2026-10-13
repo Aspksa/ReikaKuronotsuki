@@ -31,17 +31,37 @@ function Install-PortableNode {
     $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
     $name = "node-$nodeVersion-win-$arch"
     $url = "https://nodejs.org/dist/$nodeVersion/$name.zip"
-    $tmp = Join-Path $root 'runtime\download'
+    # A unique directory avoids access-denied collisions with old half-extracted downloads.
+    $runtime = Join-Path $root 'runtime'
+    New-Item -ItemType Directory -Force -Path $runtime | Out-Null
+    $tmp = Join-Path $runtime ('node-install-' + [guid]::NewGuid().ToString('N'))
+    $target = Join-Path $runtime 'node'
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-    $zip = Join-Path $tmp "$name.zip"
-    Write-Host "Node.js 22.13+ не найден (или установлен несовместимый). Скачиваю переносную версию ($name)..."
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-    Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
-    $target = Join-Path $root 'runtime\node'
-    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
-    Move-Item -LiteralPath (Join-Path $tmp $name) -Destination $target
-    Remove-Item -LiteralPath $tmp -Recurse -Force
+    try {
+        $zip = Join-Path $tmp "$name.zip"
+        Write-Host "Node.js 22.13+ не найден (или установлен несовместимый). Скачиваю переносную версию ($name)..."
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+        Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
+        $extracted = Join-Path $tmp $name
+        if (-not (Test-NodeRuntime -Candidate (Join-Path $extracted 'node.exe'))) {
+            throw 'Загруженный Node.js повреждён или не подходит.'
+        }
+        if (Test-Path -LiteralPath $target) {
+            # Do not erase an existing runtime before the replacement is known good.
+            $old = Join-Path $runtime ('node-old-' + [guid]::NewGuid().ToString('N'))
+            Move-Item -LiteralPath $target -Destination $old -ErrorAction Stop
+            try { Move-Item -LiteralPath $extracted -Destination $target -ErrorAction Stop }
+            catch { Move-Item -LiteralPath $old -Destination $target -ErrorAction SilentlyContinue; throw }
+            Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
+        } else {
+            Move-Item -LiteralPath $extracted -Destination $target -ErrorAction Stop
+        }
+    } catch {
+        throw "Не удалось установить Node.js в $runtime. Проверьте доступ к папке и защиту Windows (Контролируемый доступ к папкам). Причина: $($_.Exception.Message)"
+    } finally {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Get-NodeOrInstall {
