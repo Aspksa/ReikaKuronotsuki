@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { collect, inspect, readSamples, cachedInspect } = require('../update/stats');
+const { collect, inspect, readSamples, cachedInspect, findAnomalies, gitDiff } = require('../update/stats');
 
 test('statistics scan excludes user data and maintains project growth baseline', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'reika-stats-'));
@@ -128,4 +128,26 @@ test('dashboard provides hour, day and week histories with truthful trend contex
   for(const ms of ['3600000','86400000','604800000'])assert.ok(html.includes('value="'+ms+'"'));
   assert.match(script,/const cutoff=now-Number\(period.value\)/);
   assert.match(script,/previous-recorded-version/);
+});
+
+test('anomaly warnings require six real observations and a material departure', () => {
+  assert.deepEqual(findAnomalies([{rss:100},{rss:100}]),[]);
+  const rows=[100,101,100,100,99,150].map((rss,i)=>({at:1000+i*60000,rss,bytes:500,freeDiskBytes:1000,failures:0}));
+  const alerts=findAnomalies(rows);
+  assert.equal(alerts.length,1);
+  assert.equal(alerts[0].key,'rss');
+  assert.ok(alerts[0].changePercent>25);
+  assert.equal(gitDiff(path.join(os.tmpdir(),'reika-git-nonexistent-'+Date.now())),null);
+});
+test('new metric interactions expose keyboard-accessible controls and dialog', async () => {
+  const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
+  const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
+  const css=await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
+  for(const id of ['up-stats-detail','up-stats-detail-close','up-stats-favorites-toggle','up-stats-alerts','up-stats-gitdiff'])assert.ok(html.includes('id="'+id+'"'));
+  assert.match(js,/function openDetail\(/);
+  assert.match(js,/function toggleFavorite\(/);
+  assert.match(js,/localStorage\.setItem/);
+  assert.match(js,/showModal\(\)/);
+  assert.match(css,/\.stats-detail::backdrop/);
+  assert.match(css,/\.stats-open:focus-visible/);
 });
