@@ -94,6 +94,12 @@
         <h3>Обновить из файла</h3>
         <p class="text-muted">Выберите ZIP-архив проекта (на GitHub: Code → Download ZIP). Подходит без интернета и для проекта на флешке. Архив не сверяется с GitHub, поэтому ставьте только те, которым доверяете. Перед установкой тесты запускаются в отдельной папке, а ваши данные и настройки не затрагиваются.</p>
         <label class="btn btn--ghost file-btn">Выбрать ZIP-файл…<input id="up-file" class="sr" type="file" accept=".zip,application/zip"></label>
+        <section class="stats-panel" aria-label="Сто статистик проекта">
+          <h3>100 фактов, которые никто не просил</h3>
+          <p class="text-muted">Но теперь они есть. Цифры настоящие, названия — с характером.</p>
+          <p id="up-stats-note" class="text-muted">Загрузка статистики…</p>
+          <div id="up-stats"></div>
+        </section>
         <h3>История</h3><ul id="up-history" class="history"></ul>
         <button id="up-rollback" type="button" class="btn btn--ghost" hidden>Откатить последнюю установку</button>
       </div>
@@ -148,6 +154,7 @@
 <script src="toast.js"></script>
 <script src="update-state.js"></script>
 <script src="update.js"></script>
+<script src="update-stats.js"></script>
 <script src="sky.js"></script>
 <script src="shell.js"></script>
 <script src="orb.js"></script>
