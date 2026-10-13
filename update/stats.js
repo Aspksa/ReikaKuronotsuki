@@ -79,7 +79,7 @@ async function collect(updater) {
     const run = args => execFileSync('git', ['-C', root, ...args], { timeout: 1800, encoding: 'utf8', stdio:['ignore','pipe','ignore'] }).trim();
     const countCommits = Number(run(['rev-list','--count','HEAD']));
     git.commitCount = Number.isFinite(countCommits) ? countCommits : null;
-    git.firstCommit = dateMs(run(['log','--reverse','--format=%aI','-1', '$(git rev-list --max-parents=0 HEAD)'])) ?? null;
+    git.firstCommit = dateMs(run(['log','--reverse','--format=%aI','HEAD']).split('\n')[0]) ?? null;
     git.lastCommit = dateMs(run(['log','-1','--format=%aI']));
     git.authors = run(['shortlog','-sne','HEAD']).split('\n').filter(Boolean).length;
   } catch { /* ZIP installations may not have git */ }
