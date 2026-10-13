@@ -330,7 +330,7 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
           // Rules-based offline Reika has no LLM: expose relevant memories
           // transparently rather than pretending to perform semantic reasoning.
           if (/(?:помнишь|запомнила|вспомни|что ты знаешь обо мне|мои предпочтения)/i.test(text)) {
-            answer = { text: memories.length ? 'Вот что я нашла в своей памяти:\\n' + memories.map(x => '• ' + x).join('\\n') : 'Пока не нашла подходящих воспоминаний. Можешь сказать «Запомни: …».', emotion: 'neutral' };
+            answer = { text: memories.length ? 'Вот что я нашла в своей памяти:\n' + memories.map(x => '• ' + x).join('\n') : 'Пока не нашла подходящих воспоминаний. Можешь сказать «Запомни: …».', emotion: 'neutral' };
           } else answer = core.reply(text);
         }
         const user = store.add('user', text, core.detectEmotion(text));
