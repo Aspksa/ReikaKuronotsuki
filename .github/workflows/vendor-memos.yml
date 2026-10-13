@@ -35,5 +35,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add vendor/memos
           git add -f vendor/memos/dist
+          # Some upstream tracked data and benchmark records match its own .gitignore.
+          # Carry them anyway: this is an exact source snapshot, not a filtered export.
+          git add -f vendor/memos/scripts/bench-crossrepo-results.json vendor/memos/scripts/bench-memory-results.json vendor/memos/scripts/bench-quality-results.json vendor/memos/scripts/bench-results.json vendor/memos/scripts/dataset/beam/data/beam_100k.json vendor/memos/scripts/dataset/locomo/data/locomo10.json vendor/memos/scripts/dataset/locomo/data/msc_personas_all.json vendor/memos/scripts/dataset/locomo/data/multimodal_dialog/example/agent_a.json vendor/memos/scripts/dataset/locomo/data/multimodal_dialog/example/agent_b.json vendor/memos/website/data/benchmarks.json
           git commit -m "Vendor full MIT-licensed MemOS source and compiled SDK" || exit 0
           git push origin HEAD:feature/vendor-memos-full-source-20261013
