@@ -88,10 +88,10 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
   function memoryCandidate(text) {
     const value = String(text || '').trim();
     if (value.length < 12 || value.length > 350 || /[?？]/.test(value)) return null;
-    if (/^запомни\\s*[:：,]?\\s+/i.test(value)) return value.replace(/^запомни\\s*[:：,]?\\s*/i, '').trim() || null;
-    if (/^(?:привет|пока|спасибо|окей|хорошо|да|нет|сделай|покажи|найди|объясни|расскажи|помоги|проверь|переведи|напиши|запусти|открой|удали|поставь|установи)(?:\\s|$|[,.!:])/i.test(value)) return null;
-    if (!/(?:^|\\s)(?:я\\s+(?:люблю|предпочитаю|хочу|живу|работаю|учусь|ненавижу|использую|увлекаюсь|не люблю)|мне\\s+(?:нравится|не нравится|важно|нужно)|мой\\s+(?:любимый|адрес|город|проект|питомец)|моя\\s+(?:любимая|работа|цель)|меня зовут|запомни\\s*[:：,]?\\s+)(?:\\s|$|[,.!:]|\\S)/i.test(value)) return null;
-    return value.replace(/^запомни\\s*[:：,]?\\s*/i, '').trim() || null;
+    if (/^запомни\s*[:：,]?\s+/i.test(value)) return value.replace(/^запомни\s*[:：,]?\s*/i, '').trim() || null;
+    if (/^(?:привет|пока|спасибо|окей|хорошо|да|нет|сделай|покажи|найди|объясни|расскажи|помоги|проверь|переведи|напиши|запусти|открой|удали|поставь|установи)(?:\s|$|[,.!:])/i.test(value)) return null;
+    if (!/(?:^|\s)(?:я\s+(?:люблю|предпочитаю|хочу|живу|работаю|учусь|ненавижу|использую|увлекаюсь|не люблю)|мне\s+(?:нравится|не нравится|важно|нужно)|мой\s+(?:любимый|адрес|город|проект|питомец)|моя\s+(?:любимая|работа|цель)|меня зовут|запомни\s*[:：,]?\s+)(?:\s|$|[,.!:]|\S)/i.test(value)) return null;
+    return value.replace(/^запомни\s*[:：,]?\s*/i, '').trim() || null;
   }
   async function remember(text) {
     const content = memoryCandidate(text);
@@ -329,7 +329,7 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         if (!answer) {
           // Rules-based offline Reika has no LLM: expose relevant memories
           // transparently rather than pretending to perform semantic reasoning.
-          if (/\\b(?:помнишь|запомнила|вспомни|что ты знаешь обо мне|мои предпочтения)\\b/i.test(text)) {
+          if (/(?:помнишь|запомнила|вспомни|что ты знаешь обо мне|мои предпочтения)/i.test(text)) {
             answer = { text: memories.length ? 'Вот что я нашла в своей памяти:\\n' + memories.map(x => '• ' + x).join('\\n') : 'Пока не нашла подходящих воспоминаний. Можешь сказать «Запомни: …».', emotion: 'neutral' };
           } else answer = core.reply(text);
         }
