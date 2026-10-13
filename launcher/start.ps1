@@ -57,7 +57,13 @@ if ($Step -eq 'check') {
         Write-Host "Node.js: $node"
         # Install the pinned upstream MemOS SDK directly into the application.
         $sdk = Join-Path $root 'node_modules\@mem-os\sdk\dist\index.js'
-        if (-not (Test-Path -LiteralPath $sdk)) {
+        $sourceStamp = Join-Path $root 'vendor\memos\REIKA_UPSTREAM.txt'
+        $installedStamp = Join-Path $root 'runtime\memos-vendored-installed.txt'
+        if (-not (Test-Path -LiteralPath $sourceStamp)) { throw 'В проекте отсутствует версия исходников MemOS.' }
+        $requiredStamp = (Get-Content -LiteralPath $sourceStamp -Raw).Trim()
+        $currentStamp = if (Test-Path -LiteralPath $installedStamp) { (Get-Content -LiteralPath $installedStamp -Raw).Trim() } else { '' }
+        # Replace a previously installed npm package with the vendored SDK.
+        if (-not (Test-Path -LiteralPath $sdk) -or $currentStamp -ne $requiredStamp) {
             if (-not (Test-Path -LiteralPath (Join-Path $root 'vendor\memos\dist\index.js'))) { throw 'Не найдена локальная сборка MemOS. Скачайте актуальную версию проекта с GitHub.' }
             Write-Host 'Устанавливаю встроенную память MemOS...'
             $localNpm = Join-Path $root 'runtime\node\node_modules\npm\bin\npm-cli.js'
@@ -69,6 +75,7 @@ if ($Step -eq 'check') {
                 & $npm.Source install --omit=dev --no-audit --no-fund
             }
             if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $sdk)) { throw 'Не удалось установить MemOS. Проверьте подключение к интернету.' }
+            Set-Content -LiteralPath $installedStamp -Value $requiredStamp -Encoding ASCII
         }
 
         & $node (Join-Path $root 'tests\run.js')
