@@ -49,7 +49,7 @@ test('every file the page references exists', () => {
 test('every element id used by the page scripts exists in index.html (sidebar, orb, chat, update page)', () => {
   const html = read('index.html');
   const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
-  for (const file of ['app.js', 'update.js', 'shell.js', 'orb.js', 'sky.js', 'toast.js', 'palette.js']) {
+  for (const file of ['app.js', 'update.js', 'shell.js', 'orb.js', 'sky.js', 'toast.js']) {
     const code = read(file);
     const used = [...code.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]).concat([...code.matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]));
     for (const id of used) assert.ok(ids.has(id), `${file} uses #${id} but index.html has no such element`);
@@ -60,13 +60,13 @@ test('left menu: home, chat and (hidden until a server answers) update; no old h
   const html = read('index.html');
   const side = html.slice(html.indexOf('<aside'), html.indexOf('</aside>'));
   assert.match(side, /id="nav-home"/);
-  assert.match(side, /id="nav-chat"/);
+  assert.ok(!side.includes('id="nav-chat"') && !side.includes('id="palette-open"'), 'no chat item and no search in the menu: the chat opens from the floating logo');
   assert.match(side, /id="update-card"[^>]*hidden/, 'the update block stays hidden until a server answers');
   assert.match(side, /id="nav-update"[\s\S]*>Обновления</);
   const bottom = side.slice(side.indexOf('class="side-bottom"'));
   assert.ok(bottom.includes('id="nav-update"') && bottom.includes('id="side-toggle"') && bottom.indexOf('id="nav-update"') < bottom.indexOf('id="side-toggle"'), 'the update entry sits in the bottom block, above the footer');
   assert.ok(!side.slice(0, side.indexOf('class="side-bottom"')).includes('id="nav-update"'), 'not in the menu list');
-  for (const id of ['palette-open', 'about-open', 'presence', 'side-mood', 'update-mini', 'update-install-quick', 'update-news']) assert.ok(side.includes(`id="${id}"`), `#${id} is missing in the menu`);
+  for (const id of ['about-open', 'presence', 'side-mood', 'update-news']) assert.ok(side.includes(`id="${id}"`), `#${id} is missing in the menu`);
   assert.ok(!side.includes('id="menu-mode"'));
   assert.ok(!side.includes('id="update-status"'), 'no status text in the menu');
   assert.match(side, /id="side-toggle"/);
@@ -129,12 +129,10 @@ test('motion is optional: petals and glow respect prefers-reduced-motion', () =>
 
 test('side panel features: quick search, about dialog, toasts, update card states and ZIP upload are wired', () => {
   const html = read('index.html');
-  for (const f of ['toast.js', 'update-state.js', 'palette.js']) assert.ok(fs.existsSync(path.join(web, f)) && html.includes(`src="${f}"`), `${f} must exist and be loaded`);
+  for (const f of ['toast.js', 'update-state.js']) assert.ok(fs.existsSync(path.join(web, f)) && html.includes(`src="${f}"`), `${f} must exist and be loaded`);
   assert.ok(html.indexOf('update-state.js') < html.indexOf('src="update.js"'), 'update-state.js loads before update.js');
-  assert.match(html, /<dialog id="palette"/); assert.match(html, /<dialog id="about-dialog"/); assert.match(html, /id="toasts"[^>]*aria-live/);
+  assert.match(html, /<dialog id="about-dialog"/); assert.match(html, /id="toasts"[^>]*aria-live/);
   assert.match(html, /id="up-file"[^>]*type="file"[^>]*accept="[^"]*zip/);
-  const palette = read('palette.js');
-  assert.match(palette, /KeyK/); assert.match(palette, /ArrowDown/); assert.match(palette, /showModal/);
   const update = read('update.js');
   assert.match(update, /api\/update\/from-archive/); assert.match(update, /X-File-Name/); assert.match(update, /ReikaToast/); assert.match(update, /reika\.notified\.v1/);
   assert.match(read('app.js'), /reika:mood/);

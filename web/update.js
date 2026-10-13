@@ -65,13 +65,6 @@
     card.dataset.state = state;
     $('update-ico-path').setAttribute('d', S.ICONS[state]);
     show($('update-dot'), state === 'available' || state === 'ready');
-    const bar = $('update-mini');
-    show(bar, state === 'busy' && st.phase === 'downloading');
-    const pct = Math.max(0, Math.min(100, Math.round(st.percent || 0)));
-    bar.setAttribute('aria-valuenow', String(pct));
-    $('update-mini-fill').style.width = `${pct}%`;
-    const needConfirm = st.pendingRemovals && st.pendingRemovals.length > 0 && !st.removalsConfirmed;
-    show($('update-install-quick'), state === 'ready' && !st.rollbackPending && !needConfirm);
     const n = S.news(st);
     const pop = $('update-news');
     pop.textContent = '';
@@ -180,13 +173,12 @@
   act('up-confirm', () => call('confirm-removals', 'POST', {}));
   act('up-rollback', async () => { if (confirm('Откатить последнюю установку? Данные чата не изменятся. Рэйка перезапустится.')) { await call('rollback', 'POST', {}); await install(); } });
   act('up-install', install);
-  $('update-install-quick').addEventListener('click', () => install().catch(fail));
   $('up-channel').addEventListener('change', () => call('settings', 'POST', { channel: $('up-channel').value }).then(poll).catch((e) => alert(e.message)));
   $('up-auto').addEventListener('change', () => call('settings', 'POST', { autoCheck: $('up-auto').value }).then(poll).catch((e) => alert(e.message)));
 
   window.addEventListener('reika:route', (event) => { if (event.detail === 'update') { poll(); refreshHistory(); } });
 
-  // for the command palette
+  // small public handle (console, other scripts)
   window.ReikaUpdate = {
     check: () => call('check', 'POST', {}).then(poll),
     open: () => { location.hash = '#/update'; },
