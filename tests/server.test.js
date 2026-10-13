@@ -108,3 +108,19 @@ test('MemOS is connected directly in the chat pipeline, without an adapter modul
  assert.match(src,/await remember\(text\)/);
  assert.match(launcher,/npm-cli\.js/);
 });
+
+test('MemOS CRUD and consolidation are available through Reika directly',()=>withServer(async(base)=>{
+  const create=await fetch(base+'/api/memory',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:'Рэйка любит ночное небо'})});
+  assert.equal(create.status,201);
+  const created=(await create.json()).memory;
+  assert.ok(created.id);
+  const list=await (await fetch(base+'/api/memory')).json();
+  assert.ok(list.memories.some(x=>x.id===created.id));
+  const patch=await fetch(base+'/api/memory/'+encodeURIComponent(created.id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:'Рэйка любит лунный свет'})});
+  assert.equal(patch.status,200);
+  const consolidate=await fetch(base+'/api/memory/consolidate',{method:'POST'});
+  assert.equal(consolidate.status,200);
+  const remove=await fetch(base+'/api/memory/'+encodeURIComponent(created.id),{method:'DELETE'});
+  assert.equal(remove.status,200);
+  assert.equal((await remove.json()).deleted,true);
+}));
