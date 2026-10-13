@@ -69,6 +69,44 @@ function getGitStats(root){
   return git;
 }
 
+// A read-only Git comparison. Paths and commit IDs are never accepted from HTTP input.
+function gitDiff(root) {
+  try {
+    const run=args=>execFileSync('git',['-C',root,...args],{encoding:'utf8',timeout:2500,maxBuffer:512*1024,stdio:['ignore','pipe','ignore']}).trim();
+    const current=run(['rev-parse','HEAD']);
+    const previous=run(['rev-parse','HEAD^']);
+    const records=run(['diff','--numstat','--no-renames',previous,current]).split('\n');
+    let added=0,deleted=0,changed=0,addedFiles=0,deletedFiles=0;
+    for(const row of records){
+      if(!row)continue;
+      const [a,d,...name]=row.split('\t');
+      const filename=name.join('\t');
+      if(!filename)continue;
+      changed++;
+      if(a!=='-' && d!=='-'){added+=Number(a)||0;deleted+=Number(d)||0;}
+    }
+    const status=run(['diff','--name-status','--no-renames',previous,current]).split('\n');
+    for(const row of status){if(row.startsWith('A\t'))addedFiles++;if(row.startsWith('D\t'))deletedFiles++;}
+    return {from:previous.slice(0,12),to:current.slice(0,12),addedLines:added,deletedLines:deleted,changedFiles:changed,addedFiles,deletedFiles};
+  }catch{return null;}
+}
+function findAnomalies(samples) {
+  const metrics=[['rss','Память процесса'],['bytes','Размер проекта'],['freeDiskBytes','Свободное место'],['failures','Ошибки установок']];
+  const alerts=[];
+  for(const [key,title] of metrics){
+    const points=samples.map(s=>s[key]).filter(Number.isFinite);
+    if(points.length<6)continue;
+    const previous=points.slice(-6,-1),now=points.at(-1);
+    const baseline=previous.reduce((a,b)=>a+b,0)/previous.length;
+    if(baseline<=0)continue;
+    const delta=(now-baseline)/baseline;
+    if((key==='freeDiskBytes'&&delta<-.15)||(key!=='freeDiskBytes'&&delta>.25)){
+      alerts.push({key,title,changePercent:Math.round(delta*100),at:samples.at(-1)?.at});
+    }
+  }
+  return alerts;
+}
+
 async function inspect(root) {
   const result = { files: 0, bytes: 0, js: 0, css: 0, html: 0, json: 0, images: 0, text: 0,
     lines: 0, blank: 0, comments: 0, largest: 0, smallest: null, deepest: 0, directories: 0,
@@ -160,7 +198,7 @@ async function collect(updater) {
   const oldest=olderVersion||samples[0]||null;
   const versionComparison=oldest?{from:oldest.at,to:sample.at,fromVersion:oldest.version||null,toVersion:sample.version,bytes:sample.bytes-oldest.bytes,files:sample.files-oldest.files,lines:sample.lines-oldest.lines,baseline:olderVersion?'previous-recorded-version':'earliest-recorded-sample'}:null;
   return {
-    samples,versionComparison,
+    samples,versionComparison, gitDiff: gitDiff(root), anomalies: findAnomalies(samples),
     capturedAt: Date.now(), processStartedAt: Date.now() - Math.floor(process.uptime()*1000),
     uptimeMs: Math.floor(process.uptime()*1000), node: process.version, platform: process.platform,
     memoryRss: process.memoryUsage().rss, memoryHeap: process.memoryUsage().heapUsed,
@@ -185,4 +223,4 @@ async function collect(updater) {
       backups, backupBytes},
   };
 }
-module.exports = {collect, inspect, readLines, cachedInspect, readSamples};
+module.exports = {collect, inspect, readLines, cachedInspect, readSamples, findAnomalies, gitDiff};
