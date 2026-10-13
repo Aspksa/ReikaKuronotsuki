@@ -86,7 +86,7 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
   async function remember(text) {
     const mem = await memory();
     if (!mem) return;
-    try { await mem.store(text, { type: 'conversation', tags: ['reika-chat'] }); }
+    try { await mem.store(text, { type: 'fact', tags: ['reika-chat'], source: 'user_input' }); }
     catch (error) { console.warn('MemOS store:', error.message); }
   }
   async function recall(text) {
