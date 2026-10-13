@@ -107,7 +107,8 @@
     const value=document.createElement('strong');value.className='stats-number';value.textContent='—';
     const trend=document.createElement('span');trend.className='stats-trend';trend.textContent='Нет истории';
     const chart=document.createElement('div');chart.className='stats-chart';chart.setAttribute('aria-label','История изменения');
-    card.append(icon,name,value,trend,chart);
+    const meta=document.createElement('div');meta.className='stats-meta';meta.append(value,trend);
+    card.append(icon,name,meta,chart);
     const c={key,unit,value,trend,chart,card};
     cards.push(c);
     return card;
@@ -116,7 +117,10 @@
   let ordinal=0;
   groups.forEach(([title,items],i)=>{
     const tab=document.createElement('button');
-    tab.type='button';tab.className='stats-tab';tab.textContent=title;
+    tab.type='button';tab.className='stats-tab';
+    const titleSpan=document.createElement('span');titleSpan.textContent=title;
+    const countSpan=document.createElement('small');countSpan.textContent=String(items.length).padStart(2,'0');
+    tab.append(titleSpan,countSpan);
     tab.setAttribute('aria-controls',i===0?'up-stats-category':'up-stats-category-'+i);
     tab.setAttribute('aria-pressed',String(i===0));
     tab.addEventListener('click',()=>activate(i));
@@ -131,6 +135,8 @@
   });
   function activate(i){
     selected.index=i;
+    $('up-stats-section-title').textContent=groups[i][0];
+    $('up-stats-section-count').textContent=groups[i][1].length+' показателей';
     root.querySelectorAll('.stats-category').forEach((node,n)=>node.hidden=n!==i);
     tabButtons.forEach((tab,n)=>tab.setAttribute('aria-pressed',String(n===i)));
   }
@@ -168,7 +174,7 @@
         const change=arr.at(-1)-arr[0];
         const direction=change>0?'up':change<0?'down':'flat';
         c.card.dataset.direction=direction;
-        c.trend.textContent=change>0?'↗ Растёт':change<0?'↘ Снижается':'→ Без изменений';
+        c.trend.textContent=change>0?'↗ Растёт':change<0?'↘ Снижается':'→ Ровно';
       }
     }else{
       c.chart.replaceChildren();
