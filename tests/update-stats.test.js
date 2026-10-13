@@ -92,6 +92,6 @@ test('dashboard CSS uses one canonical declaration per base selector and breakpo
     const hits = css.split('\n').filter(line => line.startsWith(selector + ' {'));
     assert.equal(hits.length, 1, selector + ' must have one base declaration');
   }
-  assert.equal((css.match(/@media \\(max-width:1180px\\)/g) || []).length, 1);
-  assert.doesNotMatch(css, /\\.stats-heading/);
+  assert.equal((css.match(/@media \(max-width:1180px\)/g) || []).length, 1);
+  assert.doesNotMatch(css, /\.stats-heading/);
 });
