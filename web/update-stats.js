@@ -71,21 +71,111 @@
     if(/growth|lines|commit|git/i.test(key))return 'orange';
     return tones[i % tones.length];
   };
+  // One category is visible at a time: all 100 metrics remain accessible without a long page.
+  const tabs=$('up-stats-tabs');
+  const highlights=$('up-stats-highlights');
   const cards=[];
-  for(const [title,items] of groups){
-    const section=document.createElement('details');section.className='stats-section';
-    if(cards.length===0)section.open=true;
-    const summary=document.createElement('summary');summary.textContent=title+' · 10';section.appendChild(summary);
+  const traces=new Map();
+  const selected={index:0};
+  const reduced=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const numeric=value=>typeof value==='number'&&Number.isFinite(value);
+  function sparkline(values){
+    const good=values.filter(numeric);
+    if(good.length<2)return null; // never pretend there is a trend without samples
+    const lo=Math.min(...good), hi=Math.max(...good);
+    const range=hi-lo || 1;
+    const points=good.map((v,i)=>[4+i*112/(good.length-1),27-(v-lo)*22/range]);
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 120 32');
+    svg.setAttribute('aria-hidden','true');
+    svg.classList.add('stats-sparkline');
+    const path=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    path.setAttribute('points',points.map(p=>p.map(x=>x.toFixed(2)).join(',')).join(' '));
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke','currentColor');
+    path.setAttribute('stroke-width','2');
+    path.setAttribute('stroke-linecap','round');
+    path.setAttribute('stroke-linejoin','round');
+    svg.appendChild(path);
+    return svg;
+  }
+  function createCard(label,key,unit,index,compact=false){
+    const card=document.createElement('div');card.className='stats-tile'+(compact?' stats-tile--hero':'');
+    card.dataset.tone=toneFor(key,index);
+    const icon=document.createElement('span');icon.className='stats-icon';icon.setAttribute('aria-hidden','true');icon.textContent=symbols[index];
+    const name=document.createElement('span');name.className='stats-name';name.textContent=label;
+    const value=document.createElement('strong');value.className='stats-number';value.textContent='—';
+    const trend=document.createElement('span');trend.className='stats-trend';trend.textContent='Нет истории';
+    const chart=document.createElement('div');chart.className='stats-chart';chart.setAttribute('aria-label','История изменения');
+    card.append(icon,name,value,trend,chart);
+    const c={key,unit,value,trend,chart,card};
+    cards.push(c);
+    return card;
+  }
+  const tabButtons=[];
+  let ordinal=0;
+  groups.forEach(([title,items],i)=>{
+    const tab=document.createElement('button');
+    tab.type='button';tab.className='stats-tab';tab.textContent=title;
+    tab.setAttribute('aria-controls','up-stats-category');
+    tab.setAttribute('aria-pressed',String(i===0));
+    tab.addEventListener('click',()=>activate(i));
+    tabs.appendChild(tab);tabButtons.push(tab);
+    const section=document.createElement('section');
+    section.className='stats-category';section.hidden=i!==0;
+    section.setAttribute('aria-label',title);
+    section.id=i===0?'up-stats-category':'up-stats-category-'+i;
     const grid=document.createElement('div');grid.className='stats-grid';
-    for(const [label,key,unit] of items){
-      const card=document.createElement('div');card.className='stats-tile';
-      card.dataset.tone=toneFor(key,cards.length);
-      const icon=document.createElement('span');icon.className='stats-icon';icon.setAttribute('aria-hidden','true');icon.textContent=symbols[cards.length];
-      const name=document.createElement('span');name.className='stats-name';name.textContent=label;
-      const value=document.createElement('strong');value.className='stats-number';value.textContent='—';
-      card.append(icon,name,value);grid.appendChild(card);cards.push({key,unit,value});
-    }
+    for(const [label,key,unit] of items){grid.appendChild(createCard(label,key,unit,ordinal++));}
     section.appendChild(grid);root.appendChild(section);
+  });
+  function activate(i){
+    selected.index=i;
+    root.querySelectorAll('.stats-category').forEach((node,n)=>node.hidden=n!==i);
+    tabButtons.forEach((tab,n)=>tab.setAttribute('aria-pressed',String(n===i)));
+  }
+  // Highlight six useful signals; duplicates share the same historic samples.
+  const heroes=[
+    ['Время работы','uptimeMs','duration'],
+    ['Скачано всего','events.downloadedBytes','bytes'],
+    ['Размер проекта','scan.bytes','bytes'],
+    ['Рост проекта','growth.bytes','bytes'],
+    ['Установок','history.installs','number'],
+    ['Ошибок','events.errorCount','number']
+  ];
+  heroes.forEach(([label,key,unit],i)=>highlights.appendChild(createCard(label,key,unit,100+i,true)));
+  function renderValue(c,data){
+    const value=get(data,c.key);
+    const previous=c.previous;
+    const formatted=format(value,c.unit);
+    if(c.value.textContent!==formatted){
+      c.value.textContent=formatted;
+      if(previous!==undefined&&!reduced()){
+        c.card.classList.remove('stats-changed');
+        void c.card.offsetWidth;
+        c.card.classList.add('stats-changed');
+      }
+    }
+    if(numeric(value)){
+      const arr=traces.get(c.key)||[];
+      // A fresh poll with the same value is still a real sample, not fake chart data.
+      if(c.sampleAt!==data.capturedAt){arr.push(value);if(arr.length>24)arr.shift();traces.set(c.key,arr);c.sampleAt=data.capturedAt;}
+      c.chart.replaceChildren();
+      const line=sparkline(arr);
+      if(line)c.chart.appendChild(line);
+      if(arr.length<2){c.trend.textContent='Набираем данные';c.card.dataset.direction='unknown';}
+      else{
+        const change=arr.at(-1)-arr[0];
+        const direction=change>0?'up':change<0?'down':'flat';
+        c.card.dataset.direction=direction;
+        c.trend.textContent=change>0?'↗ Растёт':change<0?'↘ Снижается':'→ Без изменений';
+      }
+    }else{
+      c.chart.replaceChildren();
+      c.trend.textContent='Нет временного ряда';
+      c.card.dataset.direction='unknown';
+    }
+    c.previous=value;
   }
   let lastFetch=0, busy=false;
   async function load(force=false){
@@ -95,7 +185,7 @@
       const res=await fetch('api/update/stats',{cache:'no-store'});
       if(!res.ok)throw Error('HTTP '+res.status);
       const data=expand(await res.json());lastFetch=Date.now();
-      for(const c of cards)c.value.textContent=format(get(data,c.key),c.unit);
+      for(const c of cards)renderValue(c,data);
       $('up-stats-note').textContent='Факты из проекта, процесса и журналов. Исторические данные доступны только с момента начала их записи. Обновлено: '+new Date(data.capturedAt).toLocaleTimeString('ru-RU');
     }catch(e){$('up-stats-note').textContent='Статистика пока недоступна: '+e.message;}
     finally{busy=false;}
