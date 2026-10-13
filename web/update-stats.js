@@ -117,7 +117,7 @@
   groups.forEach(([title,items],i)=>{
     const tab=document.createElement('button');
     tab.type='button';tab.className='stats-tab';tab.textContent=title;
-    tab.setAttribute('aria-controls','up-stats-category');
+    tab.setAttribute('aria-controls',i===0?'up-stats-category':'up-stats-category-'+i);
     tab.setAttribute('aria-pressed',String(i===0));
     tab.addEventListener('click',()=>activate(i));
     tabs.appendChild(tab);tabButtons.push(tab);
