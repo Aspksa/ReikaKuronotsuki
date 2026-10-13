@@ -29,7 +29,7 @@
 .stats-tab { display:flex; justify-content:space-between; align-items:center; text-align:left; gap:6px; border:1px solid transparent; border-radius:var(--radius-sm); padding:10px; background:transparent; color:var(--text-muted); font:550 .77rem/1.3 var(--font-sans); cursor:pointer; }
 .stats-tab small { color:var(--faint); font:500 .65rem var(--font-sans); font-variant-numeric:tabular-nums; }
 .stats-tab:hover { color:var(--text); background:var(--surface); }
-.stats-tab[aria-pressed="true"] { color:var(--text); background:var(--surface-solid); border-color:var(--border-soft); box-shadow:inset 3px 0 0 var(--stat-pro-accent); }
+.stats-tab[aria-pressed="true"] { color:var(--text); background:var(--stat-pro-soft); border-color:rgb(var(--crimson-rgb) / .24); box-shadow:inset 3px 0 0 var(--stat-pro-accent); font-weight:700; }
 .stats-tab:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
 .stats-content { min-width:0; }
 .stats-content-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:5px 0 12px; border-bottom:1px solid var(--border-soft); }
@@ -158,7 +158,6 @@
 .stats-explorer {padding-top:8px;border-top:1px solid var(--border-soft);}
 .stats-tabs {padding-right:8px;border-right:1px solid var(--border-soft);}
 .stats-tab {min-height:42px;border-radius:var(--radius-sm);padding:10px 12px;transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast);}
-.stats-tab[aria-pressed="true"] {background:var(--stat-pro-soft);border-color:rgb(var(--crimson-rgb) / .24);font-weight:700;}
 .stats-tab[aria-pressed="true"] small {color:var(--stat-rose);}
 .stats-content-head {padding:8px 0 16px;}
 .stats-tile:not(.stats-tile--hero) {min-height:72px;border-radius:var(--radius-sm);padding:12px 8px;}
