@@ -204,3 +204,24 @@ test('MemOS upstream benchmark file larger than 10 MB can be staged and hash-ver
   assert.equal(u.status().phase, 'ready', JSON.stringify(u.status()));
   assert.equal(fs.statSync(path.join(root, '.updates/staging/vendor/memos/scripts/dataset/beam/data/beam_100k.json')).size, benchmark.length);
 });
+
+test('updater installs dependencies in isolated staging before running MemOS integration tests', async () => {
+  const root = tmpProject();
+  const site = { files: { ...FILES, 'package.json': JSON.stringify({ name: 'reika', dependencies: { '@mem-os/sdk': 'file:vendor/memos' } }) }, ci: passing };
+  const calls = [];
+  const u = make(root, site, { runner: async (cwd, command, args) => { calls.push({ cwd, command, args }); } });
+  // Controlled runner: confirm the isolated dependency-install step is reached,
+  // without contacting npm during mocked update tests.
+  const originalInstall = u.installStagingDependencies.bind(u);
+  u.installStagingDependencies = async (staging) => {
+    assert.equal(staging, path.join(root, '.updates', 'staging'));
+    assert.ok(fs.existsSync(path.join(staging, 'package.json')));
+    await originalInstall(staging);
+    calls.push({ cwd: staging, command: 'dependency-install-step', args: [] });
+  };
+  await u.start();
+  assert.equal(u.status().phase, 'ready', u.status().error);
+  assert.equal(calls[0].command, 'dependency-install-step');
+  assert.equal(calls[1].args[0], 'tests/run.js');
+  assert.equal(calls[1].cwd, path.join(root, '.updates', 'staging'));
+});
