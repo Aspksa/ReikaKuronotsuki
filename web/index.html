@@ -274,6 +274,9 @@
       <p id="mood">Спокойствие</p>
       <p id="mode" class="mode" hidden>Работает в браузере: история хранится на этом устройстве</p>
     </div>
+    <button id="memory-open" class="btn btn--icon" type="button" title="Память Рэйки" aria-label="Открыть память Рэйки" aria-controls="memory-panel" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4c-2-2-6-1-6 3-3 0-4 4-2 6-2 3 0 6 3 6 1 2 4 2 5 0m0-15c2-2 6-1 6 3 3 0 4 4 2 6 2 3 0 6-3 6-1 2-4 2-5 0M12 4v15M7 10l5 2 5-2"/></svg>
+    </button>
     <button id="chat-clear" class="btn btn--icon" type="button" title="Очистить историю чата" aria-label="Очистить историю чата">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>
     </button>
@@ -281,6 +284,16 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </header>
+  <section id="memory-panel" class="memory-panel" aria-labelledby="memory-title" hidden>
+    <header class="memory-head"><h3 id="memory-title">Память Рэйки</h3><span id="memory-state" role="status">Загрузка…</span><button id="memory-close" class="btn btn--icon" type="button" aria-label="Закрыть память">×</button></header>
+    <div class="memory-body">
+      <label class="sr" for="memory-search">Поиск по воспоминаниям</label>
+      <input id="memory-search" class="field" type="search" placeholder="Найти воспоминание" autocomplete="off">
+      <form id="memory-create" class="memory-form"><label class="sr" for="memory-new">Новое воспоминание</label><textarea id="memory-new" class="field" rows="2" maxlength="2000" placeholder="Что Рэйке запомнить?"></textarea><button class="btn btn--primary" type="submit">Запомнить</button></form>
+      <div id="memory-list" class="memory-list" aria-live="polite"></div>
+      <button id="memory-consolidate" class="btn btn--outline" type="button">Упорядочить память</button>
+    </div>
+  </section>
   <div id="log" class="log" role="log" aria-live="polite"></div>
   <form id="form" class="composer" autocomplete="off">
     <label for="input" class="sr">Сообщение</label>
@@ -309,6 +322,7 @@
 
 <script src="reika-chat.js"></script>
 <script src="app.js"></script>
+<script src="memory-ui.js"></script>
 <script src="toast.js"></script>
 <script src="update-state.js"></script>
 <script src="update.js"></script>

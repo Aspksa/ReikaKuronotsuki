@@ -178,3 +178,21 @@ test('MemOS bundled CLI has Russian help and translated memory errors without re
  assert.match(built,/Узел памяти не найден/);
  assert.match(ts,/async store\(/);
 });
+
+test('memory controls live inside chat and use the existing MemOS API', async () => withServer(async (base) => {
+  const html = await (await fetch(base + '/')).text();
+  assert.match(html, /id="memory-open"/);
+  assert.match(html, /id="memory-panel"/);
+  assert.match(html, /id="memory-search"/);
+  assert.match(html, /id="memory-consolidate"/);
+  assert.match(html, /src="memory-ui.js"/);
+  assert.doesNotMatch(html, /data-route="memory"/);
+  const jsResponse = await fetch(base + '/memory-ui.js');
+  assert.equal(jsResponse.status, 200);
+  const script = await jsResponse.text();
+  for (const action of ["api/memory", "PATCH", "DELETE", "consolidate"]) assert.ok(script.includes(action));
+  assert.match(script, /textContent = memory.content/);
+  const cssResponse = await fetch(base + '/css/memory.css');
+  assert.equal(cssResponse.status, 200);
+  assert.match(await cssResponse.text(), /memory-panel\[hidden\]/);
+}));
