@@ -16,6 +16,7 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 const MAX_BODY = 16 * 1024;
+const MAX_ARCHIVE = 60_000_000;
 
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), 'utf8');
@@ -50,6 +51,16 @@ function requestAllowed(req) {
   const origin = req.headers.origin;
   if (!origin) return true; // not a browser cross-site request (curl, tests, same-origin without header)
   try { return new URL(origin).host === host; } catch { return false; }
+}
+
+// Raw request body as a Buffer with its own (larger) limit; the rest of the request is drained so the answer can be delivered.
+function readBuffer(req, max) {
+  return new Promise((resolve, reject) => {
+    const chunks = []; let size = 0, tooBig = false;
+    req.on('data', (chunk) => { size += chunk.length; if (size > max) { tooBig = true; chunks.length = 0; return; } chunks.push(chunk); });
+    req.on('end', () => (tooBig ? reject(Object.assign(new Error('Файл слишком большой'), { status: 413 })) : resolve(Buffer.concat(chunks))));
+    req.on('error', reject);
+  });
 }
 
 function createApp({ webRoot, dataDir, updater = null, restart = () => false }) {
@@ -87,6 +98,15 @@ function createApp({ webRoot, dataDir, updater = null, restart = () => false }) 
       if (route === 'download') {
         if (updater.isBusy()) return sendJson(res, 409, { error: 'Обновление уже выполняется' });
         updater.start().catch(() => {});
+        return sendJson(res, 202, updater.status());
+      }
+      if (route === 'from-archive') {
+        if (updater.isBusy()) return sendJson(res, 409, { error: 'Обновление уже выполняется' });
+        if (Number(req.headers['content-length']) > MAX_ARCHIVE) { req.resume(); return sendJson(res, 413, { error: 'Файл слишком большой (больше 60 МБ)' }); }
+        const archive = await readBuffer(req, MAX_ARCHIVE);
+        let fileName = 'archive.zip';
+        try { fileName = decodeURIComponent(String(req.headers['x-file-name'] || fileName)); } catch { /* keep the default */ }
+        updater.startFromArchive(archive, fileName).catch(() => {});
         return sendJson(res, 202, updater.status());
       }
       if (route === 'cancel') return sendJson(res, 200, updater.cancel());
