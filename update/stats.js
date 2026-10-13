@@ -5,6 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const { BLOCKED } = require('./shared');
+const metricsDb = require('./metrics-db');
 
 const readLines = async (file) => {
   try { return (await fs.readFile(file, 'utf8')).split('\n').filter(Boolean).slice(-20000).flatMap(line => {
@@ -16,10 +17,8 @@ const count = (xs, pred) => xs.filter(pred).length;
 const dateMs = x => { const n = Date.parse(x || ''); return Number.isFinite(n) ? n : null; };
 const optional = (arr, f) => arr.length ? f(arr) : null;
 const CACHE_MS = 60_000;
-const HISTORY_MAX = 10080; // up to one week of one-minute samples
 const cache = new Map();
 const gitCache = new Map();
-const writes = new Map();
 async function cachedInspect(root) {
   const existing=cache.get(root);
   const directoryMtime=(await fs.stat(root).catch(()=>null))?.mtimeMs ?? null;
@@ -30,28 +29,8 @@ async function cachedInspect(root) {
   try { const value=await pending;cache.set(root,{value,at:Date.now(),directoryMtime});return value; }
   catch(e){cache.delete(root);throw e;}
 }
-async function readSamples(root){
-  try {const value=JSON.parse(await fs.readFile(path.join(root,'.updates','metric-samples.json'),'utf8'));return Array.isArray(value)?value.slice(-HISTORY_MAX):[];}
-  catch{return [];}
-}
-async function appendSample(root,sample){
-  const previous=writes.get(root);
-  if(previous?.pending)return previous.pending;
-  if(previous?.at && sample.at-previous.at<60_000)return;
-  const pending=(async()=>{
-    const samples=await readSamples(root);
-    if(samples.length && sample.at-samples.at(-1).at<60_000)return;
-    samples.push(sample);
-    const dir=path.join(root,'.updates');
-    const filename=path.join(dir,'metric-samples.json');
-    const temp=filename+'.'+process.pid+'.tmp';
-    await fs.mkdir(dir,{recursive:true});
-    try{await fs.writeFile(temp,JSON.stringify(samples.slice(-HISTORY_MAX)));await fs.rename(temp,filename);}
-    finally{await fs.rm(temp,{force:true}).catch(()=>{});}
-  })();
-  writes.set(root,{pending});
-  try {await pending;writes.set(root,{at:sample.at});}catch{writes.delete(root);}
-}
+async function readSamples(root){ return metricsDb.readSamples(root); }
+async function appendSample(root,sample){ return metricsDb.appendSample(root,sample); }
 
 function getGitStats(root){
   const previous=gitCache.get(root);
@@ -180,13 +159,7 @@ async function collect(updater) {
     backups = names.filter(x => x.isDirectory()).length;
   } catch { backups = 0; }
   const downloadEvents = (lifetime.length ? lifetime : events).filter(e => e.type === 'file_download_done');
-  const baselineFile = path.join(dir, 'stats-baseline.json');
-  let baseline = null;
-  try { baseline = JSON.parse(await fs.readFile(baselineFile, 'utf8')); } catch { /* first observation */ }
-  if (!baseline || !Number.isFinite(baseline.bytes) || !Number.isFinite(baseline.files)) {
-    baseline = { bytes: scan.bytes, files: scan.files, lines: scan.lines, at: Date.now() };
-    try { await fs.mkdir(dir, {recursive:true}); await fs.writeFile(baselineFile, JSON.stringify(baseline), {flag:'wx'}); } catch { /* another process may have written it */ }
-  }
+  const baseline = metricsDb.getBaseline(root,scan);
   const current = status;
   const git = getGitStats(root);
   const fsInfo = await fs.statfs(root).catch(() => null);
