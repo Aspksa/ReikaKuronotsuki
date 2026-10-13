@@ -66,3 +66,19 @@ test('every state has an icon, and the entry never throws on odd data', () => {
   assert.doesNotThrow(() => S.news({ latest: { sha: B, changes: 'nope' }, localVersion: A }));
   assert.equal(S.shortVersion(undefined), 'не определена');
 });
+
+test('describe(): headline and sub line for every state of the update page', () => {
+  assert.equal(S.describe(null).title, 'Проверяем…');
+  assert.equal(S.describe(base()).title, 'Проверьте наличие обновлений');
+  const checked = S.describe(base({ checkedAt: Date.UTC(2026, 0, 1, 12, 40) }));
+  assert.equal(checked.title, 'У вас последняя версия'); assert.match(checked.sub, /Установлена aaaaaaaa · проверено \d\d:\d\d/);
+  const found = S.describe(base({ latest: latest({ changesTotal: 7 }) }));
+  assert.equal(found.title, 'Доступна новая версия'); assert.match(found.sub, /bbbbbbbb · изменений: 7/);
+  assert.equal(S.describe(base({ phase: 'downloading' })).title, 'Скачиваем обновление');
+  assert.equal(S.describe(base({ phase: 'testing' })).title, 'Проверяем обновление');
+  assert.equal(S.describe(base({ phase: 'ready' })).title, 'Готово к установке');
+  assert.match(S.describe(base({ phase: 'ready', pendingRemovals: ['x'] })).sub, /Подтвердите удаление/);
+  assert.equal(S.describe(base({ rollbackPending: true })).title, 'Откат ждёт перезапуска');
+  assert.equal(S.describe(base({ phase: 'error', error: 'x' })).title, 'Не удалось обновить');
+  assert.doesNotThrow(() => S.describe({}));
+});

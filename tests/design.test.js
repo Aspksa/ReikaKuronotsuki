@@ -34,7 +34,7 @@ test('raw colours live in tokens.css only (no #hex elsewhere; rgb() literals onl
 test('every var(--token) used is defined in CSS or set by a script', () => {
   const defined = new Set();
   for (const css of Object.values(files)) for (const m of css.matchAll(/(--[\w-]+)\s*:/g)) defined.add(m[1]);
-  const setByScripts = new Set(['--size', '--sway']);
+  const setByScripts = new Set(['--size', '--sway', '--tone']);
   for (const [file, css] of Object.entries(files)) {
     for (const m of css.matchAll(/var\((--[\w-]+)/g)) assert.ok(defined.has(m[1]) || setByScripts.has(m[1]), `${file} uses ${m[1]} which nothing defines`);
   }

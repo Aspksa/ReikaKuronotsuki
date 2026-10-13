@@ -82,29 +82,7 @@
     if(unit==='bytes'){if(value<1024)return num(value)+' Б';const units=['КБ','МБ','ГБ','ТБ'];let n=value,i=-1;do{n/=1024;i++;}while(n>=1024&&i<units.length-1);return num(n)+' '+units[i];}
     return typeof value==='number'?num(value):String(value);
   };
-  // Each card has its own symbol; tones reflect the metric's meaning, not random decoration.
-  const symbols = [
-    '◷','⚑','◉','⇩','↧','▣','☷','↺','▤','◫',
-    '▦','⌗','▰','▱','⇣','⌘','▥','▧','{ }','▨',
-    '≡','▫','※','¶','☰','∑','◔','✎','↔','№',
-    '☷','✓','⚠','⟲','▣','◈','▥','◴','☁','↶',
-    '↓','⇓','◇','⇢','⊙','⌕','✔','!','⊘','▤',
-    '⑂','⌁','⌚','♙','⌛','◷','◉','#','◐','✦',
-    '◴','▣','▥','◵','◔','◎','⬡','▧','◩','◷',
-    '◈','▶','↕','◐','⌘','▥','⌥','▦','◴','◉',
-    '⏱','◷','⌁','↶','◴','◵','↔','⌛','↑','↓',
-    '%','▤','◧','⌗','◫','▦','÷','◉','≡','↻'
-  ];
-  const tones=['gold','blue','mint','violet','rose','orange','cyan','silver'];
-  const toneFor=(key,i)=>{
-    if(/error|failure|blocked|cancel|rollback/i.test(key))return 'rose';
-    if(/download|Bytes|totalBytes|freeDisk/i.test(key))return 'blue';
-    if(/success|ready|checkDone|verify|install/i.test(key))return 'mint';
-    if(/cpu|memory|cores|node|platform/i.test(key))return 'violet';
-    if(/date|At|uptime|since|Age|Duration/i.test(key))return 'cyan';
-    if(/growth|lines|commit|git/i.test(key))return 'orange';
-    return tones[i % tones.length];
-  };
+  const V=window.ReikaStatsVisual;
   // All 150 metrics have distinct sources; switch categories without a global search.
   const tabs=$('up-stats-tabs');
   const highlights=$('up-stats-highlights');
@@ -113,43 +91,26 @@
   const selected={index:0};
   const reduced=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const numeric=value=>typeof value==='number'&&Number.isFinite(value);
-  function sparkline(values,key){
-    const good=values.filter(numeric);
-    if(good.length<2)return null; // never pretend there is a trend without samples
-    const rawLo=Math.min(...good), hi=Math.max(...good);
-    // Cumulative counters start at zero; fluctuating gauges keep an honest context band.
-    const cumulative=/^(events\.|history\.|growth\.|scan\.|uptimeMs)/.test(key);
-    const lo=cumulative?Math.min(0,rawLo):Math.min(0,rawLo-(Math.max(hi,1)*0.1));
-    const upper=Math.max(hi,lo+Math.max(Math.abs(hi)*0.1,1));
-    const range=upper-lo;
-    const points=good.map((v,i)=>[4+i*112/(good.length-1),27-(v-lo)*22/range]);
-    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    svg.setAttribute('viewBox','0 0 120 32');
-    svg.setAttribute('aria-hidden','true');
-    svg.classList.add('stats-sparkline');
-    const path=document.createElementNS('http://www.w3.org/2000/svg','polyline');
-    path.setAttribute('points',points.map(p=>p.map(x=>x.toFixed(2)).join(',')).join(' '));
-    path.setAttribute('fill','none');
-    path.setAttribute('stroke','currentColor');
-    path.setAttribute('stroke-width','2');
-    path.setAttribute('stroke-linecap','round');
-    path.setAttribute('stroke-linejoin','round');
-    svg.appendChild(path);
-    return svg;
-  }
+  // Every metric: its own icon (matches the name), its own colour, and a diagram of the kind that fits what it measures.
+  const positions=new Map();
+  groups.forEach(([,items],g)=>items.forEach(([,key],i)=>positions.set(key,[g,i])));
   function createCard(label,key,unit,index,compact=false){
+    const [g,i]=positions.get(key)||[index%groups.length,index%10];
+    const tone=V.tone(g,i,key);
     const card=document.createElement('div');card.className='stats-tile'+(compact?' stats-tile--hero':'');
-    card.dataset.tone=toneFor(key,index);
-    const icon=document.createElement('span');icon.className='stats-icon';icon.setAttribute('aria-hidden','true');icon.textContent=symbols[index % symbols.length];
+    card.style.setProperty('--tone',tone.color);
+    const kind=V.chartKind(key,unit);
+    card.dataset.kind=kind;
+    const icon=document.createElement('span');icon.className='stats-icon';icon.setAttribute('aria-hidden','true');icon.innerHTML=V.iconSvg(V.iconName(key,unit));
     const name=document.createElement('span');name.className='stats-name';name.textContent=label;
     const value=document.createElement('strong');value.className='stats-number';value.textContent='—';
-    const trend=document.createElement('span');trend.className='stats-trend';trend.textContent='Нет истории';
-    const chart=document.createElement('div');chart.className='stats-chart';chart.setAttribute('aria-label','История изменения');
-    const meta=document.createElement('div');meta.className='stats-meta';meta.append(value,trend);
+    const trend=document.createElement('span');trend.className='stats-trend';trend.textContent='';
+    const chart=document.createElement('div');chart.className='stats-chart';
     const detail=document.createElement('button');detail.type='button';detail.className='stats-open';detail.setAttribute('aria-label','Подробнее: '+label);detail.textContent='↗';
     detail.addEventListener('click',()=>openDetail({key,unit,label}));
-    card.append(icon,name,meta,chart,detail);
-    const c={key,unit,value,trend,chart,card};
+    const foot=document.createElement('div');foot.className='stats-foot';foot.append(chart,trend);
+    card.append(icon,name,value,foot,detail);
+    const c={key,unit,kind,value,trend,chart,card};
     card.dataset.metricKey=key;
     cards.push(c);
     return card;
@@ -158,7 +119,7 @@
   let ordinal=0;
   groups.forEach(([title,items],i)=>{
     const tab=document.createElement('button');
-    tab.type='button';tab.className='stats-tab';
+    tab.type='button';tab.className='stats-tab';tab.style.setProperty('--tone',V.groupColor(i));
     const titleSpan=document.createElement('span');titleSpan.textContent=title;
     const countSpan=document.createElement('small');countSpan.textContent=String(items.length).padStart(2,'0');
     tab.append(titleSpan,countSpan);
@@ -258,10 +219,7 @@
       const arr=traces.get(c.key)||[];
       // A fresh poll with the same value is still a real sample, not fake chart data.
       if(c.sampleAt!==data.capturedAt && !persisted[c.key]){arr.push(value);if(arr.length>24)arr.shift();traces.set(c.key,arr);c.sampleAt=data.capturedAt;}
-      c.chart.replaceChildren();
-      const line=sparkline(arr,c.key);
-      if(line)c.chart.appendChild(line);
-      if(arr.length<2){c.trend.textContent='Набираем данные';c.card.dataset.direction='unknown';}
+      if(arr.length<2){c.trend.textContent='';c.card.dataset.direction='unknown';}
       else{
         const change=arr.at(-1)-arr[0];
         const direction=change>0?'up':change<0?'down':'flat';
@@ -269,10 +227,14 @@
         c.trend.textContent=change>0?'↗ Растёт':change<0?'↘ Снижается':'→ Ровно';
       }
     }else{
-      c.chart.replaceChildren();
-      c.trend.textContent='Нет временного ряда';
+      c.trend.textContent='';
       c.card.dataset.direction='unknown';
     }
+    const totalKey=V.shareTotalKey(c.key);
+    const ageMs=c.kind!=='age'?null:c.unit==='date'?(Number.isFinite(Number(value))&&Number(value)>0?Math.max(0,(data.capturedAt||Date.now())-Number(value)):null):numeric(value)?(c.unit==='days'?value*86400000:value):null;
+    const base=data.baseline||{};
+    const baseline=c.key==='growth.bytes'?base.bytes:c.key==='growth.files'?base.files:c.key==='growth.lines'?base.lines:null;
+    c.chart.innerHTML=V.chart(c.kind,{value,unit:c.unit,series:traces.get(c.key)||[],baseline,total:totalKey?get(data,totalKey):null,ageMs,text:Array.isArray(value)?'':value});
     c.previous=value;
   }
   let lastFetch=0, busy=false;

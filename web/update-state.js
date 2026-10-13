@@ -47,6 +47,31 @@
     }
   }
 
+  /** Headline and sub line of the big status card on the update page. */
+  function describe(st) {
+    if (!st) return { title: 'Проверяем…', sub: '' };
+    const state = cardState(st);
+    const installed = 'Установлена ' + shortVersion(st.localVersion);
+    const count = st.latest && Number.isSafeInteger(st.latest.changesTotal) && st.latest.changesTotal > 0 ? ` · изменений: ${st.latest.changesTotal}` : '';
+    switch (state) {
+      case 'busy': return st.phase === 'testing'
+        ? { title: 'Проверяем обновление', sub: 'Сверяем файлы и запускаем тесты в отдельной папке. Работающая версия не затрагивается.' }
+        : { title: 'Скачиваем обновление', sub: st.latest ? `Версия ${st.latest.version}` : '' };
+      case 'ready':
+        if (st.rollbackPending) return { title: 'Откат ждёт перезапуска', sub: 'Предыдущая версия вернётся при следующем запуске Рэйки.' };
+        return { title: 'Готово к установке', sub: st.pendingRemovals && st.pendingRemovals.length && !st.removalsConfirmed ? 'Подтвердите удаление файлов ниже, чтобы они были убраны при установке.' : 'Рэйка перезапустится сама. Данные и настройки не затрагиваются.' };
+      case 'error': return { title: 'Не удалось обновить', sub: installed + '. Подробности ниже.' };
+      case 'available': return { title: 'Доступна новая версия', sub: `Версия ${st.latest.version}${count} · ${installed.toLowerCase()}` };
+      default: return st.checkedAt
+        ? { title: 'У вас последняя версия', sub: installed + ' · проверено ' + timeOf(st.checkedAt) }
+        : { title: 'Проверьте наличие обновлений', sub: installed };
+    }
+  }
+
+  function timeOf(ms) {
+    try { return new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
+  }
+
   /** "What's new" for the hover card: up to `max` change titles, how many more there are. Null when there is nothing to show. */
   function news(st, max = 5) {
     if (!st || !st.latest) return null;
@@ -70,5 +95,5 @@
     return null;
   }
 
-  return { shortVersion, hasNewVersion, cardState, statusText, news, shouldNotifyNew, phaseNotice, ICONS };
+  return { shortVersion, hasNewVersion, cardState, statusText, describe, news, shouldNotifyNew, phaseNotice, ICONS };
 });
