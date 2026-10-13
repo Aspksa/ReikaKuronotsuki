@@ -127,3 +127,11 @@ test('MemOS CRUD and consolidation are available through Reika directly',()=>wit
   assert.equal(remove.status,200);
   assert.equal((await remove.json()).deleted,true);
 }));
+
+test('portable Windows launcher upgrades existing npm MemOS to bundled source',()=>{
+ const script=fs.readFileSync(path.join(__dirname,'..','launcher','start.ps1'),'utf8');
+ assert.match(script,/memos-vendored-installed\.txt/);
+ assert.match(script,/REIKA_UPSTREAM\.txt/);
+ assert.match(script,/\$currentStamp -ne \$requiredStamp/);
+ assert.match(script,/Set-Content -LiteralPath \$installedStamp/);
+});
