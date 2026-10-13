@@ -651,9 +651,9 @@ class ProjectUpdater {
       path.join(this.root, 'runtime', 'node', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
     ];
     const cli = candidates.find((candidate) => existsSync(candidate));
-    if (cli) return this.run(staging, process.execPath, [cli, 'install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts']);
+    if (cli) return this.run(staging, process.execPath, [cli, 'install', '--omit=dev', '--no-audit', '--no-fund']);
     // Use the platform's npm only if portable npm isn't available.
-    return this.run(staging, process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts']);
+    return this.run(staging, process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--omit=dev', '--no-audit', '--no-fund']);
   }
   async run(cwd, command, args) {
     this.throwIfCancelled();
