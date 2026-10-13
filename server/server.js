@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const core = require('../core/reika-core');
+const { collect: collectStats } = require('../update/stats');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -91,6 +92,7 @@ function createApp({ webRoot, dataDir, updater = null, restart = () => false }) 
         if (route === 'status') return sendJson(res, 200, updater.status());
         if (route === 'events') return sendJson(res, 200, await updater.events());
         if (route === 'history') return sendJson(res, 200, await updater.history());
+        if (route === 'stats') return sendJson(res, 200, await collectStats(updater));
         return sendJson(res, 404, { error: 'Не найдено' });
       }
       if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' });
