@@ -85,9 +85,9 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
   }
   async function remember(text) {
     const mem = await memory();
-    if (!mem) return;
-    try { await mem.store(text, { type: 'fact', tags: ['reika-chat'], source: 'user_input' }); }
-    catch (error) { console.warn('MemOS store:', error.message); }
+    if (!mem) return false;
+    try { await mem.store(text, { type: 'fact', tags: ['reika-chat'], source: 'user_input' }); return true; }
+    catch (error) { console.warn('MemOS store:', error.message); return false; }
   }
   async function recall(text) {
     const mem = await memory();
@@ -211,6 +211,7 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
           if (!mem) return sendJson(res, 503, { error: 'Невозможно создать полную копию: память MemOS недоступна' });
           const memoryGraph = await mem.getGraph();
           const body = Buffer.from(JSON.stringify({ kind: 'reika-backup', version: 2, createdAt: new Date().toISOString(), settings: settings.read(projectRoot), messages: store.all(), memory: memoryGraph }, null, 2), 'utf8');
+          if (body.length > MAX_BACKUP) return sendJson(res, 413, { error: 'Полная резервная копия превысила допустимый размер (32 МБ)' });
           const name = `reika-backup-${new Date().toISOString().slice(0, 10)}.json`;
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length, 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' });
           return res.end(body);
@@ -227,9 +228,12 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
                   !['fact','preference','context','relationship','entity','custom'].includes(n.type) || !Number.isSafeInteger(n.createdAt) || !Number.isSafeInteger(n.updatedAt)) ||
                 graph.edges.some(e => !e || typeof e.sourceId !== 'string' || typeof e.targetId !== 'string' ||
                   !['relates_to','contradicts','supports','derived_from','part_of','temporal_precedes','custom'].includes(e.relation) ||
-                  !Number.isFinite(e.weight) || e.weight < 0 || e.weight > 1) ||
-                graph.edges.some(e => !graph.nodes.some(n => n.id === e.sourceId) || !graph.nodes.some(n => n.id === e.targetId))) {
+                  !Number.isFinite(e.weight) || e.weight < 0 || e.weight > 1) ) {
               return sendJson(res, 400, { error: 'В копии повреждены данные долговременной памяти' });
+            }
+            const ids = new Set(graph.nodes.map(n => n.id));
+            if (ids.size !== graph.nodes.length || graph.edges.some(e => !ids.has(e.sourceId) || !ids.has(e.targetId))) {
+              return sendJson(res, 400, { error: 'Повторяющиеся или отсутствующие идентификаторы памяти' });
             }
             const mem = await memory();
             if (!mem) return sendJson(res, 503, { error: 'Память MemOS недоступна, восстановление отменено' });
@@ -309,7 +313,8 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         if (!answer) answer = core.reply(text);
         const user = store.add('user', text, core.detectEmotion(text));
         const reika = store.add('reika', answer.text, answer.emotion);
-        await remember(text);
+        const remembered = await remember(text);
+        if (!remembered) warning = [warning, 'Долговременная память MemOS недоступна: сообщение сохранено только в истории чата'].filter(Boolean).join('. ');
         return sendJson(res, 200, { user, reika, source, ...(warning ? { warning } : {}) });
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
