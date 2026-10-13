@@ -16,8 +16,9 @@ const count = (xs, pred) => xs.filter(pred).length;
 const dateMs = x => { const n = Date.parse(x || ''); return Number.isFinite(n) ? n : null; };
 const optional = (arr, f) => arr.length ? f(arr) : null;
 const CACHE_MS = 60_000;
-const HISTORY_MAX = 1440;
+const HISTORY_MAX = 10080; // up to one week of one-minute samples
 const cache = new Map();
+const gitCache = new Map();
 const writes = new Map();
 async function cachedInspect(root) {
   const existing=cache.get(root);
@@ -143,11 +144,12 @@ async function collect(updater) {
   } catch { /* ZIP installations may not have git */ }
   const fsInfo = await fs.statfs(root).catch(() => null);
   const free = fsInfo ? Number(fsInfo.bavail) * Number(fsInfo.bsize) : null;
-  const sample={at:Date.now(),bytes:scan.bytes,files:scan.files,lines:scan.lines,rss:process.memoryUsage().rss,freeDiskBytes:free,installs:installs.length,failures:failures.length,downloads:sum(downloadEvents,'bytes_done')};
+  const sample={at:Date.now(),version:status.localVersion||null,bytes:scan.bytes,files:scan.files,lines:scan.lines,rss:process.memoryUsage().rss,freeDiskBytes:free,installs:installs.length,failures:failures.length,downloads:sum(downloadEvents,'bytes_done')};
   await appendSample(root,sample);
   const samples=await readSamples(root);
-  const oldest=samples[0]||null;
-  const versionComparison=oldest?{from:oldest.at,to:sample.at,bytes:sample.bytes-oldest.bytes,files:sample.files-oldest.files,lines:sample.lines-oldest.lines,baseline:'earliest-recorded-sample'}:null;
+  const olderVersion=samples.findLast(x=>x.version && sample.version && x.version!==sample.version);
+  const oldest=olderVersion||samples[0]||null;
+  const versionComparison=oldest?{from:oldest.at,to:sample.at,fromVersion:oldest.version||null,toVersion:sample.version,bytes:sample.bytes-oldest.bytes,files:sample.files-oldest.files,lines:sample.lines-oldest.lines,baseline:olderVersion?'previous-recorded-version':'earliest-recorded-sample'}:null;
   return {
     samples,versionComparison,
     capturedAt: Date.now(), processStartedAt: Date.now() - Math.floor(process.uptime()*1000),
