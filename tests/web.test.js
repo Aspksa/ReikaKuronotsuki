@@ -182,7 +182,8 @@ test('settings page: choosing who answers in the chat, with the key kept out of 
   }
   assert.match(page, /id="set-ai-key"[^>]*type="password"/, 'the key is never shown as plain text');
   assert.match(page, /id="set-ai-provider"[\s\S]*?<option value="reika">/, 'answering offline is the first choice');
-  assert.match(page, /уходят на серверы Cloud\.ru/, 'the page says where the messages go');
+  assert.ok(page.includes('id="set-ai-save"') && page.includes('id="set-ai-badge"'), 'the chat card saves itself and says who answers');
+  assert.match(page, /уходят на серверы провайдера/, 'the page says where the messages go');
   assert.match(page, /не попадает ни в копию данных, ни в git/, 'and where the key is kept');
   const js = read('settings.js');
   assert.match(js, /api\/ai\/check/);
