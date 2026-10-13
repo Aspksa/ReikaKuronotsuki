@@ -80,7 +80,7 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
       const instance = new MemOS({ dbPath: path.join(dataDir, 'reika-memory.sqlite') });
       await instance.init();
       return instance;
-    }).catch(() => null);
+    }).catch(error => { console.warn('MemOS недоступен:', error.message); return null; });
     return memoryPromise;
   }
   async function remember(text) {
@@ -277,8 +277,7 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         if (ai.providerInfo(provider) && key) {
           try {
             const memories = await recall(text);
-            const memoryContext = memories.length ? [{ role: 'reika', text: 'Проверенные записи из моей долговременной памяти (используй только если относятся к текущему вопросу):\n' + memories.map(x => '- ' + x.slice(0,350)).join('\n'), at: new Date().toISOString() }] : [];
-            const result = await aiClient.reply({ provider, key, model: stored.aiModel, text, history: [...memoryContext, ...store.all()] });
+            const result = await aiClient.reply({ provider, key, model: stored.aiModel, text, history: store.all(), memories });
             answer = { text: result.text, emotion: core.detectEmotion(result.text) };
             source = provider;
           } catch (error) {
