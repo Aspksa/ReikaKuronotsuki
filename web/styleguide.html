@@ -9,14 +9,14 @@
 <style>
   /* only for this page: layout of the examples */
   .sg { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-6); }
-  .sg h2 { font-size: var(--text-xl); color: var(--gold); margin-bottom: var(--space-3); }
+  .sg h2 { font-size: var(--text-lg); margin-bottom: var(--space-3); }
   .sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }
   .sg-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
-  .sg-sw { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--night-850); font-size: var(--text-xs); }
+  .sg-sw { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); font-size: var(--text-xs); }
   .sg-sw i { display: block; height: 52px; }
   .sg-sw span { display: block; padding: var(--space-2); }
-  .sg-bar { background: var(--gold); height: 10px; border-radius: var(--radius-sm); }
-  .sg-box { width: 72px; height: 72px; background: var(--night-600); border: 1px solid var(--border); display: grid; place-items: center; font-size: var(--text-xs); }
+  .sg-bar { background: var(--crimson-hi); height: 10px; border-radius: var(--radius-sm); }
+  .sg-box { width: 72px; height: 72px; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; font-size: var(--text-xs); }
 </style>
 </head>
 <body>
@@ -29,7 +29,7 @@
 <main class="content">
 <div class="sg">
   <header>
-    <h1 style="font-size: var(--text-2xl)">Стиль проекта</h1>
+    <h1 style="font: 600 var(--text-xl) var(--font-serif)">Стиль проекта</h1>
     <p class="text-muted">Живые примеры всех токенов и компонентов. Описание правил: <code>DESIGN.md</code>. Страница использует тот же <code>style.css</code>, поэтому всегда показывает актуальный вид.</p>
   </header>
 
@@ -40,50 +40,48 @@
 
   <section>
     <h2>Типографика</h2>
-    <p style="font: 600 var(--text-2xl) var(--font-serif)">Заголовок · Noto Serif / Mincho</p>
-    <p style="font: 600 var(--text-xl) var(--font-serif)">Подзаголовок</p>
+    <p style="font: 600 var(--text-xl) var(--font-serif)">Заголовок страницы · Noto Serif / Mincho</p>
+    <p style="font: 600 var(--text-lg) var(--font-sans)">Заголовок карточки</p>
     <p>Основной текст: ночь, лунный свет, девять хвостов.</p>
     <p class="text-muted">Приглушённый текст для подсказок и подписей.</p>
     <p class="text-warn">Предупреждение или ошибка.</p>
   </section>
 
   <section>
-    <h2>Отступы, скругления, тени</h2>
+    <h2>Отступы, скругления, тень</h2>
     <div class="sg-row">
       <div class="sg-bar" style="width: var(--space-1)"></div><div class="sg-bar" style="width: var(--space-2)"></div><div class="sg-bar" style="width: var(--space-3)"></div>
       <div class="sg-bar" style="width: var(--space-4)"></div><div class="sg-bar" style="width: var(--space-5)"></div><div class="sg-bar" style="width: var(--space-6)"></div>
-      <div class="sg-bar" style="width: var(--space-7)"></div><div class="sg-bar" style="width: var(--space-8)"></div><span class="text-muted">space-1…8 (4 px, 8, 12, 16, 24, 32, 48, 64)</span>
+      <span class="text-muted">space-1…6 (4 px, 8, 12, 16, 24, 32)</span>
     </div>
     <div class="sg-row" style="margin-top: var(--space-3)">
       <div class="sg-box" style="border-radius: var(--radius-sm)">sm</div><div class="sg-box" style="border-radius: var(--radius-md)">md</div>
-      <div class="sg-box" style="border-radius: var(--radius-lg)">lg</div><div class="sg-box" style="border-radius: var(--radius-xl)">xl</div><div class="sg-box" style="border-radius: var(--radius-pill)">pill</div>
-      <div class="sg-box" style="box-shadow: var(--shadow-1)">shadow-1</div><div class="sg-box" style="box-shadow: var(--shadow-2)">shadow-2</div>
+      <div class="sg-box" style="border-radius: var(--radius-lg)">lg</div><div class="sg-box" style="border-radius: var(--radius-pill)">pill</div>
+      <div class="sg-box" style="box-shadow: var(--shadow)">shadow</div>
     </div>
   </section>
 
   <section>
     <h2>Кнопки</h2>
+    <p class="text-muted" style="margin-bottom: var(--space-3)">Одна высота, одна форма. Главное действие страницы одно: <code>btn--primary</code>; остальное <code>btn--outline</code>; тихое <code>btn--ghost</code>.</p>
     <div class="sg-row">
-      <button class="btn btn--primary" type="button">Главная</button>
-      <button class="btn btn--gold" type="button">Золотая</button>
-      <button class="btn btn--outline" type="button">Контурная</button>
-      <button class="btn btn--ghost" type="button">Тихая</button>
-      <button class="btn btn--gold" type="button" disabled>Недоступна</button>
+      <button class="btn btn--primary" type="button">Главное</button>
+      <button class="btn btn--outline" type="button">Обычное</button>
+      <button class="btn btn--ghost" type="button">Тихое</button>
+      <button class="btn btn--primary" type="button" disabled>Недоступно</button>
       <button class="btn btn--icon" type="button" aria-label="Закрыть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      <button class="btn btn--icon btn--sm" type="button" aria-label="Свернуть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
     </div>
   </section>
 
   <section>
     <h2>Мелочи и всплывающее</h2>
     <div class="sg-row">
-      <button class="btn btn--gold btn--xs" type="button">Малая кнопка</button>
       <span><kbd class="kbd">Ctrl K</kbd> — клавиша-подсказка</span>
     </div>
     <p class="callout callout--warn" style="margin-bottom:12px">Заметка с предупреждением: так выглядят ошибки и блокировки внутри панели.</p>
     <p class="callout" style="margin-bottom:12px">Обычная заметка.</p>
-    <div class="toast toast--ok" style="animation:none"><div class="toast__body"><b>Уведомление</b><p>Так выглядят короткие сообщения в углу страницы.</p></div></div>
-    <div class="popover" style="position:static;opacity:1;visibility:visible;transform:none;margin-top:12px"><b>Что нового</b><ul><li>Первое изменение</li><li>Второе изменение</li></ul></div>
+    <div class="toast toast--ok" style="animation:none;margin-bottom:12px"><div class="toast__body"><b>Уведомление</b><p>Так выглядят короткие сообщения в углу страницы.</p></div></div>
+    <div class="popover" style="position:static;opacity:1;visibility:visible;width:auto"><b>Что нового</b><ul><li>Первое изменение</li><li>Второе изменение</li></ul></div>
   </section>
 
   <section>
@@ -94,8 +92,8 @@
       <li class="card"><span class="card__label">Версия</span><b class="card__value">1a2b3c4d</b></li>
     </ul>
     <div class="panel" style="margin-top: var(--space-4)">
-      <h3 style="color: var(--gold)">Панель</h3>
-      <p class="text-muted">Стеклянная поверхность с лунной кромкой сверху: основа страниц и окон.</p>
+      <h3>Панель</h3>
+      <p class="text-muted">Плоская поверхность с тонкой рамкой: основа страниц и окон.</p>
       <div class="bar" style="margin: var(--space-3) 0"><div style="width: 62%"></div></div>
       <label class="form-row">Поле <select class="field"><option>Первый вариант</option><option>Второй</option></select></label>
     </div>
@@ -122,7 +120,7 @@
 </div>
 <script>
   // Swatches are read from the live tokens, so this page can never drift from tokens.css.
-  const names = ['night-950', 'night-900', 'night-850', 'night-800', 'night-700', 'night-600', 'pearl', 'blush', 'silver', 'muted', 'faint', 'crimson', 'crimson-hi', 'crimson-lo', 'crimson-deep', 'gold', 'gold-hi', 'gold-lo', 'eye', 'sakura', 'ok', 'warn'];
+  const names = ['night-900', 'night-850', 'night-800', 'night-700', 'pearl', 'muted', 'faint', 'crimson', 'crimson-hi', 'crimson-lo', 'ok', 'warn', 'sakura'];
   const grid = document.getElementById('sg-colors');
   const style = getComputedStyle(document.documentElement);
   for (const name of names) {

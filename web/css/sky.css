@@ -1,6 +1,5 @@
 /*
- * Background layer: a calm dark backdrop with falling sakura petals and a soft vignette.
- * (The night scene with the moon, stars, clouds and sea was removed on request.)
+ * Background layer: a plain dark backdrop with a few falling sakura petals.
  * This file is the only one that may use raw rgb() values besides tokens.css.
  */
 .sky { position: fixed; inset: 0; z-index: var(--z-sky); overflow: hidden; pointer-events: none; background: var(--bg); }
@@ -8,8 +7,7 @@
 #petals { inset: 0; }
 
 /* sakura petals: created by sky.js */
-.petal { top: -20px; width: var(--size, 10px); height: var(--size, 10px); background: linear-gradient(135deg, var(--sakura), var(--petal));
-  border-radius: 150% 0 150% 0; opacity: .75; animation: fall linear infinite; }
+.petal { top: -20px; width: var(--size, 10px); height: var(--size, 10px); background: var(--sakura); border-radius: 150% 0 150% 0; opacity: .5; animation: fall linear infinite; }
 @keyframes fall { 0% { transform: translate(0, -5vh) rotate(0); } 50% { transform: translate(var(--sway, 30px), 55vh) rotate(180deg); } 100% { transform: translate(calc(var(--sway, 30px) * -1), 108vh) rotate(360deg); } }
 
-.sky-vignette { inset: 0; background: radial-gradient(120% 100% at 50% 40%, transparent 60%, rgb(0 0 0 / .45)); }
+.sky-vignette { inset: 0; background: radial-gradient(120% 100% at 50% 40%, transparent 65%, rgb(0 0 0 / .35)); }

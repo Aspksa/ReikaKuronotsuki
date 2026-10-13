@@ -66,8 +66,8 @@ const hex = (name) => { const m = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`).ex
 const lum = (h) => { const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const contrast = (a, b) => { const [x, y] = [lum(hex(a)), lum(hex(b))].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 test('text stays readable: contrast of the main pairs is at least 4.5:1', () => {
-  const pairs = [['--pearl', '--night-900'], ['--muted', '--night-900'], ['--faint', '--night-900'], ['--gold', '--night-900'], ['--blush', '--night-900'], ['--warn', '--night-900'],
-    ['--pearl', '--crimson-lo'], ['--pearl', '--crimson-hi'], ['--gold-ink', '--gold-hi'], ['--gold-ink', '--gold-lo'], ['--pearl', '--night-700']];
+  const pairs = [['--pearl', '--night-900'], ['--muted', '--night-900'], ['--faint', '--night-900'], ['--warn', '--night-900'], ['--ok', '--night-900'], ['--sakura', '--night-900'],
+    ['--pearl', '--crimson'], ['--pearl', '--crimson-lo'], ['--pearl', '--crimson-hi'], ['--pearl', '--night-700'], ['--muted', '--night-800'], ['--faint', '--night-800'], ['--muted', '--night-850']];
   for (const [fg, bg] of pairs) assert.ok(contrast(fg, bg) >= 4.5, `${fg} on ${bg}: ${contrast(fg, bg).toFixed(2)}:1`);
 });
 
@@ -97,7 +97,7 @@ test('the background markup is identical on the main page and in the style guide
 test('the style guide uses the same stylesheet and shows every component', () => {
   const guide = read('styleguide.html');
   assert.match(guide, /<link rel="stylesheet" href="style\.css">/);
-  for (const cls of ['btn btn--primary', 'btn btn--gold', 'btn btn--outline', 'btn btn--ghost', 'btn btn--icon', 'card', 'panel', 'field', 'form-row', 'msg reika', 'msg user', 'bar']) assert.ok(guide.includes(cls), `style guide lacks ${cls}`);
+  for (const cls of ['btn btn--primary', 'btn btn--outline', 'btn btn--ghost', 'btn btn--icon', 'card', 'panel', 'field', 'form-row', 'msg reika', 'msg user', 'bar']) assert.ok(guide.includes(cls), `style guide lacks ${cls}`);
   // every component class defined in components.css has an example
   for (const m of files['css/components.css'].matchAll(/^\.((?:btn--)?[a-z]+(?:--[a-z]+)?)\b/gm)) {
     const cls = m[1];
@@ -105,4 +105,23 @@ test('the style guide uses the same stylesheet and shows every component', () =>
     assert.ok(guide.includes(cls), `components.css defines .${cls} but styleguide.html never shows it`);
   }
   assert.ok(fs.existsSync(path.join(__dirname, '..', 'DESIGN.md')));
+});
+
+test('minimal and uniform: no gradients, glows or blur in the interface; one button height; a single accent', () => {
+  for (const [file, css] of Object.entries(files)) {
+    if (file === 'css/tokens.css' || file === 'css/sky.css') continue; // the backdrop may keep its vignette
+    assert.ok(!/gradient\(/.test(css), `${file}: gradient`);
+    assert.ok(!/backdrop-filter|filter:\s*drop-shadow/.test(css), `${file}: blur or glow`);
+    assert.ok(!/box-shadow:\s*[^;]*(?:crimson|gold|light)/.test(css), `${file}: coloured glow`);
+  }
+  assert.ok(!/--gold|--blush|--silver|--shadow-glow|--rim-light|--radius-xl/.test(Object.values(files).join('\n')), 'old decorative tokens are gone');
+  assert.match(files['css/components.css'], /\.btn \{[^}]*min-height: var\(--control-h\)/);
+  assert.match(files['css/components.css'], /\.field \{[^}]*min-height: var\(--control-h\)/);
+  const html = read('index.html') + read('toast.js') + read('update.js');
+  assert.ok(!/btn--gold|btn--sm|btn--xs/.test(html), 'only primary, outline, ghost and icon buttons exist');
+  // sizes come from the scale: no rem/px font sizes outside tokens
+  for (const [file, css] of Object.entries(files)) {
+    if (file === 'css/tokens.css') continue;
+    for (const m of css.matchAll(/font-size:\s*([^;}]+)/g)) assert.match(m[1].trim(), /^var\(--text-/, `${file}: font-size ${m[1].trim()}`);
+  }
 });

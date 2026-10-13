@@ -1,31 +1,23 @@
 /* The floating logo (orb) and the chat window it opens. */
-.orb { position: fixed; z-index: var(--z-orb); width: var(--orb-size); height: var(--orb-size); padding: 0; border: 0; border-radius: 50%; background: none; touch-action: none; cursor: grab; user-select: none;
-  filter: drop-shadow(0 6px 16px rgb(var(--black-rgb) / .55)); animation: orb-glow 3.2s ease-in-out infinite; transition: transform var(--dur-fast); }
+.orb { position: fixed; z-index: var(--z-orb); width: var(--orb-size); height: var(--orb-size); padding: 0; border: 0; border-radius: 50%; background: none; touch-action: none; cursor: grab; user-select: none; box-shadow: var(--shadow); }
 .orb img { width: 100%; height: 100%; display: block; pointer-events: none; border-radius: 50%; }
-.orb:hover { transform: scale(1.06); }
-.orb.dragging { cursor: grabbing; transform: scale(1.12); animation: none; filter: drop-shadow(0 10px 24px rgb(var(--gold-rgb) / .5)); }
-.orb.open { animation: none; filter: drop-shadow(0 0 14px rgb(var(--crimson-rgb) / .6)); }
-@keyframes orb-glow {
-  0%, 100% { filter: drop-shadow(0 6px 16px rgb(var(--black-rgb) / .55)) drop-shadow(0 0 4px rgb(var(--gold-rgb) / .25)); }
-  50% { filter: drop-shadow(0 6px 16px rgb(var(--black-rgb) / .55)) drop-shadow(0 0 16px rgb(var(--gold-rgb) / .6)); }
-}
+.orb.dragging { cursor: grabbing; }
+.orb.open { outline: 2px solid var(--crimson-hi); outline-offset: 0; }
 
-.chat-panel { position: fixed; z-index: var(--z-chat); display: flex; flex-direction: column; overflow: hidden; border-radius: 20px;
-  background: linear-gradient(180deg, var(--night-700), var(--night-850)); backdrop-filter: none; box-shadow: var(--rim-light), var(--shadow-2), 0 0 40px rgb(var(--crimson-rgb) / .12); }
-.chat-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) 14px; border-bottom: 1px solid var(--border-soft); background: rgb(var(--crimson-rgb) / .08); }
-.face { position: relative; width: 46px; height: 46px; flex: none; border-radius: 50%; border: 2px solid var(--gold);
-  background: var(--night-700) url("../assets/reika.jpg") 50% 6% / 330% auto no-repeat; }
-.mood-badge { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 22px; display: grid; place-items: center; font-size: .8rem; border-radius: 50%; background: var(--surface-solid); border: 1px solid var(--border); }
+.chat-panel { position: fixed; z-index: var(--z-chat); display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.chat-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }
+.face { position: relative; width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid var(--border-strong);
+  background: var(--surface-2) url("../assets/reika.jpg") 50% 6% / 330% auto no-repeat; }
+.mood-badge { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 22px; display: grid; place-items: center; font-size: var(--text-xs); border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); }
 .who { flex: 1; min-width: 0; }
-.who h2 { font-size: 1.02rem; }
-.who p { margin: 0; font-size: .8rem; color: var(--text-muted); }
-.who .mode { color: var(--gold); font-size: var(--text-xs); line-height: 1.25; }
-.log { flex: 1; overflow-y: auto; padding: var(--space-4) 14px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-.msg { max-width: 86%; padding: 10px 14px; border-radius: var(--radius-lg); white-space: pre-wrap; overflow-wrap: anywhere; }
-.msg.user { align-self: flex-end; background: linear-gradient(135deg, var(--crimson-lo), var(--crimson-deep)); border-bottom-right-radius: 4px; }
-.msg.reika { align-self: flex-start; background: rgb(var(--pearl-rgb) / .07); border: 1px solid var(--border-soft); border-bottom-left-radius: 4px; }
-.msg time { display: block; margin-top: 4px; font-size: var(--text-xs); color: var(--text-muted); }
-.composer { display: flex; gap: var(--space-2); padding: 10px var(--space-3); border-top: 1px solid var(--border-soft); background: rgb(var(--black-rgb) / .2); }
-.composer textarea { flex: 1; resize: none; max-height: 140px; min-height: 44px; padding: 10px 14px; border-radius: 14px; background: var(--night-900); }
-.composer .btn { border-radius: 14px; }
-@media (prefers-reduced-motion: no-preference) { .msg { animation: pop .18s ease-out; } @keyframes pop { from { opacity: 0; transform: translateY(6px); } } }
+.who h2 { font-size: var(--text-md); }
+.who p { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
+.who .mode { font-size: var(--text-xs); line-height: 1.25; }
+.log { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.msg { max-width: 86%; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-sm); }
+.msg.user { align-self: flex-end; background: var(--crimson-lo); border-bottom-right-radius: var(--radius-sm); }
+.msg.reika { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-bottom-left-radius: var(--radius-sm); }
+.msg time { display: block; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--text-muted); }
+.composer { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
+.composer textarea { flex: 1; resize: none; max-height: 140px; min-height: 44px; }
+.composer .btn { min-height: 44px; }

@@ -4,14 +4,17 @@ html, body { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--text); font: var(--text-md)/var(--leading) var(--font-sans); overflow: hidden; }
 button { font: inherit; color: inherit; cursor: pointer; }
 a { color: inherit; }
-h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 600; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+h2 { font-family: var(--font-serif); font-size: var(--text-xl); line-height: 1.2; }
+h3 { font-size: var(--text-md); }
+h4 { font-size: var(--text-sm); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 [hidden] { display: none !important; }
 
 /* visually hidden, still read by screen readers */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.text-muted { color: var(--text-muted); font-size: var(--text-sm); margin: var(--space-2) 0; }
-.text-warn { color: var(--warn); font-size: var(--text-sm); margin: var(--space-2) 0; white-space: pre-wrap; }
+.text-muted { color: var(--text-muted); font-size: var(--text-sm); margin: 0; }
+.text-warn { color: var(--warn); font-size: var(--text-sm); margin: 0; white-space: pre-wrap; }
 
 /* One switch for all motion: nothing animates or transitions when the user asks for reduced motion. */
 @media (prefers-reduced-motion: reduce) {
