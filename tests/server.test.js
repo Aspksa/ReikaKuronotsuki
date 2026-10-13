@@ -217,9 +217,9 @@ test('offline chat uses explicit memory recall and does not store ordinary chat 
   await post(base, {text:'Привет! Как дела?'});
   await post(base, {text:'Объясни, как работает JavaScript.'});
   assert.equal((await (await fetch(base+'/api/memory')).json()).count, initial);
-  await post(base, {text:'Запомни: мой любимый цвет бирюзовый'});
+  const chatSaved = await (await post(base, {text:'Запомни: мой любимый цвет бирюзовый'})).json();
   const saved = (await (await fetch(base+'/api/memory')).json()).memories;
-  assert.ok(saved.some(m => m.content.includes('бирюзовый')));
+  assert.ok(saved.some(m => m.content.includes('бирюзовый')), JSON.stringify({ chatSaved, saved }));
   await post(base, {text:'Запомни: мой любимый цвет бирюзовый'});
   assert.equal((await (await fetch(base+'/api/memory')).json()).count, saved.length, 'deduplicated');
   const reply = await (await post(base, {text:'Что ты помнишь про мой любимый цвет?'})).json();
