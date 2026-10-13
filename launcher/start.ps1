@@ -55,6 +55,21 @@ if ($Step -eq 'check') {
     try {
         $node = Get-NodeOrInstall
         Write-Host "Node.js: $node"
+        # Install the pinned upstream MemOS SDK directly into the application.
+        $sdk = Join-Path $root 'node_modules\@mem-os\sdk\package.json'
+        if (-not (Test-Path -LiteralPath $sdk)) {
+            Write-Host 'Устанавливаю встроенную память MemOS...'
+            $localNpm = Join-Path $root 'runtime\node\node_modules\npm\bin\npm-cli.js'
+            if (Test-Path -LiteralPath $localNpm) {
+                & $node $localNpm install --omit=dev --no-audit --no-fund
+            } else {
+                $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+                if (-not $npm) { throw 'Не найден npm для установки памяти MemOS.' }
+                & $npm.Source install --omit=dev --no-audit --no-fund
+            }
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $sdk)) { throw 'Не удалось установить MemOS. Проверьте подключение к интернету.' }
+        }
+
         & $node (Join-Path $root 'tests\run.js')
         exit $LASTEXITCODE
     } catch {
