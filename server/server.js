@@ -72,6 +72,31 @@ function readBuffer(req, max) {
 
 function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..'), port = null, updater = null, restart = () => false, aiClient = ai.createClient() }) {
   const store = core.createStore(dataDir);
+  // MemOS lives in the chat pipeline itself. Its database is independent of
+  // chat history and statistics; the optional native dependency cannot block startup.
+  let memoryPromise = null;
+  function memory() {
+    if (!memoryPromise) memoryPromise = import('@mem-os/sdk').then(async ({ MemOS }) => {
+      const instance = new MemOS({ dbPath: path.join(dataDir, 'reika-memory.sqlite') });
+      await instance.init();
+      return instance;
+    }).catch(() => null);
+    return memoryPromise;
+  }
+  async function remember(text) {
+    const mem = await memory();
+    if (!mem) return;
+    try { await mem.store(text, { type: 'conversation', tags: ['reika-chat'] }); }
+    catch (error) { console.warn('MemOS store:', error.message); }
+  }
+  async function recall(text) {
+    const mem = await memory();
+    if (!mem) return [];
+    try {
+      const hits = await mem.search({ query: text, limit: 4 });
+      return hits.map(hit => hit.node?.content).filter(x => typeof x === 'string').slice(0,4);
+    } catch (error) { console.warn('MemOS search:', error.message); return []; }
+  }
   const root = path.resolve(webRoot);
 
   // Everything the settings page may see. The key itself is never sent back: only whether it is stored and its last four characters.
@@ -216,7 +241,9 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         let answer = null, warning = null, source = 'reika';
         if (ai.providerInfo(provider) && key) {
           try {
-            const result = await aiClient.reply({ provider, key, model: stored.aiModel, text, history: store.all() });
+            const memories = await recall(text);
+            const memoryContext = memories.length ? [{ role: 'reika', text: 'Проверенные записи из моей долговременной памяти (используй только если относятся к текущему вопросу):\n' + memories.map(x => '- ' + x.slice(0,350)).join('\n'), at: new Date().toISOString() }] : [];
+            const result = await aiClient.reply({ provider, key, model: stored.aiModel, text, history: [...memoryContext, ...store.all()] });
             answer = { text: result.text, emotion: core.detectEmotion(result.text) };
             source = provider;
           } catch (error) {
@@ -227,6 +254,7 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         if (!answer) answer = core.reply(text);
         const user = store.add('user', text, core.detectEmotion(text));
         const reika = store.add('reika', answer.text, answer.emotion);
+        await remember(text);
         return sendJson(res, 200, { user, reika, source, ...(warning ? { warning } : {}) });
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
