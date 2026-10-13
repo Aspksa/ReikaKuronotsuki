@@ -128,7 +128,7 @@ test('dashboard provides hour, day and week histories with truthful trend contex
   assert.match(html,/id="up-stats-period"/);
   for(const ms of ['3600000','86400000','604800000'])assert.ok(html.includes('value="'+ms+'"'));
   assert.match(script,/const cutoff=now-Number\(period.value\)/);
-  assert.match(script,/Размер проекта:/);
+  assert.doesNotMatch(script,/Размер проекта:/);
   assert.doesNotMatch(script,/С прошлой записанной версии/);
 });
 
