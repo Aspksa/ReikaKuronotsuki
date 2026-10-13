@@ -102,7 +102,7 @@
   function createCard(label,key,unit,index,compact=false){
     const card=document.createElement('div');card.className='stats-tile'+(compact?' stats-tile--hero':'');
     card.dataset.tone=toneFor(key,index);
-    const icon=document.createElement('span');icon.className='stats-icon';icon.setAttribute('aria-hidden','true');icon.textContent=symbols[index];
+    const icon=document.createElement('span');icon.className='stats-icon';icon.setAttribute('aria-hidden','true');icon.textContent=symbols[index % symbols.length];
     const name=document.createElement('span');name.className='stats-name';name.textContent=label;
     const value=document.createElement('strong');value.className='stats-number';value.textContent='—';
     const trend=document.createElement('span');trend.className='stats-trend';trend.textContent='Нет истории';
