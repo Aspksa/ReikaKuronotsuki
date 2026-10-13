@@ -79,9 +79,9 @@ test('refined dashboard has no redundant headings and supports searching all met
   const css = await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
   assert.doesNotMatch(html, /<h3>Статистика<\/h3>/);
   assert.doesNotMatch(html, /Состояние проекта/);
-  assert.match(html, /id="up-stats-search"/);
-  assert.match(js, /function filterMetrics\(/);
-  assert.match(js, /search\.addEventListener\('input',filterMetrics\)/);
+  assert.doesNotMatch(html, /id="up-stats-search"/);
+  assert.doesNotMatch(js, /function filterMetrics\(/);
+  assert.doesNotMatch(js, /search\.addEventListener\('input',filterMetrics\)/);
   assert.match(css, /stats-tile--hero:nth-child\(2\)/);
   assert.match(css, /prefers-reduced-motion/);
 });
@@ -144,10 +144,8 @@ test('new metric interactions expose keyboard-accessible controls and dialog', a
   const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
   const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
   const css=await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
-  for(const id of ['up-stats-detail','up-stats-detail-close','up-stats-favorites-toggle','up-stats-alerts','up-stats-gitdiff'])assert.ok(html.includes('id="'+id+'"'));
+  for(const id of ['up-stats-detail','up-stats-detail-close','up-stats-alerts','up-stats-gitdiff'])assert.ok(html.includes('id="'+id+'"'));
   assert.match(js,/function openDetail\(/);
-  assert.match(js,/function toggleFavorite\(/);
-  assert.match(js,/localStorage\.setItem/);
   assert.match(js,/showModal\(\)/);
   assert.match(css,/\.stats-detail::backdrop/);
   assert.match(css,/\.stats-open:focus-visible/);
@@ -159,9 +157,27 @@ test('crimson dashboard retains usable controls and mobile accessibility', async
   assert.match(css,/--stat-pro-accent:var\(--crimson-hi\)/);
   assert.match(css,/\.stats-tile--hero:focus-within/);
   assert.match(css,/\.stats-tab\[aria-pressed="true"\]/);
-  assert.match(css,/\.stats-star:focus-visible/);
+  assert.match(css,/\.stats-open:focus-visible/);
   assert.match(css,/@media\(max-width:670px\)/);
   assert.match(css,/prefers-reduced-motion:reduce/);
-  for(const id of ['up-stats-search','up-stats-favorites-toggle','up-stats-period','up-stats-detail'])assert.ok(html.includes('id="'+id+'"'));
+  for(const id of ['up-stats-period','up-stats-detail'])assert.ok(html.includes('id="'+id+'"'));
   assert.doesNotMatch(html, /<h3>Статистика<\/h3>/);
+});
+
+test('every metric has a distinct value source and removed controls cannot return', async () => {
+  const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
+  const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
+  const css=await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
+  const begin=js.indexOf('const groups = '),end=js.indexOf(';',begin);
+  const groups=JSON.parse(js.slice(begin+'const groups = '.length,end));
+  const keys=groups.flatMap(g=>g[1].map(x=>x[1]));
+  assert.equal(keys.length,150);
+  assert.equal(new Set(keys).size,150);
+  for(const word of ['up-stats-search','up-stats-favorites-toggle','up-stats-favorites-count','stats-star','toggleFavorite','favoriteStore']){
+    assert.equal(js.includes(word),false,word);
+    assert.equal(html.includes(word),false,word);
+    assert.equal(css.includes(word),false,word);
+  }
+  assert.ok(keys.includes('derived.avgNameBytes'));
+  assert.ok(keys.includes('derived.filesPerDirectory'));
 });
