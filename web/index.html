@@ -99,9 +99,10 @@
         <h3>История</h3><ul id="up-history" class="history"></ul>
         <button id="up-rollback" type="button" class="btn btn--ghost" hidden>Откатить последнюю установку</button>
       </div>
-      <section class="stats-panel panel" aria-label="Сто статистик проекта">
-          <h3>100 фактов, которые никто не просил</h3>
-          <p class="text-muted">Но теперь они есть. Цифры настоящие, названия — с характером.</p>
+      <section class="stats-panel panel" aria-label="Статистика проекта">
+          <div class="stats-heading"><div><h3>Статистика</h3><p class="text-muted">Ключевые показатели и история изменений</p></div><span class="stats-live" aria-label="Данные обновляются автоматически">● LIVE</span></div>
+          <div id="up-stats-highlights" class="stats-highlights" aria-label="Главные показатели"></div>
+          <nav id="up-stats-tabs" class="stats-tabs" aria-label="Разделы статистики"></nav>
           <p id="up-stats-note" class="text-muted">Загрузка статистики…</p>
           <div id="up-stats"></div>
         </section>

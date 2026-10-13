@@ -45,5 +45,11 @@ test('statistics live in a separate right column with accessible icon decoration
   assert.match(css, /@media \(max-width: 1180px\)/);
   assert.match(js, /stats-icon/);
   assert.match(js, /aria-hidden/);
-  assert.match(js, /toneFor\(key,cards.length\)/);
+  assert.match(js, /toneFor\(key,index\)/);
+  assert.doesNotMatch(html, /100 фактов, которые никто не просил/);
+  assert.match(html, /id="up-stats-tabs"/);
+  assert.match(html, /id="up-stats-highlights"/);
+  assert.match(js, /function sparkline\(/);
+  assert.match(js, /function activate\(/);
+  assert.match(css, /prefers-reduced-motion/);
 });
