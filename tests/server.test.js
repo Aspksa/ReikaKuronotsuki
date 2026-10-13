@@ -162,3 +162,19 @@ test('full backup saves and restores MemOS records, not only chat JSON',()=>with
   assert.equal(rejected.status,400);
   assert.ok((await (await fetch(base+'/api/memory')).json()).memories.some(x=>x.id===first.id));
 }));
+
+test('MemOS bundled CLI has Russian help and translated memory errors without renaming API',()=>{
+ const {spawnSync}=require('node:child_process');
+ const root=path.join(__dirname,'..');
+ const cli=path.join(root,'vendor','memos','dist','cli.js');
+ const help=spawnSync(process.execPath,[cli,'--help'],{cwd:root,encoding:'utf8',timeout:15000});
+ assert.equal(help.status,0,help.stderr);
+ assert.match(help.stdout,/Использование:/);
+ assert.match(help.stdout,/Команды:/);
+ assert.match(help.stdout,/Сохранить новое воспоминание/);
+ const ts=fs.readFileSync(path.join(root,'vendor','memos','src','memory.ts'),'utf8');
+ const built=fs.readFileSync(path.join(root,'vendor','memos','dist','memory.js'),'utf8');
+ assert.match(ts,/Узел памяти не найден/);
+ assert.match(built,/Узел памяти не найден/);
+ assert.match(ts,/async store\(/);
+});
