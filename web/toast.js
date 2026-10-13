@@ -16,7 +16,7 @@
     if (opts.key) for (const old of host.querySelectorAll('.toast')) if (old.dataset.key === opts.key) old.remove();
     while (host.children.length >= MAX) host.firstElementChild.remove();
     const el = document.createElement('div');
-    el.className = `toast toast--${opts.tone || 'info'} lit`;
+    el.className = `toast toast--${opts.tone || 'info'}`;
     if (opts.key) el.dataset.key = opts.key;
     const body = document.createElement('div');
     body.className = 'toast__body';

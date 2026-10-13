@@ -1,6 +1,5 @@
 'use strict';
-// Background life: falling sakura petals and a soft light that follows the pointer on ".lit" surfaces.
-// With "reduced motion" nothing moves: no petals, no pointer light.
+// Background life: falling sakura petals. With "reduced motion" nothing moves.
 (function () {
   const $ = (id) => document.getElementById(id);
   const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -19,22 +18,5 @@
       p.style.setProperty('--size', px(7 + Math.random() * 8));
       petals.appendChild(p);
     }
-  }
-
-  // ---- pointer light on ".lit" surfaces (cards, panels, the chat window, menu items) ----
-  if (!reduce) {
-    let frame = 0, mx = 0, my = 0;
-    const SPREAD = 180; // the light reaches this far outside an element
-    const update = () => {
-      frame = 0;
-      for (const el of document.querySelectorAll('.lit')) {
-        const r = el.getBoundingClientRect();
-        const near = mx > r.left - SPREAD && mx < r.right + SPREAD && my > r.top - SPREAD && my < r.bottom + SPREAD;
-        el.style.setProperty('--lit', near ? '1' : '0');
-        if (near) { el.style.setProperty('--lx', px(mx - r.left)); el.style.setProperty('--ly', px(my - r.top)); }
-      }
-    };
-    window.addEventListener('pointermove', (event) => { mx = event.clientX; my = event.clientY; if (!frame) frame = requestAnimationFrame(update); }, { passive: true });
-    document.addEventListener('pointerleave', () => { for (const el of document.querySelectorAll('.lit')) el.style.setProperty('--lit', '0'); });
   }
 })();
