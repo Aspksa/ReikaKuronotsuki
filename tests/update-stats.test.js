@@ -42,7 +42,7 @@ test('statistics live in a separate right column with accessible icon decoration
   assert.match(html, /class="update-columns"/);
   assert.match(html, /class="stats-panel panel"/);
   assert.match(css, /grid-template-columns: minmax\(320px/);
-  assert.match(css, /@media \(max-width: 1180px\)/);
+  assert.match(css, /@media \(max-width:\s*1180px\)/);
   assert.match(js, /stats-icon/);
   assert.match(js, /aria-hidden/);
   assert.match(js, /toneFor\(key,index\)/);
@@ -84,4 +84,14 @@ test('refined dashboard has no redundant headings and supports searching all met
   assert.match(js, /search\.addEventListener\('input',filterMetrics\)/);
   assert.match(css, /stats-tile--hero:nth-child\(2\)/);
   assert.match(css, /prefers-reduced-motion/);
+});
+
+test('dashboard CSS uses one canonical declaration per base selector and breakpoint', async () => {
+  const css = await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'update.css'), 'utf8');
+  for (const selector of ['.stats-highlights', '.stats-tile--hero', '.stats-live', '.stats-tab[aria-pressed="true"]']) {
+    const hits = css.split('\n').filter(line => line.startsWith(selector + ' {'));
+    assert.equal(hits.length, 1, selector + ' must have one base declaration');
+  }
+  assert.equal((css.match(/@media \(max-width:1180px\)/g) || []).length, 1);
+  assert.doesNotMatch(css, /\.stats-heading/);
 });
