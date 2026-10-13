@@ -125,3 +125,11 @@ test('minimal and uniform: no gradients, glows or blur in the interface; one but
     for (const m of css.matchAll(/font-size:\s*([^;}]+)/g)) assert.match(m[1].trim(), /^var\(--text-/, `${file}: font-size ${m[1].trim()}`);
   }
 });
+
+test('floating chat stays viewport-fixed after memory overlay stylesheet loads', () => {
+  const chat = files['css/chat.css'];
+  const memory = files['css/memory.css'];
+  assert.match(chat, /\.chat-panel\s*\{\s*position:\s*fixed\s*;/);
+  assert.doesNotMatch(memory, /\.chat-panel\s*\{[^}]*position\s*:/);
+  assert.match(memory, /\.memory-panel\s*\{\s*position:\s*absolute\s*;/);
+});
