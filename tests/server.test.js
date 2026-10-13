@@ -202,3 +202,12 @@ test('memory controls live inside chat and use the existing MemOS API', async ()
   assert.equal(cssResponse.status, 200);
   assert.match(await cssResponse.text(), /memory-panel\[hidden\]/);
 }));
+
+test('Windows portable Node install avoids stale shared extraction paths', () => {
+ const script=fs.readFileSync(path.join(__dirname,'..','launcher','start.ps1'),'utf8');
+ assert.match(script,/node-install-/);
+ assert.match(script,/\[guid\]::NewGuid\(\)/);
+ assert.match(script,/finally\s*\{/);
+ assert.match(script,/Move-Item -LiteralPath \$old -Destination \$target/);
+ assert.doesNotMatch(script,/runtime\\download'/);
+});
