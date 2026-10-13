@@ -40,7 +40,7 @@ async function acquireLock(folder) {
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
       const info = await fs.readFile(file, 'utf8').then(JSON.parse, () => null);
-      if (info && pidAlive(info.pid) && Date.now() - info.at < 10 * 60_000) {
+      if (info && Number.isInteger(info.pid) && info.pid > 0 && pidAlive(info.pid)) {
         throw Object.assign(new Error('Установка уже выполняется другим процессом'), { code: 'EBUSY_UPDATE' });
       }
       await fs.rm(file, { force: true }); // the owner is gone: a stale lock
