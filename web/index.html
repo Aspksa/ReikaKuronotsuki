@@ -41,10 +41,10 @@
     <div class="side-bottom">
       <div class="update-card lit" id="update-card" data-state="idle" hidden>
         <a href="#/update" id="nav-update" class="nav-item update-entry" data-route="update" data-tip="Обновления">
-          <span class="ico-chip emblem"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path id="update-ico-path" d="M19 12a7 7 0 1 1-2.2-5.1M19 4v4.5h-4.5M12 9.6l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z"/></svg></span>
+          <span class="ico-chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path id="update-ico-path" d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5"/></svg></span>
           <span class="label">Обновления</span><i id="update-dot" class="badge-dot" hidden aria-label="Доступна новая версия"></i>
         </a>
-        <p class="update-status label" id="update-status">…</p>
+        <p class="update-status label" id="update-status" hidden></p>
         <div class="mini-bar label" id="update-mini" role="progressbar" aria-label="Скачивание обновления" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i id="update-mini-fill"></i></div>
         <button id="update-install-quick" class="btn btn--gold update-quick label" type="button" hidden>Установить</button>
         <div class="popover" id="update-news" role="tooltip" hidden></div>

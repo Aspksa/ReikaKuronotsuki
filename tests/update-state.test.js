@@ -22,11 +22,9 @@ test('state of the entry: idle, available, busy, ready, error', () => {
 });
 
 test('the status line says what is going on', () => {
-  assert.match(S.statusText(base()), /^Версия aaaaaaaa$/);
-  assert.match(S.statusText(base({ checkedAt: Date.UTC(2026, 0, 1, 12, 40) })), /^Версия aaaaaaaa · \d\d:\d\d$/);
-  assert.equal(S.statusText(base({ localVersion: 'не определена' })), 'Версия не определена');
-  assert.equal(S.statusText(base({ latest: latest() })), 'Доступна версия bbbbbbbb');
-  assert.match(S.statusText(base({ latest: latest(), blocked: 'CI' })), /ждёт проверок CI/);
+  assert.equal(S.statusText(base()), '', 'idle: only the name, no version');
+  assert.equal(S.statusText(base({ latest: latest() })), 'Есть новая версия');
+  assert.match(S.statusText(base({ latest: latest(), blocked: 'CI' })), /проверок CI/);
   assert.equal(S.statusText(base({ phase: 'downloading', percent: 41.6 })), 'Скачивание… 42%');
   assert.equal(S.statusText(base({ phase: 'downloading', percent: 900 })), 'Скачивание… 100%');
   assert.equal(S.statusText(base({ phase: 'testing' })), 'Проверка и тесты…');

@@ -47,7 +47,7 @@
 /* bottom block: the update entry (separate from the menu list) and the footer */
 .side-bottom { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-3); }
 .update-card { position: relative; isolation: isolate; padding: 0; border: 1px solid transparent; border-radius: var(--radius-md); transition: border-color var(--dur), background var(--dur); }
-.update-card .nav-item { padding: 5px var(--space-2); }
+.update-card .nav-item { padding: 7px var(--space-2); }
 .update-card[data-state="available"] { border-color: var(--border); background: rgb(var(--gold-rgb) / .08); }
 .update-card[data-state="busy"] { border-color: var(--border-soft); }
 .update-card[data-state="ready"] { border-color: rgb(var(--ok-rgb) / .5); background: rgb(var(--ok-rgb) / .08); }
@@ -57,11 +57,6 @@
 .update-card[data-state="error"] .ico-chip { color: var(--warn); }
 .update-card[data-state="available"] .ico-chip { color: var(--gold); }
 .update-card .nav-item[aria-current="page"] { background: none; }
-/* the emblem of the update entry: a round gold-ringed badge */
-.emblem { width: 32px; height: 32px; border-radius: 50%; color: var(--gold); border-color: var(--gold-lo); background: radial-gradient(circle at 35% 30%, rgb(var(--gold-rgb) / .28), rgb(var(--night-rgb) / .6)); box-shadow: inset 0 0 0 2px rgb(var(--night-rgb) / .6), 0 0 10px rgb(var(--gold-rgb) / .22); }
-.emblem .ico { width: 18px; height: 18px; }
-.nav-item:hover .emblem, .nav-item[aria-current="page"] .emblem { border-color: var(--gold-hi); }
-.nav-item[aria-current="page"] .emblem { background: radial-gradient(circle at 35% 30%, rgb(var(--gold-rgb) / .4), rgb(var(--crimson-rgb) / .5)); box-shadow: 0 0 12px rgb(var(--gold-rgb) / .35); }
 .update-entry .label { font-size: var(--text-sm); }
 .update-entry .badge-dot { position: absolute; top: 8px; right: 10px; margin: 0; }
 .update-status { margin: 0 var(--space-2) var(--space-1) 48px; font-size: var(--text-xs); color: var(--text-muted); text-overflow: ellipsis; }
