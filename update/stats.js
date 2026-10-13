@@ -52,6 +52,22 @@ async function appendSample(root,sample){
   try {await pending;writes.set(root,{at:sample.at});}catch{writes.delete(root);}
 }
 
+function getGitStats(root){
+  const previous=gitCache.get(root);
+  if(previous && Date.now()-previous.at<300_000)return previous.value;
+  const git={commitCount:null,firstCommit:null,lastCommit:null,authors:null};
+  try{
+    const run=args=>execFileSync('git',['-C',root,...args],{timeout:1800,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();
+    const commitCount=Number(run(['rev-list','--count','HEAD']));
+    git.commitCount=Number.isSafeInteger(commitCount)?commitCount:null;
+    git.firstCommit=dateMs(run(['log','--reverse','--format=%aI','HEAD']).split('\n')[0]);
+    git.lastCommit=dateMs(run(['log','-1','--format=%aI']));
+    git.authors=run(['shortlog','-sne','HEAD']).split('\n').filter(Boolean).length;
+  }catch{ /* Git unavailable for ZIP installs */ }
+  gitCache.set(root,{at:Date.now(),value:git});
+  return git;
+}
+
 async function inspect(root) {
   const result = { files: 0, bytes: 0, js: 0, css: 0, html: 0, json: 0, images: 0, text: 0,
     lines: 0, blank: 0, comments: 0, largest: 0, smallest: null, deepest: 0, directories: 0,
@@ -133,15 +149,7 @@ async function collect(updater) {
     try { await fs.mkdir(dir, {recursive:true}); await fs.writeFile(baselineFile, JSON.stringify(baseline), {flag:'wx'}); } catch { /* another process may have written it */ }
   }
   const current = status;
-  let git = { commitCount: null, firstCommit: null, lastCommit: null, authors: null };
-  try {
-    const run = args => execFileSync('git', ['-C', root, ...args], { timeout: 1800, encoding: 'utf8', stdio:['ignore','pipe','ignore'] }).trim();
-    const countCommits = Number(run(['rev-list','--count','HEAD']));
-    git.commitCount = Number.isFinite(countCommits) ? countCommits : null;
-    git.firstCommit = dateMs(run(['log','--reverse','--format=%aI','HEAD']).split('\n')[0]) ?? null;
-    git.lastCommit = dateMs(run(['log','-1','--format=%aI']));
-    git.authors = run(['shortlog','-sne','HEAD']).split('\n').filter(Boolean).length;
-  } catch { /* ZIP installations may not have git */ }
+  const git = getGitStats(root);
   const fsInfo = await fs.statfs(root).catch(() => null);
   const free = fsInfo ? Number(fsInfo.bavail) * Number(fsInfo.bsize) : null;
   const sample={at:Date.now(),version:status.localVersion||null,bytes:scan.bytes,files:scan.files,lines:scan.lines,rss:process.memoryUsage().rss,freeDiskBytes:free,installs:installs.length,failures:failures.length,downloads:sum(downloadEvents,'bytes_done')};
