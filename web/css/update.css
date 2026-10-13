@@ -1,0 +1,17 @@
+/* "Обновление проекта" page. */
+.update { max-width: var(--content-max); margin: 0 auto; }
+.update h3 { margin: var(--space-4) 0 var(--space-2); color: var(--gold); font-size: var(--text-md); }
+.route { list-style: none; display: flex; align-items: center; padding: 0; margin: var(--space-4) 0 10px; }
+.route li:not(.lane) { padding: 7px var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-md); font-size: .86rem; color: var(--text-muted); }
+.route li.on { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 14px rgb(var(--gold-rgb) / .25); }
+.route .lane { flex: 1; height: 2px; background: var(--border-soft); position: relative; }
+.fly { position: absolute; top: -9px; left: 0; width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(135deg, var(--gold), var(--sakura)); animation: fly 1.2s linear infinite; }
+@keyframes fly { to { left: calc(100% - 20px); } }
+.checks, .history, .removals ul { list-style: none; padding: 0; margin: var(--space-2) 0; font-size: .88rem; }
+.checks li::before { content: '○ '; }
+.checks li.active::before { content: '◔ '; color: var(--gold); }
+.checks li.done::before { content: '✔ '; color: var(--ok); }
+.checks li.error::before { content: '✖ '; color: var(--warn); }
+.removals li { color: var(--warn); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.history li { padding: 6px 0; border-bottom: 1px solid var(--border-soft); color: var(--text-muted); }

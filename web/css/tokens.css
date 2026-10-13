@@ -1,0 +1,59 @@
+/*
+ * Design tokens: the ONLY place with raw colours, sizes and scales.
+ * Other files use var(--token). Palette comes from the Reika artwork: moonlit night, pearl silver, crimson tassels, gold, sakura.
+ * Translucent colours use the -rgb triplets:  rgb(var(--gold-rgb) / .3)
+ */
+:root {
+  /* palette */
+  --night-950: #070813; --night-900: #0b0c16; --night-850: #10111f; --night-800: #151628; --night-700: #1d1b33; --night-600: #2a2745;
+  --pearl: #fdf7f4; --blush: #e5c6c3; --silver: #d6d9e8; --muted: #aaa6c0; --faint: #8a86a2;
+  --crimson: #b3223f; --crimson-hi: #c9304f; --crimson-lo: #8f1a33; --crimson-deep: #5b282e;
+  --gold: #d8b46a; --gold-hi: #e3c27c; --gold-lo: #c39a4a; --gold-ink: #20150f;
+  --eye: #6fb7ff; --sakura: #f3b8c8; --ok: #8fd3a0; --warn: #f2a28b;
+  --sky-top: #070813; --sky-mid: #10122a; --sky-low: #1b1428; --petal: #f7d9e2;
+  --gold-rgb: 216 180 106; --crimson-rgb: 179 34 63; --pearl-rgb: 253 247 244; --blush-rgb: 229 198 195;
+  --night-rgb: 11 12 22; --moon-rgb: 214 224 255; --black-rgb: 0 0 0;
+
+  /* semantic */
+  --bg: var(--night-900);
+  --surface: rgb(22 20 38 / .78);
+  --surface-solid: var(--night-700);
+  --text: var(--pearl);
+  --text-muted: var(--muted);
+  --border: rgb(var(--gold-rgb) / .28);
+  --border-soft: rgb(var(--blush-rgb) / .12);
+  --accent: var(--crimson);
+  --accent-2: var(--gold);
+  --focus: var(--gold);
+
+  /* typography */
+  --font-serif: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", "Cambria", Georgia, serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --text-xs: .72rem; --text-sm: .85rem; --text-md: 1rem; --text-lg: 1.15rem; --text-xl: 1.5rem; --text-2xl: 2rem;
+  --leading: 1.5;
+
+  /* spacing (4 px base) */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+
+  /* radius */
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 18px; --radius-xl: 22px; --radius-pill: 999px;
+
+  /* elevation */
+  --shadow-1: 0 6px 20px rgb(var(--black-rgb) / .35);
+  --shadow-2: 0 18px 50px rgb(var(--black-rgb) / .55);
+  --shadow-glow-crimson: 0 6px 24px rgb(var(--crimson-rgb) / .4);
+  --rim-light: inset 0 1px 0 rgb(var(--moon-rgb) / .10);
+
+  /* motion */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --dur-fast: .15s; --dur: .2s; --dur-slow: .6s;
+
+  /* stacking */
+  --z-below: -1; --z-sky: 0; --z-shell: 1; --z-chat: 55; --z-orb: 60; --z-overlay: 80;
+
+  /* layout */
+  --sidebar-w: 248px; --sidebar-w-collapsed: 76px; --orb-size: 64px; --content-max: 760px;
+
+  /* the moon (shared by the sky layers and the water reflection) */
+  --moon-size: clamp(220px, 36vmin, 480px); --moon-top: 5vmin; --moon-right: 9vw;
+}

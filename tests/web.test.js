@@ -8,6 +8,8 @@ const vm = require('node:vm');
 
 const web = path.join(__dirname, '..', 'web');
 const read = (f) => fs.readFileSync(path.join(web, f), 'utf8');
+// style.css is only the list of @imports: "the CSS" means all the files it pulls in
+const allCss = () => [...read('style.css').matchAll(/@import url\("([^"]+)"\)/g)].map((m) => read(m[1])).join('\n');
 
 test('reika-chat.js runs in a browser-like context and exposes window.ReikaChat', () => {
   const sandbox = { console };
@@ -47,7 +49,7 @@ test('every file the page references exists', () => {
 test('every element id used by the page scripts exists in index.html (sidebar, orb, chat, update page)', () => {
   const html = read('index.html');
   const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
-  for (const file of ['app.js', 'update.js', 'shell.js', 'orb.js']) {
+  for (const file of ['app.js', 'update.js', 'shell.js', 'orb.js', 'sky.js']) {
     const code = read(file);
     const used = [...code.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]).concat([...code.matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]));
     for (const id of used) assert.ok(ids.has(id), `${file} uses #${id} but index.html has no such element`);
@@ -63,7 +65,7 @@ test('left menu: home, chat and (hidden until a server answers) update; no old h
   assert.match(side, /id="side-toggle"/);
   assert.ok(!/id="menu-btn"|id="menu-update"|id="menu-clear"|id="open-update"/.test(html), 'leftovers of the old dropdown menu');
   assert.ok(html.indexOf('<aside') < html.indexOf('<main'), 'the menu is on the left (before the content)');
-  assert.match(read('style.css'), /\.shell\s*\{[^}]*grid-template-columns:\s*var\(--sidebar\)\s+1fr/);
+  assert.match(allCss(), /\.shell\s*\{[^}]*grid-template-columns:\s*var\(--sidebar-w\)\s+1fr/);
 });
 
 test('the chat opens from the floating logo: hidden panel, draggable orb with keyboard and remembered place', () => {
@@ -73,7 +75,7 @@ test('the chat opens from the floating logo: hidden panel, draggable orb with ke
   for (const id of ['log', 'form', 'input', 'send', 'chat-clear', 'chat-close']) assert.ok(new RegExp(`id="${id}"`).test(html.slice(html.indexOf('id="chat-panel"'), html.indexOf('id="orb"'))), `#${id} must live inside the chat panel`);
   const orb = read('orb.js');
   assert.match(orb, /pointerdown/); assert.match(orb, /setPointerCapture/); assert.match(orb, /ArrowLeft/); assert.match(orb, /localStorage/); assert.match(orb, /Escape/);
-  assert.match(read('style.css'), /\.orb\s*\{[^}]*position:\s*fixed/);
+  assert.match(allCss(), /\.orb\s*\{[^}]*position:\s*fixed/);
   assert.ok(html.indexOf('orb.js') > html.indexOf('app.js'));
 });
 
@@ -86,7 +88,7 @@ test('the home page has no names/titles and no picture; the artwork is only the 
   assert.ok(!/assets\/reika\.jpg/.test(html), 'index.html no longer shows the artwork');
   const file = path.join(web, 'assets', 'reika.jpg');
   assert.ok(fs.existsSync(file) && fs.statSync(file).size < 1_500_000, 'the avatar image exists and stays light');
-  assert.match(read('style.css'), /assets\/reika\.jpg/);
+  assert.match(allCss(), /assets\/reika\.jpg/);
 });
 
 test('one logo ("Black Moon": eclipse, fox ears, nine tails, red tassel) is used everywhere and the favicon is the same drawing', () => {
@@ -106,6 +108,6 @@ test('one logo ("Black Moon": eclipse, fox ears, nine tails, red tassel) is used
 });
 
 test('motion is optional: petals and glow respect prefers-reduced-motion', () => {
-  assert.match(read('shell.js'), /prefers-reduced-motion: reduce/);
-  assert.match(read('style.css'), /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(read('sky.js'), /prefers-reduced-motion: reduce/);
+  assert.match(allCss(), /@media \(prefers-reduced-motion: reduce\)/);
 });

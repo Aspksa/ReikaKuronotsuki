@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<title>Стиль · Reika Kuronotsuki</title>
+<style>
+  /* only for this page: layout of the examples */
+  .sg { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-6); }
+  .sg h2 { font-size: var(--text-xl); color: var(--gold); margin-bottom: var(--space-3); }
+  .sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }
+  .sg-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+  .sg-sw { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--night-850); font-size: var(--text-xs); }
+  .sg-sw i { display: block; height: 52px; }
+  .sg-sw span { display: block; padding: var(--space-2); }
+  .sg-bar { background: var(--gold); height: 10px; border-radius: var(--radius-sm); }
+  .sg-box { width: 72px; height: 72px; background: var(--night-600); border: 1px solid var(--border); display: grid; place-items: center; font-size: var(--text-xs); }
+</style>
+</head>
+<body>
+<div class="sky" aria-hidden="true">
+  <div class="sky-stars" id="stars"></div>
+  <div class="moon-stage"><div class="moon-glow"></div><div class="moon-rays"></div><div class="moon-halo"></div><div class="moon-disc"></div><div class="moon-bloom"></div></div>
+  <div class="cloud cloud--a"></div><div class="cloud cloud--b"></div>
+  <div class="sky-water"><div class="moon-path"></div></div>
+  <div class="mist"></div><div id="petals"></div><div class="sky-vignette"></div>
+</div>
+
+<div class="shell shell--single">
+<main class="content">
+<div class="sg">
+  <header>
+    <h1 style="font-size: var(--text-2xl)">Стиль проекта</h1>
+    <p class="text-muted">Живые примеры всех токенов и компонентов. Описание правил: <code>DESIGN.md</code>. Страница использует тот же <code>style.css</code>, поэтому всегда показывает актуальный вид.</p>
+  </header>
+
+  <section>
+    <h2>Цвета (токены)</h2>
+    <div class="sg-grid" id="sg-colors"></div>
+  </section>
+
+  <section>
+    <h2>Типографика</h2>
+    <p style="font: 600 var(--text-2xl) var(--font-serif)">Заголовок · Noto Serif / Mincho</p>
+    <p style="font: 600 var(--text-xl) var(--font-serif)">Подзаголовок</p>
+    <p>Основной текст: ночь, лунный свет, девять хвостов.</p>
+    <p class="text-muted">Приглушённый текст для подсказок и подписей.</p>
+    <p class="text-warn">Предупреждение или ошибка.</p>
+  </section>
+
+  <section>
+    <h2>Отступы, скругления, тени</h2>
+    <div class="sg-row">
+      <div class="sg-bar" style="width: var(--space-1)"></div><div class="sg-bar" style="width: var(--space-2)"></div><div class="sg-bar" style="width: var(--space-3)"></div>
+      <div class="sg-bar" style="width: var(--space-4)"></div><div class="sg-bar" style="width: var(--space-5)"></div><div class="sg-bar" style="width: var(--space-6)"></div>
+      <div class="sg-bar" style="width: var(--space-7)"></div><div class="sg-bar" style="width: var(--space-8)"></div><span class="text-muted">space-1…8 (4 px, 8, 12, 16, 24, 32, 48, 64)</span>
+    </div>
+    <div class="sg-row" style="margin-top: var(--space-3)">
+      <div class="sg-box" style="border-radius: var(--radius-sm)">sm</div><div class="sg-box" style="border-radius: var(--radius-md)">md</div>
+      <div class="sg-box" style="border-radius: var(--radius-lg)">lg</div><div class="sg-box" style="border-radius: var(--radius-xl)">xl</div><div class="sg-box" style="border-radius: var(--radius-pill)">pill</div>
+      <div class="sg-box" style="box-shadow: var(--shadow-1)">shadow-1</div><div class="sg-box" style="box-shadow: var(--shadow-2)">shadow-2</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Кнопки</h2>
+    <div class="sg-row">
+      <button class="btn btn--primary" type="button">Главная</button>
+      <button class="btn btn--gold" type="button">Золотая</button>
+      <button class="btn btn--outline" type="button">Контурная</button>
+      <button class="btn btn--ghost" type="button">Тихая</button>
+      <button class="btn btn--gold" type="button" disabled>Недоступна</button>
+      <button class="btn btn--icon" type="button" aria-label="Закрыть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button class="btn btn--icon btn--sm" type="button" aria-label="Свернуть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Поверхности и свет</h2>
+    <p class="text-muted">Наведите курсор: лунный свет следует за ним на элементах с классом <code>lit</code>.</p>
+    <ul class="card-grid">
+      <li class="card lit"><span class="card__label">Карточка</span><b class="card__value">Значение</b></li>
+      <li class="card lit"><span class="card__label">Статус</span><b class="card__value">Всё в порядке</b></li>
+      <li class="card lit"><span class="card__label">Версия</span><b class="card__value">1a2b3c4d</b></li>
+    </ul>
+    <div class="panel lit" style="margin-top: var(--space-4)">
+      <h3 style="color: var(--gold)">Панель</h3>
+      <p class="text-muted">Стеклянная поверхность с лунной кромкой сверху: основа страниц и окон.</p>
+      <div class="bar" style="margin: var(--space-3) 0"><div style="width: 62%"></div></div>
+      <label class="form-row">Поле <select class="field"><option>Первый вариант</option><option>Второй</option></select></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Чат</h2>
+    <div class="log" style="max-width: 420px; padding: 0; overflow: visible">
+      <div class="msg reika">Здравствуй. Я Рэйка.<time>23:15</time></div>
+      <div class="msg user">Привет!<time>23:15</time></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Логотип «Чёрная луна»</h2>
+    <div class="sg-row" style="align-items: flex-end">
+      <img src="icon.svg" width="16" height="16" alt="16 px"><img src="icon.svg" width="32" height="32" alt="32 px"><img src="icon.svg" width="44" height="44" alt="44 px">
+      <img src="icon.svg" width="64" height="64" alt="64 px"><img src="icon.svg" width="128" height="128" alt="128 px"><img src="icon.svg" width="256" height="256" alt="256 px">
+    </div>
+  </section>
+</div>
+</main>
+</div>
+<script>
+  // Swatches are read from the live tokens, so this page can never drift from tokens.css.
+  const names = ['night-950', 'night-900', 'night-850', 'night-800', 'night-700', 'night-600', 'pearl', 'blush', 'silver', 'muted', 'faint', 'crimson', 'crimson-hi', 'crimson-lo', 'crimson-deep', 'gold', 'gold-hi', 'gold-lo', 'eye', 'sakura', 'ok', 'warn'];
+  const grid = document.getElementById('sg-colors');
+  const style = getComputedStyle(document.documentElement);
+  for (const name of names) {
+    const el = document.createElement('div');
+    el.className = 'sg-sw';
+    el.innerHTML = `<i style="background:var(--${name})"></i><span>--${name}<br>${style.getPropertyValue('--' + name).trim()}</span>`;
+    grid.appendChild(el);
+  }
+</script>
+<script src="sky.js"></script>
+</body>
+</html>
