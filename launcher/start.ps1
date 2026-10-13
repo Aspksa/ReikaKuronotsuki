@@ -6,13 +6,23 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $root
 
-$nodeVersion = 'v22.11.0'
+$nodeVersion = 'v22.16.0'
+
+function Test-NodeRuntime {
+    param([string]$Candidate)
+    if (-not $Candidate -or -not (Test-Path -LiteralPath $Candidate -PathType Leaf)) { return $false }
+    try {
+        $versionText = (& $Candidate -p 'process.versions.node' 2>$null)
+        $version = [version]($versionText | Select-Object -First 1)
+        return $version -ge [version]'22.13.0'
+    } catch { return $false }
+}
 
 function Find-Node {
     $local = Join-Path $root 'runtime\node\node.exe'
-    if (Test-Path -LiteralPath $local) { return $local }
+    if (Test-NodeRuntime -Candidate $local) { return $local }
     $cmd = Get-Command node -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
+    if ($cmd -and (Test-NodeRuntime -Candidate $cmd.Source)) { return $cmd.Source }
     return $null
 }
 
@@ -24,7 +34,7 @@ function Install-PortableNode {
     $tmp = Join-Path $root 'runtime\download'
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     $zip = Join-Path $tmp "$name.zip"
-    Write-Host "Node.js не найден. Скачиваю переносную версию ($name)..."
+    Write-Host "Node.js 22.13+ не найден (или установлен несовместимый). Скачиваю переносную версию ($name)..."
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
     Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
@@ -37,7 +47,7 @@ function Install-PortableNode {
 function Get-NodeOrInstall {
     $node = Find-Node
     if (-not $node) { Install-PortableNode; $node = Find-Node }
-    if (-not $node) { throw 'Не удалось найти или скачать Node.js.' }
+    if (-not $node) { throw 'Нужен Node.js 22.13 или новее для встроенной SQLite. Не удалось найти или скачать совместимую версию.' }
     return $node
 }
 

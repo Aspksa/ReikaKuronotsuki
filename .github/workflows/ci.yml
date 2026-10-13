@@ -13,11 +13,12 @@ jobs:
         with:
           node-version: 22
       - run: node tests/run.js
+  # Run Windows tests with the exact bundled Node runtime, not only latest 22.x.
   tests-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.16.0
       - run: node tests/run.js
