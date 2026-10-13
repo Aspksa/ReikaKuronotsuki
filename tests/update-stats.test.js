@@ -50,6 +50,9 @@ test('statistics live in a separate right column with accessible icon decoration
   assert.match(html, /id="up-stats-tabs"/);
   assert.match(html, /id="up-stats-highlights"/);
   assert.match(js, /function sparkline\(/);
+  assert.match(css, /stats-explorer/);
+  assert.match(css, /stats-content-head/);
+  assert.doesNotMatch(html, /100 фактов/);
   assert.match(js, /function activate\(/);
   assert.match(css, /prefers-reduced-motion/);
 });
