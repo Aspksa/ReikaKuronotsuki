@@ -42,7 +42,7 @@ function appendSample(root,sample){
   const prev=db.prepare('SELECT at FROM samples ORDER BY at DESC LIMIT 1').get();
   if(prev && sample.at-prev.at<INTERVAL)return false;
   db.prepare('INSERT OR IGNORE INTO samples(at,version,bytes,files,lines,rss,freeDiskBytes,installs,failures,downloads) VALUES(?,?,?,?,?,?,?,?,?,?)')
-    .run(sample.at,sample.version,...['bytes','files','lines','rss','freeDiskBytes','installs','failures','downloads'].map(k=>Number.isFinite(sample[k])?sample[k]:null));
+     .run(sample.at,typeof sample.version==='string'?sample.version:null,...['bytes','files','lines','rss','freeDiskBytes','installs','failures','downloads'].map(k=>Number.isFinite(sample[k])?sample[k]:null));
   db.prepare('DELETE FROM samples WHERE at < ?').run(sample.at-7*24*60*60*1000);
   // Also guard against corrupt clocks or unusually high sampling rates.
   db.prepare('DELETE FROM samples WHERE at NOT IN (SELECT at FROM samples ORDER BY at DESC LIMIT ?)').run(MAX_POINTS);
