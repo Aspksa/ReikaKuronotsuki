@@ -140,3 +140,10 @@ test('side panel features: quick search, about dialog, toasts, update card state
   for (const k of ['@keyframes spin', '@keyframes toast-in']) assert.ok(css.includes(k), `${k} is missing`);
   for (const s of ['available', 'busy', 'ready', 'error']) assert.ok(css.includes(`.update-card[data-state="${s}"]`), `update card state ${s} has no style`);
 });
+
+test('collapsed menu: every icon of the bottom block sits on the same vertical axis', () => {
+  const css = allCss();
+  assert.match(css, /\.collapsed \.update-card \{[^}]*display: flex;[^}]*justify-content: center/, 'the update entry is centred like its neighbours');
+  assert.match(css, /\.collapsed \.nav-item, \.collapsed \.side-about \{[^}]*width: var\(--control-h\)/);
+  assert.match(css, /\.collapsed \.side-foot \{[^}]*align-items: center/);
+});

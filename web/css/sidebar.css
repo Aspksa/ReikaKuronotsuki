@@ -45,7 +45,8 @@
 .collapsed .sidebar { align-items: center; padding-inline: var(--space-2); }
 .collapsed .brand { padding: var(--space-1) 0 var(--space-3); }
 .collapsed .brand-text, .collapsed .label, .collapsed .side-title { display: none; }
-.collapsed .nav, .collapsed .side-bottom, .collapsed .update-card { width: 100%; align-items: center; }
+.collapsed .nav, .collapsed .side-bottom { width: 100%; align-items: center; }
+.collapsed .update-card { width: 100%; display: flex; justify-content: center; }
 .collapsed .nav-item, .collapsed .side-about { justify-content: center; width: var(--control-h); padding: 0; }
 .collapsed .nav-item[aria-current="page"]::before { left: -8px; }
 .collapsed .badge-dot { position: absolute; top: 6px; right: 6px; margin: 0; }
