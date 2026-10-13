@@ -137,6 +137,6 @@ test('side panel features: quick search, about dialog, toasts, update card state
   assert.match(update, /api\/update\/from-archive/); assert.match(update, /X-File-Name/); assert.match(update, /ReikaToast/); assert.match(update, /reika\.notified\.v1/);
   assert.match(read('app.js'), /reika:mood/);
   const css = allCss();
-  for (const k of ['@keyframes spin', '@keyframes ping', '@keyframes toast-in']) assert.ok(css.includes(k), `${k} is missing`);
+  for (const k of ['@keyframes spin', '@keyframes toast-in']) assert.ok(css.includes(k), `${k} is missing`);
   for (const s of ['available', 'busy', 'ready', 'error']) assert.ok(css.includes(`.update-card[data-state="${s}"]`), `update card state ${s} has no style`);
 });

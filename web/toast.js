@@ -28,12 +28,12 @@
     row.className = 'toast__actions';
     for (const a of opts.actions || []) {
       const b = document.createElement('button');
-      b.type = 'button'; b.className = 'btn btn--gold btn--xs'; b.textContent = a.label;
+      b.type = 'button'; b.className = 'btn btn--outline'; b.textContent = a.label;
       b.addEventListener('click', () => { close(el); try { a.run && a.run(); } catch { /* an action must not break the page */ } });
       row.appendChild(b);
     }
     const x = document.createElement('button');
-    x.type = 'button'; x.className = 'btn btn--icon btn--xs'; x.setAttribute('aria-label', 'Закрыть уведомление');
+    x.type = 'button'; x.className = 'btn btn--icon'; x.setAttribute('aria-label', 'Закрыть уведомление');
     x.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     x.addEventListener('click', () => close(el));
     row.appendChild(x);

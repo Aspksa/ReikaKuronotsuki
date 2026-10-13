@@ -1,38 +1,36 @@
-/* Things that float above the page: the "what's new" card, toasts, and the "about" dialog. */
+/* Things that float above the page: the "what's new" card, toasts and the "about" dialog. They share one look. */
+.popover, .toast, .about, .stats-detail { border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-2); box-shadow: var(--shadow); color: var(--text); }
 
 /* ---- hover card next to the update entry ---- */
-.popover { position: absolute; left: calc(100% + 14px); bottom: 0; width: 270px; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  background: var(--night-700); box-shadow: var(--shadow-2); font-size: var(--text-sm); opacity: 0; visibility: hidden; transform: translateX(-6px); pointer-events: none;
-  transition: opacity var(--dur), transform var(--dur), visibility var(--dur); }
-.popover b { display: block; color: var(--gold); margin-bottom: var(--space-1); }
+.popover { position: absolute; left: calc(100% + var(--space-3)); bottom: 0; width: 270px; padding: var(--space-3) var(--space-4); font-size: var(--text-sm); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--dur), visibility var(--dur); }
+.popover b { display: block; margin-bottom: var(--space-1); }
 .popover ul { margin: 0; padding-left: var(--space-4); }
 .popover li { margin: 2px 0; overflow-wrap: anywhere; }
 .popover p { margin: var(--space-1) 0 0; color: var(--text-muted); }
-.update-card:is(:hover, :focus-within) .popover { opacity: 1; visibility: visible; transform: none; }
+.update-card:is(:hover, :focus-within) .popover { opacity: 1; visibility: visible; }
 
 /* ---- toasts ---- */
 .toasts { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--space-2); width: min(360px, calc(100vw - 2 * var(--space-4))); pointer-events: none; }
-.toast { position: relative; isolation: isolate; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-left: 3px solid var(--gold); border-radius: var(--radius-lg);
-  background: var(--night-700); box-shadow: var(--shadow-2); pointer-events: auto; animation: toast-in var(--dur) var(--ease); }
+.toast { position: relative; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-left: 3px solid var(--crimson-hi); pointer-events: auto; animation: toast-in var(--dur) ease-out; }
 .toast--ok { border-left-color: var(--ok); }
 .toast--warn { border-left-color: var(--warn); }
-.toast.leaving { opacity: 0; transform: translateX(12px); transition: opacity var(--dur-fast), transform var(--dur-fast); }
+.toast.leaving { opacity: 0; transition: opacity var(--dur); }
 .toast__body { min-width: 0; padding-right: var(--space-5); }
-.toast .btn--icon { position: absolute; top: var(--space-2); right: var(--space-2); }
-.toast__body b { display: block; }
+.toast__body b { display: block; font-size: var(--text-sm); }
 .toast__body p { margin: 2px 0 0; font-size: var(--text-sm); color: var(--text-muted); overflow-wrap: anywhere; }
-.toast__actions { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
-@keyframes toast-in { from { opacity: 0; transform: translateX(16px); } }
+.toast .btn--icon { position: absolute; top: var(--space-1); right: var(--space-1); }
+.toast__actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+@keyframes toast-in { from { opacity: 0; } }
 
-/* ---- dialogs: "about" ---- */
+/* ---- dialogs ---- */
 dialog { color: var(--text); }
-dialog::backdrop { background: rgb(var(--black-rgb) / .55); backdrop-filter: blur(3px); }
-.about { width: min(420px, calc(100vw - 2 * var(--space-4))); padding: var(--space-6) var(--space-5) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--night-800); box-shadow: var(--shadow-2); text-align: center; }
-.about img { border-radius: 50%; filter: drop-shadow(0 0 16px rgb(var(--gold-rgb) / .4)); }
+dialog::backdrop { background: rgb(var(--black-rgb) / .6); }
+.about { width: min(400px, calc(100vw - 2 * var(--space-4))); padding: var(--space-6) var(--space-5) var(--space-5); text-align: center; }
+.about img { border-radius: 50%; }
 .about h2 { margin: var(--space-3) 0 var(--space-1); }
 .about-list { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-4); margin: var(--space-4) 0; text-align: left; font-size: var(--text-sm); }
-.about-list dt { color: var(--gold); }
+.about-list dt { color: var(--text-muted); }
 .about-list dd { margin: 0; overflow-wrap: anywhere; }
-.about a { color: var(--blush); }
+.about a { color: var(--text); }
 .file-btn { position: relative; cursor: pointer; }
 .file-btn:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }

@@ -43,7 +43,7 @@
           <button id="about-open" class="side-about" type="button" aria-haspopup="dialog" data-tip="О проекте">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/></svg><span class="label">О проекте</span>
           </button>
-          <button id="side-toggle" class="btn btn--icon btn--sm collapse" type="button" aria-label="Свернуть меню" aria-pressed="false" title="Свернуть меню">
+          <button id="side-toggle" class="btn btn--icon collapse" type="button" aria-label="Свернуть меню" aria-pressed="false" title="Свернуть меню">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
           </button>
         </div>
@@ -83,9 +83,9 @@
           </div>
           <div class="up-actions">
             <button id="up-install" class="btn btn--primary" type="button" hidden>Установить и перезапустить</button>
-            <button id="up-download" class="btn btn--gold" type="button">Скачать и проверить</button>
+            <button id="up-download" class="btn btn--primary" type="button">Скачать и проверить</button>
             <button id="up-cancel" class="btn btn--outline" type="button" hidden>Отмена</button>
-            <button id="up-check" class="btn btn--ghost" type="button">Проверить</button>
+            <button id="up-check" class="btn btn--outline" type="button">Проверить</button>
           </div>
         </div>
 
@@ -103,7 +103,7 @@
         <div id="up-removals" class="callout callout--warn" hidden>
           <p><b>Новая версия удаляет файлы.</b> Они будут удалены только после вашего подтверждения:</p>
           <ul id="up-removals-list" class="removals"></ul>
-          <button id="up-confirm" class="btn btn--gold" type="button">Подтвердить удаление</button>
+          <button id="up-confirm" class="btn btn--outline" type="button">Подтвердить удаление</button>
         </div>
       </section>
 
@@ -155,7 +155,7 @@
         </div>
       </section>
       <dialog id="up-stats-detail" class="stats-detail" aria-labelledby="up-stats-detail-title">
-        <div class="stats-detail-head"><div><p class="text-muted">Подробности показателя</p><h3 id="up-stats-detail-title"></h3></div><button type="button" id="up-stats-detail-close" aria-label="Закрыть" class="btn btn--ghost">✕</button></div>
+        <div class="stats-detail-head"><div><p class="text-muted">Подробности показателя</p><h3 id="up-stats-detail-title"></h3></div><button type="button" id="up-stats-detail-close" aria-label="Закрыть" class="btn btn--icon">✕</button></div>
         <strong id="up-stats-detail-value" class="stats-detail-value">—</strong>
         <p id="up-stats-detail-desc" class="text-muted"></p>
         <div id="up-stats-detail-chart" class="stats-detail-chart"></div>
@@ -185,7 +185,7 @@
   <form id="form" class="composer" autocomplete="off">
     <label for="input" class="sr">Сообщение</label>
     <textarea id="input" class="field" rows="1" maxlength="2000" placeholder="Напиши Рэйке…"></textarea>
-    <button id="send" class="btn btn--gold" type="submit">Отправить</button>
+    <button id="send" class="btn btn--primary" type="submit">Отправить</button>
   </form>
 </section>
 
@@ -202,7 +202,7 @@
     <dt>Репозиторий</dt><dd><a href="https://github.com/Aspksa/ReikaKuronotsuki" target="_blank" rel="noopener noreferrer">github.com/Aspksa/ReikaKuronotsuki</a></dd>
     <dt>Образцы</dt><dd><a href="styleguide.html" target="_blank" rel="noopener">Стиль проекта</a></dd>
   </dl>
-  <form method="dialog"><button class="btn btn--gold" type="submit">Закрыть</button></form>
+  <form method="dialog"><button class="btn btn--outline" type="submit">Закрыть</button></form>
 </dialog>
 
 <div id="toasts" class="toasts" role="status" aria-live="polite"></div>

@@ -47,7 +47,7 @@ test('statistics are their own section below the update controls, with accessibl
   assert.match(html, /class="up-cards"/);
   assert.match(html, /class="stats-panel"/);
   assert.ok(html.indexOf('class="up-hero') < html.indexOf('class="stats-panel"'), 'update controls come first, statistics below');
-  assert.match(css, /@media \(max-width:\s*1100px\)/);
+  assert.match(css, /@media \(max-width:\s*780px\)/);
   assert.match(js, /stats-icon/);
   assert.match(js, /aria-hidden/);
   assert.match(js, /V\.tone\(g,i,key\)/);
@@ -96,7 +96,7 @@ test('dashboard CSS uses one canonical declaration per base selector and breakpo
     const hits = css.split('\n').filter(line => line.startsWith(selector + ' {'));
     assert.equal(hits.length, 1, selector + ' must have one base declaration');
   }
-  assert.equal((css.match(/@media \(max-width: 1100px\)/g) || []).length, 1);
+  assert.equal((css.match(/@media \(max-width: 780px\)/g) || []).length, 1);
   assert.doesNotMatch(css, /\.stats-heading/);
 });
 
