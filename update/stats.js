@@ -57,8 +57,8 @@ async function inspect(root) {
 }
 async function collect(updater) {
   const root = updater.root, dir = path.join(root, '.updates');
-  const [events, history, scan] = await Promise.all([
-    readLines(path.join(dir, 'events.jsonl')), readLines(path.join(dir, 'history.jsonl')), inspect(root)
+  const [events, history, scan, lifetime] = await Promise.all([
+    readLines(path.join(dir, 'events.jsonl')), readLines(path.join(dir, 'history.jsonl')), inspect(root), readLines(path.join(dir, 'telemetry.jsonl'))
   ]);
   const status = updater.status();
   const types = Object.create(null);
@@ -72,7 +72,14 @@ async function collect(updater) {
     const names = await fs.readdir(path.join(dir, 'backups'), { withFileTypes: true });
     backups = names.filter(x => x.isDirectory()).length;
   } catch { backups = 0; }
-  const downloadEvents = events.filter(e => e.type === 'file_download_done');
+  const downloadEvents = (lifetime.length ? lifetime : events).filter(e => e.type === 'file_download_done');
+  const baselineFile = path.join(dir, 'stats-baseline.json');
+  let baseline = null;
+  try { baseline = JSON.parse(await fs.readFile(baselineFile, 'utf8')); } catch { /* first observation */ }
+  if (!baseline || !Number.isFinite(baseline.bytes) || !Number.isFinite(baseline.files)) {
+    baseline = { bytes: scan.bytes, files: scan.files, lines: scan.lines, at: Date.now() };
+    try { await fs.mkdir(dir, {recursive:true}); await fs.writeFile(baselineFile, JSON.stringify(baseline), {flag:'wx'}); } catch { /* another process may have written it */ }
+  }
   const current = status;
   let git = { commitCount: null, firstCommit: null, lastCommit: null, authors: null };
   try {
@@ -91,7 +98,7 @@ async function collect(updater) {
     memoryRss: process.memoryUsage().rss, memoryHeap: process.memoryUsage().heapUsed,
     cpuUserMs: process.cpuUsage().user/1000, cpuSystemMs: process.cpuUsage().system/1000,
     cores: os.cpus().length, freeDiskBytes: free,
-    scan, git, status: current,
+    scan, git, status: current, baseline, growth: { bytes: scan.bytes - baseline.bytes, files: scan.files - baseline.files, lines: scan.lines - baseline.lines },
     events: { count: events.length, types, first: optional(events, a => dateMs(a[0].timestamp)),
       last: optional(events, a => dateMs(a[a.length-1].timestamp)), downloadedFiles: downloadEvents.length,
       downloadedBytes: sum(downloadEvents,'bytes_done'),
