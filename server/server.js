@@ -6,6 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const core = require('../core/reika-core');
 const settings = require('../core/settings');
+const secrets = require('../core/secrets');
+const ai = require('../core/ai');
 const { collect: collectStats } = require('../update/stats');
 
 const MIME = {
@@ -68,9 +70,25 @@ function readBuffer(req, max) {
   });
 }
 
-function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..'), port = null, updater = null, restart = () => false }) {
+function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..'), port = null, updater = null, restart = () => false, aiClient = ai.createClient() }) {
   const store = core.createStore(dataDir);
   const root = path.resolve(webRoot);
+
+  // Everything the settings page may see. The key itself is never sent back: only whether it is stored and its last four characters.
+  function settingsView() {
+    const stored = settings.read(projectRoot);
+    const provider = ai.isProvider(stored.aiProvider) ? stored.aiProvider : ai.OFFLINE;
+    return {
+      ...stored, aiProvider: provider, activePort: typeof port === 'function' ? port() : port, dataDir, messages: store.all().length,
+      limits: { minPort: settings.MIN_PORT, maxPort: settings.MAX_PORT },
+      ai: {
+        provider,
+        model: stored.aiModel || '',
+        key: secrets.hint(dataDir, 'cloudru'),
+        providers: Object.values(ai.PROVIDERS).map((p) => ({ id: p.id, title: p.title, defaultModel: p.defaultModel, keyUrl: p.keyUrl })),
+      },
+    };
+  }
 
   function serveStatic(req, res, pathname) {
     let rel;
@@ -137,14 +155,29 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
       if (url.pathname === '/api/health' && req.method === 'GET') return sendJson(res, 200, { ok: true, name: 'Reika Kuronotsuki', version: updater ? updater.localVersion() : null });
       if (url.pathname.startsWith('/api/update/')) return handleUpdate(req, res, url);
       if (url.pathname === '/api/settings') {
-        if (req.method === 'GET') return sendJson(res, 200, { ...settings.read(projectRoot), activePort: port, dataDir, messages: store.all().length, limits: { minPort: settings.MIN_PORT, maxPort: settings.MAX_PORT } });
+        if (req.method === 'GET') return sendJson(res, 200, settingsView());
         if (req.method === 'POST') {
           let patch;
           try { patch = JSON.parse((await readBody(req)) || '{}'); } catch { return sendJson(res, 400, { error: 'Некорректный JSON' }); }
-          try { return sendJson(res, 200, { ...settings.write(projectRoot, patch), activePort: port, dataDir, messages: store.all().length }); }
-          catch (error) { return sendJson(res, error.status || 400, { error: error.message }); }
+          const touchesKey = patch && typeof patch === 'object' && patch.apiKey !== undefined;
+          try {
+            const stored = settings.write(projectRoot, patch);
+            // The key goes to its own file in the data folder, never into config.json.
+            if (touchesKey) secrets.set(dataDir, 'cloudru', patch.apiKey);
+            if (!Object.keys(settings.validate(patch)).length && !touchesKey) return sendJson(res, 400, { error: 'Нечего сохранять' });
+            void stored;
+            return sendJson(res, 200, settingsView());
+          } catch (error) { return sendJson(res, error.status || 400, { error: error.message }); }
         }
         return sendJson(res, 405, { error: 'method not allowed' });
+      }
+      // "Проверить связь": does the key work, and which models does the provider offer?
+      if (url.pathname === '/api/ai/check') {
+        if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' });
+        const provider = settings.read(projectRoot).aiProvider;
+        if (!ai.providerInfo(provider)) return sendJson(res, 400, { error: 'Сейчас выбрана сама Рэйка — проверять нечего' });
+        try { return sendJson(res, 200, await aiClient.check({ provider, key: secrets.get(dataDir, 'cloudru') })); }
+        catch (error) { return sendJson(res, error.status === 401 ? 401 : 502, { error: error.message }); }
       }
       // A copy of everything of yours: the chat history and the settings, in one file you can keep anywhere.
       if (url.pathname === '/api/backup') {
@@ -177,10 +210,24 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
         }
         const text = core.normalizeText(payload && payload.text);
         if (!text) return sendJson(res, 400, { error: 'Пустое сообщение' });
-        const answer = core.reply(text);
+        const stored = settings.read(projectRoot);
+        const provider = stored.aiProvider;
+        const key = ai.providerInfo(provider) ? secrets.get(dataDir, 'cloudru') : null;
+        let answer = null, warning = null, source = 'reika';
+        if (ai.providerInfo(provider) && key) {
+          try {
+            const result = await aiClient.reply({ provider, key, model: stored.aiModel, text, history: store.all() });
+            answer = { text: result.text, emotion: core.detectEmotion(result.text) };
+            source = provider;
+          } catch (error) {
+            // The answer must not be lost because the provider is down: Reika answers herself and says what happened.
+            warning = error.message;
+          }
+        }
+        if (!answer) answer = core.reply(text);
         const user = store.add('user', text, core.detectEmotion(text));
         const reika = store.add('reika', answer.text, answer.emotion);
-        return sendJson(res, 200, { user, reika });
+        return sendJson(res, 200, { user, reika, source, ...(warning ? { warning } : {}) });
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
       serveStatic(req, res, url.pathname);

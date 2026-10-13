@@ -33,7 +33,7 @@
     <div class="side-bottom">
       <div class="side-foot">
         <a href="#/settings" id="nav-settings" class="nav-item" data-route="settings" data-tip="Настройки" hidden>
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V20a2 2 0 11-4 0v-.1A1.6 1.6 0 008 18.4a1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H2a2 2 0 110-4h.1A1.6 1.6 0 003.6 8a1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H8a1.6 1.6 0 001-1.5V2a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V8a1.6 1.6 0 001.5 1H22a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h8M16 8h4M4 16h4M12 16h8"/><circle cx="14" cy="8" r="2.2"/><circle cx="10" cy="16" r="2.2"/></svg>
           <span class="label">Настройки</span>
         </a>
         <div class="update-card" id="update-card" data-state="idle" hidden>
@@ -88,6 +88,24 @@
           <label class="form-row set-switch"><span>Тихий звук, когда Рэйка отвечает</span><input id="set-sound" class="set-check" type="checkbox"></label>
           <p class="text-muted">В памяти сейчас <b id="set-count">—</b> сообщений. Хранится не больше 500 последних.</p>
           <div class="set-actions"><button id="set-clear" class="btn btn--outline" type="button">Очистить историю чата</button></div>
+        </section>
+
+        <section class="panel set-card set-card--wide" aria-labelledby="set-ai-title">
+          <h3 id="set-ai-title">Кто отвечает в чате</h3>
+          <label class="form-row">Собеседник <select id="set-ai-provider" class="field"><option value="reika">Рэйка сама — без интернета и ключей</option></select></label>
+          <div id="set-ai-cloud" hidden>
+            <label class="form-row">Ключ <span class="set-key"><input id="set-ai-key" class="field" type="password" autocomplete="off" spellcheck="false" placeholder="вставьте ключ"><button id="set-ai-key-clear" class="btn btn--ghost" type="button" hidden>Убрать</button></span></label>
+            <p id="set-ai-key-state" class="text-muted"></p>
+            <label class="form-row">Модель <input id="set-ai-model" class="field" type="text" list="set-ai-models" autocomplete="off" spellcheck="false" placeholder="openai/gpt-oss-120b"></label>
+            <datalist id="set-ai-models"></datalist>
+            <div class="set-actions">
+              <button id="set-ai-check" class="btn btn--outline" type="button">Проверить связь</button>
+              <span id="set-ai-result" class="set-hint" hidden></span>
+            </div>
+            <p class="callout">Ваши сообщения и ответы Рэйки уходят на серверы Cloud.ru. Ключ хранится только на этом компьютере, в папке данных, и не попадает ни в копию данных, ни в git. Если ключа нет или связи нет, Рэйка отвечает сама.</p>
+            <p class="text-muted">Ключ создаётся в консоли Cloud.ru: сервисный аккаунт → API-ключ. <a id="set-ai-help" href="https://cloud.ru/docs/foundation-models/ug/topics/quickstart" target="_blank" rel="noopener noreferrer">Как его получить</a>.</p>
+          </div>
+          <p id="set-ai-error" class="callout callout--warn" hidden></p>
         </section>
 
         <section class="panel set-card set-card--wide" aria-labelledby="set-data-title">

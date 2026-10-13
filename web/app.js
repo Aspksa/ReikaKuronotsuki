@@ -100,11 +100,19 @@
     send.disabled = true;
     try {
       await ready;
-      const { user, reika } = await backend.chat(text);
+      const { user, reika, warning } = await backend.chat(text);
       input.value = '';
       autosize();
       render(user);
       render(reika);
+      // The chosen AI could not answer: Reika answered herself, and this says why.
+      if (warning) {
+        const note = document.createElement('p');
+        note.className = 'msg-note';
+        note.textContent = `Отвечала сама Рэйка: ${warning}`;
+        log.appendChild(note);
+        log.scrollTop = log.scrollHeight;
+      }
       setMood(reika.emotion);
       if (window.ReikaSound) window.ReikaSound.play();
     } catch (error) {

@@ -36,8 +36,14 @@
 
   if (location.protocol === 'file:') return; // no server: nothing below can work
   const show = (el, on) => { el.hidden = !on; };
-  const fail = (e) => { $('set-error').hidden = false; $('set-error').textContent = e.message || String(e); };
-  const clearError = () => { $('set-error').hidden = true; $('set-error').textContent = ''; };
+  // Problems with the provider belong next to its settings; everything else to the data card.
+  const fail = (e) => {
+    const text = e.message || String(e);
+    const box = /cloud|ключ|модел|провайдер|собеседник/i.test(text) ? $('set-ai-error') : $('set-error');
+    box.hidden = false;
+    box.textContent = text;
+  };
+  const clearError = () => { for (const id of ['set-error', 'set-ai-error']) { $(id).hidden = true; $(id).textContent = ''; } };
 
   async function call(path, options) {
     const response = await fetch(path, options);
@@ -46,8 +52,36 @@
     return data;
   }
 
+  function renderAi(s) {
+    const info = s.ai || { provider: 'reika', providers: [], key: { has: false, tail: '' } };
+    const select = $('set-ai-provider');
+    if (select.options.length <= 1) {
+      for (const p of info.providers) {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = `${p.title} — по вашему ключу`;
+        option.dataset.model = p.defaultModel || '';
+        if (p.keyUrl) $('set-ai-help').href = p.keyUrl;
+        select.appendChild(option);
+      }
+    }
+    select.value = info.provider;
+    const cloud = info.provider !== 'reika';
+    show($('set-ai-cloud'), cloud);
+    const chosen = select.selectedOptions[0];
+    $('set-ai-model').placeholder = (chosen && chosen.dataset.model) || 'openai/gpt-oss-120b';
+    $('set-ai-model').value = info.model || '';
+    $('set-ai-key').value = '';
+    $('set-ai-key').placeholder = info.key.has ? `сохранён ···${info.key.tail}` : 'вставьте ключ';
+    show($('set-ai-key-clear'), info.key.has);
+    $('set-ai-key-state').textContent = info.key.has
+      ? 'Ключ сохранён на этом компьютере. Чтобы заменить его, вставьте новый и нажмите «Сохранить».'
+      : 'Ключа пока нет: вставьте его и нажмите «Сохранить». Без ключа отвечает сама Рэйка.';
+  }
+
   function render(s) {
     current = s;
+    renderAi(s);
     $('set-port').value = s.port;
     $('set-port').min = s.limits ? s.limits.minPort : 1024;
     $('set-port').max = s.limits ? s.limits.maxPort : 65535;
@@ -63,13 +97,59 @@
     try { render(await call('api/settings')); } catch { /* no server with this API: the page is not reachable anyway */ }
   }
 
+  const save = (patch) => call('api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+
   $('set-save').addEventListener('click', async () => {
     clearError();
     show($('set-saved'), false);
+    show($('set-ai-result'), false);
+    const patch = { port: Number($('set-port').value), aiProvider: $('set-ai-provider').value, aiModel: $('set-ai-model').value };
+    const key = $('set-ai-key').value.trim();
+    if (key) patch.apiKey = key; // an empty field means "keep the stored key", not "remove it"
     try {
-      render(await call('api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ port: Number($('set-port').value) }) }));
+      render(await save(patch));
       show($('set-saved'), true);
     } catch (e) { fail(e); }
+  });
+
+  // ---- the AI provider ----
+  $('set-ai-provider').addEventListener('change', () => {
+    const cloud = $('set-ai-provider').value !== 'reika';
+    show($('set-ai-cloud'), cloud);
+    show($('set-ai-result'), false);
+    const chosen = $('set-ai-provider').selectedOptions[0];
+    if (chosen) $('set-ai-model').placeholder = chosen.dataset.model || 'openai/gpt-oss-120b';
+  });
+
+  $('set-ai-key-clear').addEventListener('click', async () => {
+    if (!confirm('Убрать сохранённый ключ? Рэйка снова будет отвечать сама.')) return;
+    clearError();
+    try { render(await save({ apiKey: '' })); } catch (e) { fail(e); }
+  });
+
+  $('set-ai-check').addEventListener('click', async () => {
+    clearError();
+    const button = $('set-ai-check');
+    const result = $('set-ai-result');
+    button.disabled = true;
+    result.hidden = false;
+    result.textContent = 'Проверяю…';
+    try {
+      const key = $('set-ai-key').value.trim();
+      // Check what will actually be used: save the provider (and a freshly typed key) first.
+      await save({ aiProvider: $('set-ai-provider').value, aiModel: $('set-ai-model').value, ...(key ? { apiKey: key } : {}) });
+      const answer = await call('api/ai/check', { method: 'POST' });
+      const list = $('set-ai-models');
+      list.textContent = '';
+      for (const id of answer.models) { const option = document.createElement('option'); option.value = id; list.appendChild(option); }
+      result.textContent = answer.models.length ? `Связь есть. Доступно моделей: ${answer.models.length} — список подсказок в поле «Модель».` : 'Связь есть, но список моделей пуст.';
+      render(await call('api/settings'));
+      show($('set-ai-result'), true);
+    } catch (e) {
+      result.hidden = true;
+      fail(e);
+      try { render(await call('api/settings')); } catch { /* the saved key is still shown on the next visit */ }
+    } finally { button.disabled = false; }
   });
 
   $('set-sound').checked = sound.on();
