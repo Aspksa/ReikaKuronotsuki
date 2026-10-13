@@ -194,3 +194,13 @@ test('after an install the UI can ask for a rollback of exactly that install', a
   assert.equal(read(root, 'a.txt'), 'old');
   assert.equal((await u.history()).canRollback, null, 'an install is undone only once');
 });
+
+test('MemOS upstream benchmark file larger than 10 MB can be staged and hash-verified', async () => {
+  const root = tmpProject();
+  const benchmark = 'x'.repeat(13_899_729);
+  const files = { 'vendor/memos/scripts/dataset/beam/data/beam_100k.json': benchmark };
+  const u = make(root, { files, ci: passing });
+  await u.start();
+  assert.equal(u.status().phase, 'ready', JSON.stringify(u.status()));
+  assert.equal(fs.statSync(path.join(root, '.updates/staging/vendor/memos/scripts/dataset/beam/data/beam_100k.json')).size, benchmark.length);
+});

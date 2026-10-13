@@ -17,7 +17,7 @@ const REQUIRED_CI_JOB = 'tests'; // the CI job whose success is mandatory (see .
 const MAX_ATTEMPTS = 3;
 const MAX_DOWNLOAD_BYTES = 50_000_000;
 const MAX_FILES = 2000;
-const MAX_FILE_BYTES = 10_000_000;
+const MAX_FILE_BYTES = 20_000_000; // MemOS includes a tracked 13.9 MB benchmark dataset; stay bounded per file.
 const AUTO_CHECK_MIN_MS = 30 * 60_000;
 const TEST_TIMEOUT_MS = 300_000;
 const MAX_API_BYTES = 20_000_000;
@@ -659,6 +659,6 @@ class ProjectUpdater {
   }
 }
 
-const isProtected = (p) => typeof p === 'string' && p.split('/').some((s) => BLOCKED.has(s));
+const isProtected = (p) => typeof p === 'string' && BLOCKED.has(p.split('/')[0]); // protect only project-root user directories, not vendored library datasets
 
 module.exports = { MAX_ARCHIVE_BYTES, ProjectUpdater, rollbackTarget, localVersion, failureTail, REQUIRED_CI_JOB };
