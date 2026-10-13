@@ -197,7 +197,10 @@ class ProjectUpdater {
 
   async emit(type, relative_path = '', status = '', extra = {}) {
     await fs.mkdir(this.folder(), { recursive: true });
-    await fs.appendFile(this.file('events.jsonl'), JSON.stringify({ event_id: crypto.randomUUID(), type, timestamp: new Date().toISOString(), operation_id: this.operationId, relative_path, status, ...extra }) + '\n');
+    const line = JSON.stringify({ event_id: crypto.randomUUID(), type, timestamp: new Date().toISOString(), operation_id: this.operationId, relative_path, status, ...extra }) + '\n';
+    await fs.appendFile(this.file('events.jsonl'), line);
+    if (['file_download_done','update_cancelled','update_failed'].includes(type))
+      await fs.appendFile(this.file('telemetry.jsonl'), line).catch(() => {});
   }
   async events() {
     try {
