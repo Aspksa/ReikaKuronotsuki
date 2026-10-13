@@ -34,7 +34,7 @@ test('raw colours live in tokens.css only (no #hex elsewhere; rgb() literals onl
 test('every var(--token) used is defined in CSS or set by a script', () => {
   const defined = new Set();
   for (const css of Object.values(files)) for (const m of css.matchAll(/(--[\w-]+)\s*:/g)) defined.add(m[1]);
-  const setByScripts = new Set(['--lx', '--ly', '--lit', '--size', '--sway']);
+  const setByScripts = new Set(['--size', '--sway']);
   for (const [file, css] of Object.entries(files)) {
     for (const m of css.matchAll(/var\((--[\w-]+)/g)) assert.ok(defined.has(m[1]) || setByScripts.has(m[1]), `${file} uses ${m[1]} which nothing defines`);
   }
@@ -71,7 +71,7 @@ test('text stays readable: contrast of the main pairs is at least 4.5:1', () => 
   for (const [fg, bg] of pairs) assert.ok(contrast(fg, bg) >= 4.5, `${fg} on ${bg}: ${contrast(fg, bg).toFixed(2)}:1`);
 });
 
-test('the night scene (moon, sky, stars, clouds, sea) is gone; only petals, the vignette and the pointer light remain', () => {
+test('the night scene (moon, sky, stars, clouds, sea) is gone; only petals and the vignette remain; no pointer light', () => {
   const html = read('index.html');
   const sky = html.slice(html.indexOf('<div class="sky"'), html.indexOf('</div>', html.indexOf('class="sky-vignette"')) + 6);
   assert.match(sky, /id="petals"/);
@@ -82,10 +82,10 @@ test('the night scene (moon, sky, stars, clouds, sea) is gone; only petals, the 
   const js = read('sky.js');
   assert.ok(!/moon|ripple|sparkle|shooting|'stars'|water/.test(js), 'scene code left in sky.js');
   assert.match(js, /className = 'petal'/);
-  assert.match(js, /--lx/);
+  assert.ok(!/--lx|pointermove/.test(js), 'no light that follows the pointer');
   assert.match(files['css/sky.css'], /\.sky \{[^}]*background: var\(--bg\)/, 'a plain dark backdrop');
-  assert.ok((html.match(/\blit\b/g) || []).length >= 6, 'cards, panel, chat and menu items use the "lit" light');
-  assert.match(files['css/components.css'], /\.lit::before/);
+  assert.ok(!/lit/.test(html), 'no "lit" surfaces');
+  assert.ok(!/\.lit\b/.test(Object.values(files).join('')), 'no .lit rules left');
   assert.ok(!/--moon-/.test(Object.values(files).join('')), 'no moon tokens are left');
 });
 
@@ -97,11 +97,11 @@ test('the background markup is identical on the main page and in the style guide
 test('the style guide uses the same stylesheet and shows every component', () => {
   const guide = read('styleguide.html');
   assert.match(guide, /<link rel="stylesheet" href="style\.css">/);
-  for (const cls of ['btn btn--primary', 'btn btn--gold', 'btn btn--outline', 'btn btn--ghost', 'btn btn--icon', 'card lit', 'panel lit', 'field', 'form-row', 'msg reika', 'msg user', 'bar']) assert.ok(guide.includes(cls), `style guide lacks ${cls}`);
+  for (const cls of ['btn btn--primary', 'btn btn--gold', 'btn btn--outline', 'btn btn--ghost', 'btn btn--icon', 'card', 'panel', 'field', 'form-row', 'msg reika', 'msg user', 'bar']) assert.ok(guide.includes(cls), `style guide lacks ${cls}`);
   // every component class defined in components.css has an example
   for (const m of files['css/components.css'].matchAll(/^\.((?:btn--)?[a-z]+(?:--[a-z]+)?)\b/gm)) {
     const cls = m[1];
-    if (['lit', 'bar'].includes(cls)) continue;
+    if (['bar'].includes(cls)) continue;
     assert.ok(guide.includes(cls), `components.css defines .${cls} but styleguide.html never shows it`);
   }
   assert.ok(fs.existsSync(path.join(__dirname, '..', 'DESIGN.md')));

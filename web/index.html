@@ -25,14 +25,14 @@
 
     <p class="side-title label">Навигация</p>
     <nav class="nav">
-      <a href="#/home" id="nav-home" class="nav-item lit" data-route="home" data-tip="Главная">
+      <a href="#/home" id="nav-home" class="nav-item" data-route="home" data-tip="Главная">
         <span class="ico-chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg></span><span class="label">Главная</span>
       </a>
     </nav>
 
     <div class="side-bottom">
       <div class="side-foot">
-        <div class="update-card lit" id="update-card" data-state="idle" hidden>
+        <div class="update-card" id="update-card" data-state="idle" hidden>
           <a href="#/update" id="nav-update" class="nav-item update-entry" data-route="update" data-tip="Обновления">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path id="update-ico-path" d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5"/></svg>
             <span class="label">Обновления</span><i id="update-dot" class="badge-dot" hidden aria-label="Доступна новая версия"></i>
@@ -61,16 +61,16 @@
         </div>
         <p class="hint">Круглый логотип в углу — это чат. Его можно перетащить в любое место, он будет на всех страницах.</p>
         <ul class="card-grid">
-          <li class="card lit"><span class="card__label">Режим</span><b class="card__value" id="card-mode">—</b></li>
-          <li class="card lit"><span class="card__label">Версия</span><b class="card__value" id="card-version">—</b></li>
-          <li class="card lit"><span class="card__label">Обновления</span><b class="card__value" id="card-update">—</b></li>
+          <li class="card"><span class="card__label">Режим</span><b class="card__value" id="card-mode">—</b></li>
+          <li class="card"><span class="card__label">Версия</span><b class="card__value" id="card-version">—</b></li>
+          <li class="card"><span class="card__label">Обновления</span><b class="card__value" id="card-update">—</b></li>
         </ul>
       </div>
     </section>
 
     <section class="page" id="page-update" data-page="update" aria-labelledby="update-title" hidden>
       <header class="page-head"><h2 id="update-title">Обновление проекта</h2></header>
-      <div class="panel update lit">
+      <div class="panel update">
         <p class="text-muted">Источник: github.com/Aspksa/ReikaKuronotsuki · установлено: <b id="up-local">…</b> · доступно: <b id="up-latest">—</b></p>
         <p id="up-blocked" class="text-warn" hidden></p>
         <ol class="route" aria-label="Маршрут обновления">
@@ -102,7 +102,7 @@
 </div>
 
 <!-- Chat: opens from the floating logo (orb), which can be dragged anywhere and stays on every page. -->
-<section id="chat-panel" class="chat-panel lit" role="dialog" aria-label="Чат с Рэйкой" hidden>
+<section id="chat-panel" class="chat-panel" role="dialog" aria-label="Чат с Рэйкой" hidden>
   <header class="chat-head">
     <div class="face" aria-hidden="true"><span id="avatar" class="mood-badge">🦊</span></div>
     <div class="who">
