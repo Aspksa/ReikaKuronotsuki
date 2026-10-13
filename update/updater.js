@@ -9,6 +9,7 @@ const { readFileSync, existsSync, statfsSync } = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { REPO, SHA, BLOCKED, pathKey, safeUpdatePath, gitHash } = require('./shared');
+const { readZip } = require('./zip');
 
 const API = 'https://api.github.com/repos/' + REPO;
 const HEADERS = { 'user-agent': 'Reika-Updater', accept: 'application/vnd.github+json' };
@@ -20,6 +21,9 @@ const MAX_FILE_BYTES = 10_000_000;
 const AUTO_CHECK_MIN_MS = 30 * 60_000;
 const TEST_TIMEOUT_MS = 300_000;
 const MAX_API_BYTES = 20_000_000;
+const MAX_ARCHIVE_BYTES = 60_000_000;
+// A project archive must at least look like this project: these files must be in it.
+const PROJECT_MARKERS = ['server/main.js', 'update/installer.js', 'launcher/boot.js', 'web/index.html'];
 const MAX_LOCK_MS = 3_600_000; // whatever GitHub says, never stay silent for more than an hour
 const CI_VALUES = ['success', 'pending', 'failure', 'none', 'unknown'];
 const UNKNOWN_VERSION = 'не определена';
@@ -156,12 +160,12 @@ class ProjectUpdater {
   }
 
   status() {
-    return { ...this.state, latest: this.latest, localVersion: this.localVersion(), config: this.getConfig(), rollbackPending: this.rollbackPending, blocked: this.blocked(), rateLimitedUntil: Date.now() < this.rateLimitUntil ? this.rateLimitUntil : null };
+    return { ...this.state, latest: this.latest, checkedAt: this.checkedAt || null, localVersion: this.localVersion(), config: this.getConfig(), rollbackPending: this.rollbackPending, blocked: this.blocked(), rateLimitedUntil: Date.now() < this.rateLimitUntil ? this.rateLimitUntil : null };
   }
 
   /** Why the newest version cannot be installed right now (null = it can). */
   blocked() {
-    if (!this.latest || !this.requireCi) return null;
+    if (!this.latest || !this.requireCi || this.latest.source === 'archive') return null; // an archive the user picked is not gated by GitHub's CI
     switch (this.latest.ci) {
       case 'success': return null;
       case 'pending': return 'Автоматические проверки (CI) этой версии ещё идут — обновление станет доступно, когда они завершатся.';
@@ -436,6 +440,99 @@ class ProjectUpdater {
     if (this.abort?.signal.aborted) throw new Error('cancelled');
   }
 
+  /**
+   * "Update from a file": the user picks a ZIP of the project (GitHub's "Download ZIP" works). It goes through the same staging,
+   * file check and tests as a download and becomes "ready"; the installer then applies it like any other update.
+   * Not checked against GitHub (no network needed), so the UI says to use archives you trust.
+   */
+  async startFromArchive(buffer, name = 'archive.zip') {
+    if (this.busy) throw new Error('Обновление уже выполняется');
+    this.busy = true; // claim the slot before any await
+    const abort = this.abort = new AbortController();
+    const signal = abort.signal;
+    this.operationId = crypto.randomUUID();
+    const label = String(name).replace(/[\u0000-\u001f]/g, '').slice(0, 120) || 'archive.zip';
+    this.state = { ...blankState(), phase: 'downloading', message: 'Чтение архива' };
+    try {
+      if (!Buffer.isBuffer(buffer) || buffer.length === 0 || buffer.length > MAX_ARCHIVE_BYTES) throw new Error(`Архив больше ${Math.floor(MAX_ARCHIVE_BYTES / 1e6)} МБ или пуст`);
+      await fs.mkdir(this.folder(), { recursive: true });
+      await fs.rm(this.file('ready.json'), { force: true });
+      await fs.rm(this.file('removals-confirmed.json'), { force: true });
+      await fs.writeFile(this.file('events.jsonl'), '');
+      await this.emit('archive_started', '', 'reading', { name: label, bytes: buffer.length });
+      const files = readZip(buffer, { maxEntries: MAX_FILES + 500, maxFileBytes: MAX_FILE_BYTES });
+      // GitHub's ZIP wraps everything in one folder ("Repo-main/"): drop it
+      let prefix = '';
+      const tops = new Set(files.map((f) => (f.name.includes('/') ? f.name.slice(0, f.name.indexOf('/') + 1) : '')));
+      if (tops.size === 1 && !tops.has('')) prefix = [...tops][0];
+      const entries = [];
+      for (const f of files) {
+        const rel = f.name.slice(prefix.length);
+        if (!rel || isProtected(rel)) continue; // user data, settings and bookkeeping never come from an update
+        if (!safeUpdatePath(rel)) throw new Error('Недопустимый путь в архиве: ' + rel.slice(0, 120));
+        entries.push({ path: rel, sha: gitHash(f.data), size: f.data.length, data: f.data });
+      }
+      entries.sort((a, b) => (a.path < b.path ? -1 : 1));
+      if (new Set(entries.map((e) => pathKey(e.path))).size !== entries.length) throw new Error('Повтор файла в архиве');
+      if (entries.length > MAX_FILES) throw new Error('Слишком много файлов в архиве');
+      const missing = PROJECT_MARKERS.filter((m) => !entries.some((e) => e.path === m));
+      if (missing.length) throw new Error('Это не архив проекта Рэйки: нет файлов ' + missing.join(', '));
+      // the version id of an archive: a hash over the paths and contents (there is no commit to name)
+      const sha = crypto.createHash('sha1').update(entries.map((e) => `${e.path}\0${e.sha}\n`).join('')).digest('hex');
+      const treeBytes = entries.reduce((n, e) => n + e.size, 0);
+      const free = this.freeBytes(), need = treeBytes * 2 + 50_000_000;
+      if (free < need) throw new Error(`Недостаточно места на диске: нужно около ${Math.ceil(need / 1e6)} МБ, свободно ${Math.floor(free / 1e6)} МБ`);
+
+      const changes = await Promise.all(entries.map(async (e) => {
+        try { return { path: e.path, change_type: gitHash(await fs.readFile(path.join(this.root, e.path))) === e.sha ? 'unchanged' : 'modified', size: e.size }; }
+        catch (error) { if (error.code !== 'ENOENT' && error.code !== 'EISDIR') throw error; return { path: e.path, change_type: 'added', size: e.size }; }
+      }));
+      const removals = await this.findRemovals(entries);
+      Object.assign(this.state, { totalFiles: entries.length, totalBytes: treeBytes, treeBytes, pendingRemovals: removals });
+      this.latest = { sha, version: `из файла · ${sha.slice(0, 8)}`, source: 'archive', channel: 'fresh', description: 'Установка из файла: ' + label, date: new Date().toISOString(), ci: 'none', changes: [], changesTotal: 0 };
+      await this.emit('manifest_ready', '', 'ready', { files: [...changes, ...removals.map((p) => ({ path: p, change_type: 'removed', size: 0 }))], sha });
+
+      const staging = this.file('staging');
+      await fs.rm(staging, { recursive: true, force: true });
+      await fs.mkdir(staging, { recursive: true });
+      await fs.writeFile(this.file('staging.sha'), sha + '\n');
+      for (const e of entries) {
+        if (signal.aborted) throw new Error('cancelled');
+        const dest = path.join(staging, e.path);
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        await fs.writeFile(dest, e.data);
+        this.state.downloadedFiles++; this.state.downloadedBytes += e.size;
+        this.state.percent = Math.floor(100 * this.state.downloadedFiles / entries.length);
+        await this.emit('file_download_done', e.path, 'downloaded', { change_type: changes.find((c) => c.path === e.path)?.change_type, bytes_done: e.size, bytes_total: e.size, target_relative_path: e.path });
+      }
+      this.state.percent = 100;
+      this.state.phase = 'testing';
+      await this.step('verify', async () => {
+        for (const e of entries) {
+          const bytes = await fs.readFile(path.join(staging, e.path)).catch(() => null);
+          if (!bytes || gitHash(bytes) !== e.sha) throw new Error('Файл в подготовке повреждён: ' + e.path);
+        }
+      });
+      await this.step('test', () => this.run(staging, process.execPath, ['tests/run.js']));
+      this.throwIfCancelled();
+      await this.writeJson('ready.json', { sha, files: entries.map((e) => ({ path: e.path, sha: e.sha })), removals, description: 'Установка из файла: ' + label, notes: [{ title: 'Файл ' + label }], createdAt: new Date().toISOString() });
+      await this.emit('update_prepared', '', 'ready', { sha });
+      this.state.phase = 'ready';
+      this.state.message = 'Проверки пройдены. Перезапустите Рэйку для установки.';
+    } catch (e) {
+      await fs.rm(this.file('ready.json'), { force: true }).catch(() => {});
+      if (signal.aborted) {
+        this.state = { ...blankState(), message: 'Подготовка обновления отменена' };
+        await this.emit('update_cancelled', '', 'cancelled').catch(() => {});
+      } else {
+        await this.emit('update_failed', '', 'failed', { message: e instanceof Error ? e.message : String(e) }).catch(() => {});
+        this.state.phase = 'error';
+        this.state.error = e instanceof Error ? e.message : String(e);
+        this.state.message = 'Не удалось подготовить обновление из файла';
+      }
+    } finally { this.busy = false; this.abort = null; this.child = null; }
+  }
+
   async step(id, work) {
     this.throwIfCancelled(); // a cancel that arrived between two steps must stop the next one
     const s = this.state.checks.find((c) => c.id === id);
@@ -558,4 +655,4 @@ class ProjectUpdater {
 
 const isProtected = (p) => typeof p === 'string' && p.split('/').some((s) => BLOCKED.has(s));
 
-module.exports = { ProjectUpdater, rollbackTarget, localVersion, failureTail, REQUIRED_CI_JOB };
+module.exports = { MAX_ARCHIVE_BYTES, ProjectUpdater, rollbackTarget, localVersion, failureTail, REQUIRED_CI_JOB };

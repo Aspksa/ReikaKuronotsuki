@@ -16,6 +16,8 @@
     const [label, icon] = MOODS[emotion] || MOODS.neutral;
     mood.textContent = label;
     avatar.textContent = icon;
+    window.ReikaMood = label;
+    window.dispatchEvent(new CustomEvent('reika:mood', { detail: label }));
   }
 
   function render(message) {

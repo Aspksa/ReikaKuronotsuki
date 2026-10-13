@@ -15,6 +15,12 @@
 .btn--icon svg { width: 19px; height: 19px; fill: none; stroke: var(--blush); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .btn--sm { width: 34px; min-height: 34px; border-color: var(--border-soft); }
 
+.btn--xs { width: 30px; min-height: 30px; }
+.btn--gold.btn--xs { width: auto; padding: 0 var(--space-3); font-size: var(--text-sm); }
+
+/* ---- keyboard hint ---- */
+.kbd { padding: 1px 7px; border: 1px solid var(--border-soft); border-bottom-width: 2px; border-radius: 6px; font: 600 var(--text-xs) var(--font-sans); color: var(--muted); background: rgb(var(--pearl-rgb) / .05); white-space: nowrap; }
+
 /* ---- surfaces ---- */
 .panel, .card, .chat-panel { position: relative; isolation: isolate; border: 1px solid var(--border); background: var(--surface); backdrop-filter: blur(10px);
   box-shadow: var(--rim-light), var(--shadow-1); }
