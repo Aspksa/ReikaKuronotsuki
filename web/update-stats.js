@@ -1,0 +1,81 @@
+'use strict';
+// A hundred read-only cards. A dash means not captured, never an invented zero.
+(function () {
+  const groups = [["Прямо сейчас",[["Сколько мы тут уже сидим?","uptimeMs","duration"],["Режим паники","status.phase","text"],["Всё под контролем. Наверное","status.percent","percent"],["Байты на свободе","status.downloadedBytes","bytes"],["Байты в розыске","status.totalBytes","bytes"],["Файлы в деле","status.downloadedFiles","number"],["Очередь на вход","status.totalFiles","number"],["Без повторной загрузки","status.reusedFiles","number"],["Проект на весах","scan.bytes","bytes"],["Свободная территория","freeDiskBytes","bytes"]]],["Файловый переполох",[["Все файлы проекта","scan.files","number"],["Комнаты в лабиринте","scan.directories","number"],["Самый толстый файл","scan.largest","bytes"],["Самый скромный файл","scan.smallest","bytes"],["Глубина кроличьей норы","scan.deepest","number"],["Файлы JavaScript","scan.js","number"],["Файлы CSS","scan.css","number"],["HTML-страницы","scan.html","number"],["JSON-файлы","scan.json","number"],["Картинки и иконки","scan.images","number"]]],["Код и его последствия",[["Строки всего","scan.lines","number"],["Пустые, но важные строки","scan.blank","number"],["Комментарии разработчиков","scan.comments","number"],["Файлы с читаемым текстом","scan.text","number"],["Строки не пустуют","derived.nonblank","number"],["Код без комментариев","derived.noncomment","number"],["Плотность пустоты","derived.blankRatio","percent"],["Разговорчивость комментариев","derived.commentRatio","percent"],["Средняя длина файла","derived.avgFileBytes","bytes"],["Среднее число строк","derived.avgLines","number"]]],["Хроники обновлений",[["Сколько всего пережито","history.count","number"],["Удивительно, но работает","history.installs","number"],["Это было близко","history.failures","number"],["Назад в прошлое","history.rollbacks","number"],["Запасные планы","history.backups","number"],["Непохожие версии","history.uniqueVersions","number"],["Файлов обновлено исторически","history.installedFiles","number"],["Последняя удачная операция","history.lastInstall","date"],["Последняя неприятность","history.lastFailure","date"],["Последний билет назад","history.lastRollback","date"]]],["Интернет пострадал",[["Файлов скачано по журналу","events.downloadedFiles","number"],["Байтов скачано по журналу","events.downloadedBytes","bytes"],["Уникальных файлов скачано","events.uniqueFiles","number"],["Попыток загрузки файлов","events.downloadsStarted","number"],["Проверок файлов","events.verifyCount","number"],["Проверок новых версий","events.starts","number"],["Подготовлено обновлений","events.preparations","number"],["Случилось ошибок","events.errorCount","number"],["Отменено обновлений","events.cancellations","number"],["Всего событий в журнале","events.count","number"]]],["Git и временная машина",[["Сколько раз передумали","git.commitCount","number"],["Первый коммит","git.firstCommit","date"],["Последний коммит","git.lastCommit","date"],["Авторов в истории Git","git.authors","number"],["Возраст со старта Git","derived.gitAgeDays","days"],["Сколько прожила версия","derived.versionAgeDays","days"],["Последняя проверка GitHub","status.checkedAt","date"],["Новый коммит","status.latest.sha","short"],["Старая версия","status.localVersion","short"],["Что нового вообще","status.latest.changesTotal","number"]]],["Ресурсы компьютера",[["Сервер на ногах","uptimeMs","duration"],["Память процесса","memoryRss","bytes"],["Память JavaScript","memoryHeap","bytes"],["CPU занимается делом","cpuUserMs","duration"],["CPU работает на систему","cpuSystemMs","duration"],["Ядер в распоряжении","cores","number"],["Версия Node.js","node","text"],["Платформа","platform","text"],["Остаток места на диске","freeDiskBytes","bytes"],["Когда всё запустилось","processStartedAt","date"]]],["Контроль и спокойствие",[["Статус CI","status.latest.ci","text"],["Доступный канал","status.config.channel","text"],["Частота автопроверки","status.config.autoCheck","text"],["Ограничение GitHub","status.rateLimitedUntil","date"],["Установка заблокирована?","derived.blocked","yesno"],["Готовность к установке","derived.ready","yesno"],["Отложен откат?","status.rollbackPending","yesno"],["Подтверждённых удалений","derived.removalsConfirmed","yesno"],["Удалений в очереди","derived.pendingRemovals","number"],["Проверок пройдено","derived.checkDone","number"]]],["Время — деньги",[["Время с последней проверки","derived.sinceCheck","duration"],["Время с последней установки","derived.sinceInstall","duration"],["Время с последней ошибки","derived.sinceFailure","duration"],["Время с последнего отката","derived.sinceRollback","duration"],["Возраст первого события","derived.sinceFirstEvent","duration"],["Возраст последнего события","derived.sinceLastEvent","duration"],["Промежуток истории","derived.historySpan","duration"],["Время с первого коммита","derived.gitAgeDuration","duration"],["Самый свежий файл проекта","scan.newest","date"],["Самый старый файл проекта","scan.oldest","date"]]],["Интересности",[["Доля JS среди файлов","derived.jsRatio","percent"],["Доля CSS среди файлов","derived.cssRatio","percent"],["Доля картинок","derived.imageRatio","percent"],["Файлы без этих расширений","derived.otherFiles","number"],["Среднее имя файла (в байтах)","derived.avgNameBytes","number"],["Файлов на папку","derived.filesPerDirectory","number"],["Ошибок на успешную установку","derived.errorPerInstall","number"],["Процент удачных установок","derived.successRatio","percent"],["Успешных на один откат","derived.installPerRollback","number"],["Уровень экономии скачивания","derived.reuseRatio","percent"]]]];
+  const $ = id => document.getElementById(id);
+  const root = $('up-stats');
+  if (!root) return;
+  const get = (o, path) => path.split('.').reduce((v,k)=>v == null ? null : v[k],o);
+  const ratio = (a,b) => Number.isFinite(a) && Number.isFinite(b) && b>0 ? 100*a/b : null;
+  const divide = (a,b) => Number.isFinite(a) && Number.isFinite(b) && b>0 ? a/b : null;
+  function expand(d) {
+    const s=d.scan || {}, h=d.history || {}, e=d.events || {}, st=d.status || {};
+    const now=d.capturedAt || Date.now();
+    const since=v=>Number.isFinite(v)?Math.max(0,now-v):null;
+    d.derived={
+      nonblank:Number.isFinite(s.lines)&&Number.isFinite(s.blank)?s.lines-s.blank:null,
+      noncomment:Number.isFinite(s.lines)&&Number.isFinite(s.comments)?s.lines-s.comments:null,
+      blankRatio:ratio(s.blank,s.lines),commentRatio:ratio(s.comments,s.lines),
+      avgFileBytes:divide(s.bytes,s.files),avgLines:divide(s.lines,s.text),
+      gitAgeDays:d.git?.firstCommit?since(d.git.firstCommit)/86400000:null,
+      versionAgeDays:st.latest?.date?since(Date.parse(st.latest.date))/86400000:null,
+      blocked:!!st.blocked,ready:st.phase==='ready',
+      removalsConfirmed:!!st.removalsConfirmed,pendingRemovals:st.pendingRemovals?.length??0,
+      checkDone:(st.checks||[]).filter(x=>x.status==='done').length,
+      sinceCheck:since(st.checkedAt),sinceInstall:since(h.lastInstall),
+      sinceFailure:since(h.lastFailure),sinceRollback:since(h.lastRollback),
+      sinceFirstEvent:since(e.first),sinceLastEvent:since(e.last),
+      historySpan:Number.isFinite(h.first)&&Number.isFinite(h.last)?h.last-h.first:null,
+      gitAgeDuration:since(d.git?.firstCommit),
+      jsRatio:ratio(s.js,s.files),cssRatio:ratio(s.css,s.files),imageRatio:ratio(s.images,s.files),
+      otherFiles:Number.isFinite(s.files)?s.files-(s.js||0)-(s.css||0)-(s.html||0)-(s.json||0)-(s.images||0):null,
+      avgNameBytes:divide(s.filenameBytes,s.files),filesPerDirectory:divide(s.files,s.directories),
+      errorPerInstall:divide(h.failures,h.installs),successRatio:ratio(h.installs,h.installs+h.failures),
+      installPerRollback:divide(h.installs,h.rollbacks),reuseRatio:ratio(st.reusedFiles,(st.totalFiles||0)+(st.reusedFiles||0))
+    };
+    return d;
+  }
+  const num=v=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:1}).format(v);
+  const format=(value,unit)=>{
+    if(value===null||value===undefined||value===''||(typeof value==='number'&&!Number.isFinite(value)))return '—';
+    if(unit==='text')return String(value);
+    if(unit==='short')return String(value).slice(0,12);
+    if(unit==='yesno')return value?'Да':'Нет';
+    if(unit==='date')return Number.isFinite(Number(value))&&Number(value)>0?new Date(Number(value)).toLocaleString('ru-RU'): '—';
+    if(unit==='duration'){const n=Math.round(Number(value)/1000);return n<60?n+' сек':n<3600?num(n/60)+' мин':n<86400?num(n/3600)+' ч':num(n/86400)+' д';}
+    if(unit==='days')return num(value)+' д';
+    if(unit==='percent')return num(value)+'%';
+    if(unit==='bytes'){if(value<1024)return num(value)+' Б';const units=['КБ','МБ','ГБ','ТБ'];let n=value,i=-1;do{n/=1024;i++;}while(n>=1024&&i<units.length-1);return num(n)+' '+units[i];}
+    return typeof value==='number'?num(value):String(value);
+  };
+  const cards=[];
+  for(const [title,items] of groups){
+    const section=document.createElement('details');section.className='stats-section';
+    if(cards.length===0)section.open=true;
+    const summary=document.createElement('summary');summary.textContent=title+' · 10';section.appendChild(summary);
+    const grid=document.createElement('div');grid.className='stats-grid';
+    for(const [label,key,unit] of items){
+      const card=document.createElement('div');card.className='stats-tile';
+      const name=document.createElement('span');name.className='stats-name';name.textContent=label;
+      const value=document.createElement('strong');value.className='stats-number';value.textContent='—';
+      card.append(name,value);grid.appendChild(card);cards.push({key,unit,value});
+    }
+    section.appendChild(grid);root.appendChild(section);
+  }
+  let lastFetch=0, busy=false;
+  async function load(force=false){
+    if(busy||(!force&&Date.now()-lastFetch<15000))return;
+    busy=true;
+    try{
+      const res=await fetch('api/update/stats',{cache:'no-store'});
+      if(!res.ok)throw Error('HTTP '+res.status);
+      const data=expand(await res.json());lastFetch=Date.now();
+      for(const c of cards)c.value.textContent=format(get(data,c.key),c.unit);
+      $('up-stats-note').textContent='Факты из проекта, процесса и журналов. Исторические данные доступны только с момента начала их записи. Обновлено: '+new Date(data.capturedAt).toLocaleTimeString('ru-RU');
+    }catch(e){$('up-stats-note').textContent='Статистика пока недоступна: '+e.message;}
+    finally{busy=false;}
+  }
+  window.ReikaStats={load,count:cards.length};
+  window.addEventListener('reika:route',e=>{if(e.detail==='update')load(true);});
+  setInterval(()=>{if(!$('page-update').hidden)load();},15000);
+})();
