@@ -12,3 +12,8 @@
 .set-links a, .set-linkbtn { color: var(--text); }
 .set-linkbtn { padding: 0; border: 0; background: none; font: inherit; color: var(--text); text-decoration: underline; }
 @media (max-width: 860px) { .settings { grid-template-columns: minmax(0, 1fr); } }
+.set-key { display: flex; align-items: center; gap: var(--space-2); }
+.settings .set-key .field { width: 260px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.settings #set-ai-model.field, .settings #set-ai-provider.field { width: 280px; }
+#set-ai-cloud { display: flex; flex-direction: column; gap: var(--space-3); }
+@media (max-width: 640px) { .settings .set-key .field, .settings #set-ai-model.field, .settings #set-ai-provider.field { width: 100%; } }

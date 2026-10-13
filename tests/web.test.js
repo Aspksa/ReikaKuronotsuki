@@ -173,3 +173,31 @@ test('settings page: its own route, hidden in the menu until a server answers, a
   assert.match(read('app.js'), /reika:history-cleared/, 'the chat reloads when the settings page clears the history');
   assert.match(read('shell.js'), /needsServer/, 'routes that need the server fall back to the home page without it');
 });
+
+test('settings page: choosing who answers in the chat, with the key kept out of sight', () => {
+  const html = read('index.html');
+  const page = html.slice(html.indexOf('id="page-settings"'), html.indexOf('id="page-update"'));
+  for (const id of ['set-ai-provider', 'set-ai-key', 'set-ai-key-clear', 'set-ai-key-state', 'set-ai-model', 'set-ai-models', 'set-ai-check', 'set-ai-result', 'set-ai-error']) {
+    assert.ok(page.includes(`id="${id}"`), `#${id} is missing`);
+  }
+  assert.match(page, /id="set-ai-key"[^>]*type="password"/, 'the key is never shown as plain text');
+  assert.match(page, /id="set-ai-provider"[\s\S]*?<option value="reika">/, 'answering offline is the first choice');
+  assert.match(page, /уходят на серверы Cloud\.ru/, 'the page says where the messages go');
+  assert.match(page, /не попадает ни в копию данных, ни в git/, 'and where the key is kept');
+  const js = read('settings.js');
+  assert.match(js, /api\/ai\/check/);
+  assert.match(js, /if \(key\) patch\.apiKey = key;/, 'an empty field keeps the stored key instead of wiping it');
+  assert.match(read('app.js'), /warning/, 'the chat shows why Reika had to answer herself');
+  assert.match(allCss(), /\.msg-note/);
+});
+
+test('the settings icon in the menu is as light as the others, not an oversized gear', () => {
+  const html = read('index.html');
+  const entry = html.slice(html.indexOf('id="nav-settings"'), html.indexOf('</a>', html.indexOf('id="nav-settings"')));
+  const svg = entry.slice(entry.indexOf('<svg'), entry.indexOf('</svg>'));
+  assert.ok(svg.length < 220, 'a simple shape, not a 20-command gear path');
+  for (const [, x, y] of svg.matchAll(/c[xy]="([\d.]+)"\s+cy="([\d.]+)"/g)) {
+    for (const v of [Number(x), Number(y)]) assert.ok(v >= 4 && v <= 20, `${v} sits outside the optical box the other icons use`);
+  }
+  assert.ok(!/M2 |h22|r="1[0-9]"/.test(svg), 'nothing is drawn edge to edge');
+});
