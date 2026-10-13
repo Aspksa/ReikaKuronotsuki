@@ -659,6 +659,6 @@ class ProjectUpdater {
   }
 }
 
-const isProtected = (p) => typeof p === 'string' && p.split('/').some((s) => BLOCKED.has(s));
+const isProtected = (p) => typeof p === 'string' && BLOCKED.has(p.split('/')[0]); // protect only project-root user directories, not vendored library datasets
 
 module.exports = { MAX_ARCHIVE_BYTES, ProjectUpdater, rollbackTarget, localVersion, failureTail, REQUIRED_CI_JOB };
