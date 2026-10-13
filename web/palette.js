@@ -22,7 +22,7 @@
     ];
     if (window.ReikaUpdaterPresent && window.ReikaUpdate) {
       cmds.splice(1, 0,
-        { title: 'Обновление проекта', hint: 'страница', run: () => window.ReikaUpdate.open() },
+        { title: 'Обновления', hint: 'страница', run: () => window.ReikaUpdate.open() },
         { title: 'Проверить обновления', hint: 'обновление', run: () => { window.ReikaUpdate.open(); window.ReikaUpdate.check().catch(() => {}); } });
     }
     return cmds;

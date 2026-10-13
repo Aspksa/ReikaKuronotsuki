@@ -26,7 +26,7 @@
   }
 
   const ICONS = {
-    idle: 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5',          // circular arrow
+    idle: 'M19 12a7 7 0 1 1-2.2-5.1M19 4v4.5h-4.5M12 9.6l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z', // circular arrow with a spark
     busy: 'M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5',          // the same arrow, spinning (CSS)
     available: 'M12 4v11M7 11l5 5 5-5M5 20h14',            // arrow down into a tray
     ready: 'M5 12.5l4.5 4.5L19 7.5',                      // check mark
@@ -48,7 +48,7 @@
         return st.pendingRemovals && st.pendingRemovals.length && !st.removalsConfirmed ? 'Готово · подтвердите удаление файлов' : 'Готово к установке';
       case 'error': return 'Ошибка: ' + String(st.error || 'неизвестная').split('\n')[0].slice(0, 70);
       case 'available': return st.blocked ? `Версия ${st.latest.version}: ждёт проверок CI` : `Доступна версия ${st.latest.version}`;
-      default: return `Версия ${version}` + (st.checkedAt ? ` · проверено ${timeOf(st.checkedAt)}` : '');
+      default: return `Версия ${version}` + (st.checkedAt ? ` · ${timeOf(st.checkedAt)}` : '');
     }
   }
 

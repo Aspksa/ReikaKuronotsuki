@@ -62,7 +62,7 @@ test('left menu: home, chat and (hidden until a server answers) update; no old h
   assert.match(side, /id="nav-home"/);
   assert.match(side, /id="nav-chat"/);
   assert.match(side, /id="update-card"[^>]*hidden/, 'the update block stays hidden until a server answers');
-  assert.match(side, /id="nav-update"[\s\S]*Обновление проекта/);
+  assert.match(side, /id="nav-update"[\s\S]*>Обновления</);
   const bottom = side.slice(side.indexOf('class="side-bottom"'));
   assert.ok(bottom.includes('id="nav-update"') && bottom.includes('id="side-toggle"') && bottom.indexOf('id="nav-update"') < bottom.indexOf('id="side-toggle"'), 'the update entry sits in the bottom block, above the footer');
   assert.ok(!side.slice(0, side.indexOf('class="side-bottom"')).includes('id="nav-update"'), 'not in the menu list');
