@@ -22,11 +22,12 @@ const gitCache = new Map();
 const writes = new Map();
 async function cachedInspect(root) {
   const existing=cache.get(root);
-  if(existing && Date.now()-existing.at<CACHE_MS)return existing.value;
+  const directoryMtime=(await fs.stat(root).catch(()=>null))?.mtimeMs ?? null;
+  if(existing?.value && existing.directoryMtime===directoryMtime && Date.now()-existing.at<CACHE_MS)return existing.value;
   if(existing?.pending)return existing.pending;
   const pending=inspect(root);
-  cache.set(root,{pending,at:Date.now()});
-  try { const value=await pending;cache.set(root,{value,at:Date.now()});return value; }
+  cache.set(root,{pending,at:Date.now(),directoryMtime});
+  try { const value=await pending;cache.set(root,{value,at:Date.now(),directoryMtime});return value; }
   catch(e){cache.delete(root);throw e;}
 }
 async function readSamples(root){
