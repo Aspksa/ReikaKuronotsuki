@@ -166,3 +166,10 @@
 @media(prefers-reduced-motion:reduce) {
   .stats-tile--hero:hover {transform:none;}
 }
+
+.stats-open {position:absolute;top:50%;right:3px;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);cursor:pointer;font:600 1rem var(--font-sans);}
+.stats-open:hover,.stats-open:focus-visible {background:var(--stat-pro-soft);color:var(--pearl);}
+.stats-open:focus-visible {outline:2px solid var(--focus);outline-offset:2px;}
+.stats-tile--hero .stats-open {top:10px;right:10px;transform:none;}
+.stats-tile:not(.stats-tile--hero) .stats-meta {padding-right:36px;}
+@media(max-width:670px) { .stats-tile:not(.stats-tile--hero) .stats-meta {padding-right:0;} }
