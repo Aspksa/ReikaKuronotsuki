@@ -206,6 +206,34 @@
     ['Ошибок','events.errorCount','number']
   ];
   heroes.forEach(([label,key,unit],i)=>highlights.appendChild(createCard(label,key,unit,100+i,true)));
+  const persisted = {'events.downloadedBytes':'downloads','scan.bytes':'bytes','scan.files':'files','scan.lines':'lines','memoryRss':'rss','freeDiskBytes':'freeDiskBytes','history.installs':'installs','history.failures':'failures'};
+  function replaySamples(data) {
+    const rows=Array.isArray(data.samples)?data.samples:[];
+    for(const [key,field] of Object.entries(persisted)){
+      const series=rows.map(row=>row[field]).filter(numeric).slice(-24);
+      if(series.length)traces.set(key,series);
+    }
+  }
+  function showContext(data) {
+    const comparison=$('up-stats-comparison');
+    const insights=$('up-stats-insights');
+    const baseline=data.versionComparison;
+    if(baseline){
+      const when=new Date(baseline.from).toLocaleDateString('ru-RU');
+      const signed=n=>(n>0?'+':'')+num(n);
+      comparison.textContent='С '+when+': '+signed(baseline.files)+' файлов · '+signed(baseline.lines)+' строк · '+signed(baseline.bytes)+' байт. Сравнение с первой сохранённой точкой, не с первой версией.';
+    }else comparison.textContent='Сравнение появится после первого сохранённого измерения.';
+    const sentences=[];
+    if(baseline){
+      if(baseline.bytes>0 && baseline.files===0)sentences.push('Размер проекта вырос без увеличения числа файлов — вероятно, изменилось содержимое существующих.');
+      if(baseline.files>0 && baseline.bytes<0)sentences.push('Файлов стало больше, но проект стал занимать меньше места.');
+      if(baseline.lines>0 && baseline.bytes<0)sentences.push('Строк стало больше, хотя общий размер уменьшился.');
+    }
+    if(data.history?.failures>0)sentences.push('В истории есть неудачные установки: '+data.history.failures+'.');
+    insights.replaceChildren();
+    if(!sentences.length){insights.textContent='Необычных изменений пока не обнаружено.';return;}
+    for(const msg of sentences.slice(0,3)){const p=document.createElement('p');p.textContent=msg;insights.appendChild(p);}
+  }
   function renderValue(c,data){
     const value=get(data,c.key);
     const previous=c.previous;
@@ -221,7 +249,7 @@
     if(numeric(value)){
       const arr=traces.get(c.key)||[];
       // A fresh poll with the same value is still a real sample, not fake chart data.
-      if(c.sampleAt!==data.capturedAt){arr.push(value);if(arr.length>24)arr.shift();traces.set(c.key,arr);c.sampleAt=data.capturedAt;}
+      if(c.sampleAt!==data.capturedAt && !persisted[c.key]){arr.push(value);if(arr.length>24)arr.shift();traces.set(c.key,arr);c.sampleAt=data.capturedAt;}
       c.chart.replaceChildren();
       const line=sparkline(arr);
       if(line)c.chart.appendChild(line);
@@ -247,6 +275,8 @@
       const res=await fetch('api/update/stats',{cache:'no-store'});
       if(!res.ok)throw Error('HTTP '+res.status);
       const data=expand(await res.json());lastFetch=Date.now();
+      replaySamples(data);
+      showContext(data);
       for(const c of cards)renderValue(c,data);
       $('stats-live-time').textContent=new Date(data.capturedAt).toLocaleTimeString('ru-RU');
       $('up-stats-note').textContent='Данные из файлов проекта и локальных журналов. Графики отражают измерения текущей сессии; история до начала записи может отсутствовать.';
