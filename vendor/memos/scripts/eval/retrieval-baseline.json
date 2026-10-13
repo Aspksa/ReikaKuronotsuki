@@ -1,0 +1,9 @@
+{
+  "recallAt5": 0.9792,
+  "mrr": 0.9688,
+  "provenance": {
+    "timestamp": "2026-10-01T13:22:16.960Z",
+    "gitSha": "ba1d992d1ba9e98d8c75436d6fefe2f9fac8c8f1",
+    "embedder": "local-hash-384"
+  }
+}

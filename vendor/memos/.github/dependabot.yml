@@ -1,0 +1,50 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Auto-rebase so dependabot branches always inherit the current CI
+    # workflow (verify-lockfile + codeql.yml) and never sit on a stale,
+    # failing config.
+    rebase-strategy: "auto"
+    # Group all npm dev/runtime bumps into a single PR to cut notification spam
+    # and merge-conflict churn.
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+    # Ignore major version bumps for packages with known native-build or
+    # breaking-change issues in CI. better-sqlite3 v13 was evaluated and
+    # REJECTED (2026-08-17): it requires Node >=22, which breaks the repo's
+    # engines >=18 contract and the Debian smoke test (trixie ships Node 20;
+    # the v13 binary segfaults on it). This rule guards FUTURE majors until
+    # they are verified against the full CI matrix the same way.
+    ignore:
+      - dependency-name: "better-sqlite3"
+        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    rebase-strategy: "auto"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    rebase-strategy: "auto"
+    labels:
+      - "dependencies"
+      - "github-actions"

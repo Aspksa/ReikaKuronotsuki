@@ -1,0 +1,340 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #09090b;
+  --line: rgba(255, 255, 255, 0.08);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  font-feature-settings: "ss01" on;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.85);
+  color: #09090b;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 8px;
+  border: 2px solid #09090b;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* ---------- Backgrounds ---------- */
+
+/* Subtle dot grid, faded with a radial mask (React Bits "Squares" pattern, restrained) */
+.dot-grid {
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.09) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 0%,
+    black 30%,
+    transparent 75%
+  );
+}
+
+/* Single cool glow at the very top of the page — the only ambient color */
+.top-glow {
+  background: radial-gradient(
+    ellipse 55% 40% at 50% -8%,
+    rgba(96, 165, 250, 0.09),
+    transparent 70%
+  );
+}
+
+/* ---------- Typography helpers ---------- */
+
+/* Vertical white→zinc fade instead of rainbow gradient text */
+.text-fade {
+  background: linear-gradient(180deg, #fafafa 30%, #71717a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Mono section label */
+.kicker {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #71717a;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kicker::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+/* ---------- Scroll reveal ---------- */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  position: relative;
+  background: #0c0c0e;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  transition:
+    border-color 0.3s ease,
+    background 0.3s ease;
+}
+
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: #101013;
+}
+
+/* Mouse-follow spotlight (React Bits SpotlightCard pattern) */
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    320px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.055),
+    transparent 65%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.spotlight:hover::before {
+  opacity: 1;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.65rem 1.1rem;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease;
+  cursor: pointer;
+}
+
+.btn:active {
+  transform: scale(0.985);
+}
+
+.btn-primary {
+  background: #fafafa;
+  color: #09090b;
+}
+
+.btn-primary:hover {
+  background: #d4d4d8;
+}
+
+.btn-secondary {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d4d4d8;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.btn-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fafafa;
+}
+
+/* ---------- Terminal / code windows ---------- */
+
+.window {
+  background: #0c0c0e;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 24px 60px -24px rgba(0, 0, 0, 0.9);
+}
+
+.window-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.window-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #27272a;
+}
+
+.window-title {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.7rem;
+  color: #52525b;
+  margin-left: 0.25rem;
+}
+
+.term-line {
+  opacity: 0;
+  animation: fade-up 0.5s ease forwards;
+}
+
+.term-caret {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background: #a1a1aa;
+  vertical-align: text-bottom;
+  animation: caret-blink 1.1s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---------- Tables ---------- */
+
+.data-table {
+  width: 100%;
+  font-size: 0.875rem;
+  border-collapse: collapse;
+}
+
+.data-table thead th {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #71717a;
+  font-weight: 500;
+  text-align: left;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.data-table tbody td {
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #a1a1aa;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ---------- Links ---------- */
+
+.arrow-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #d4d4d8;
+  transition: color 0.2s ease;
+}
+
+.arrow-link svg {
+  transition: transform 0.2s ease;
+}
+
+.arrow-link:hover {
+  color: #fafafa;
+}
+
+.arrow-link:hover svg {
+  transform: translateX(3px);
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal,
+  .term-line {
+    opacity: 1;
+    transform: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

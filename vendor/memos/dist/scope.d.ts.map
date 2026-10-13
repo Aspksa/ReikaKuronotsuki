@@ -1,0 +1,1 @@
+{"version":3,"file":"scope.d.ts","sourceRoot":"","sources":["../src/scope.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;;GAiBG;AAEH,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,YAAY,CAAC;AAQ9C,kEAAkE;AAClE,wBAAgB,YAAY,CAAC,KAAK,EAAE,WAAW,GAAG,MAAM,CAcvD;AAED;;;;GAIG;AACH,wBAAgB,aAAa,CAAC,KAAK,EAAE,MAAM,GAAG,WAAW,CAwBxD;AAED,uEAAuE;AACvE,wBAAgB,gBAAgB,CAAC,KAAK,EAAE,MAAM,GAAG,MAAM,CAEtD"}

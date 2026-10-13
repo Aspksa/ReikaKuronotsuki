@@ -1,0 +1,63 @@
+# syntax=docker/dockerfile:1
+# Multi-stage build: compile TypeScript, then run Python server
+
+# --- Stage 1: Build TypeScript SDK ---
+FROM node:22-slim AS ts-build
+WORKDIR /app
+COPY package.json pnpm-lock.yaml* ./
+# Install pnpm without lifecycle scripts: pnpm 12's install.js places a
+# native binary via optional deps, which is fragile in minimal images.
+# bin/pnpm.mjs runs through Node directly and needs no postinstall.
+RUN npm install -g pnpm@12.8.1 --ignore-scripts \
+    && node "$(npm root -g)/pnpm/bin/pnpm.mjs" install --frozen-lockfile --ignore-scripts
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN node "$(npm root -g)/pnpm/bin/pnpm.mjs" run build
+
+# --- Stage 2: Python runtime ---
+FROM python:3.12-slim AS runtime
+WORKDIR /app
+
+# Node.js runtime: reuse the exact Node 22 binary from the build stage.
+# Debian's apt nodejs is too old (no matching better-sqlite3 prebuild)
+# and its node-gyp package is broken (missing 'gyp' python module).
+COPY --from=ts-build /usr/local/bin/node /usr/local/bin/node
+COPY --from=ts-build /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+# Build tools so better-sqlite3 can compile from source as a fallback if
+# no prebuilt binary matches this Node version
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    make \
+    g++ \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python source first (needed by hatchling for wheel build)
+COPY memos/ ./memos/
+
+# Install Python deps
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic langchain langchain-core ollama
+
+# Copy built TypeScript into the bundled-SDK location the server expects
+COPY --from=ts-build /app/dist ./memos/_js
+COPY --from=ts-build /app/package.json ./
+# Native Node deps for the bundled SDK (better-sqlite3 cannot live in a wheel)
+# pnpm was installed with --ignore-scripts, so run it via node directly.
+RUN node /usr/local/lib/node_modules/pnpm/bin/pnpm.mjs add better-sqlite3@^12.11.1 --ignore-scripts
+
+# Data volume
+VOLUME /root/.memos
+
+# Expose API port
+EXPOSE 7400
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:7400/health || exit 1
+
+# Default command
+CMD ["uvicorn", "memos.server.main:app", "--host", "0.0.0.0", "--port", "7400"]

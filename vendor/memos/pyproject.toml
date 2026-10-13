@@ -1,0 +1,146 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+# NOTE: the PyPI name is "mem-os-sdk" (matching npm's @mem-os/sdk). The
+# plain name "memos" is already taken on PyPI by an unrelated project.
+name = "mem-os-sdk"
+version = "1.6.26"
+description = "Universal, local-first, persistent memory layer for AI agents, LLM apps, and chatbots."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Markgatcha" },
+]
+keywords = [
+    "memory",
+    "ai",
+    "llm",
+    "agent",
+    "graph",
+    "sqlite",
+    "local-first",
+    "ollama",
+    "langchain",
+    "chatbot",
+    "persistent-memory",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.3",
+    "pydantic>=2.13.4",
+]
+
+[project.optional-dependencies]
+langchain = [
+    "langchain>=1.3.15",
+    "langchain-core>=1.5.5",
+]
+ollama = [
+    "ollama>=0.6.2",
+]
+all = [
+    "mem-os-sdk[langchain,ollama]",
+]
+dev = [
+    "ruff>=0.16.3",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+]
+
+[project.urls]
+Homepage = "https://context-core.dev/memos/"
+Repository = "https://github.com/Markgatcha/memos"
+Issues = "https://github.com/Markgatcha/memos/issues"
+Documentation = "https://memos.readthedocs.io"
+Changelog = "https://github.com/Markgatcha/memos/blob/main/CHANGELOG.md"
+
+[project.scripts]
+memos-server = "memos.server.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["memos"]
+
+# Bundle the compiled TypeScript SDK into the wheel so a pip install can
+# run the memory engine without cloning the repo. The bundling is done by
+# a custom build hook (hatch_build.py) that only includes dist/ when it
+# exists — so `pip install -e .` in a fresh checkout (and CI lint/test
+# jobs) still works without a prior `npm run build`. The publish workflow
+# compiles the TS first, so release wheels always ship the SDK. The
+# native better-sqlite3 module cannot be bundled; the server installs it
+# via npm on first run.
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "memos",
+    "src",
+    "tests",
+    "docs",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# scripts/dataset/locomo/ is the vendored upstream snap-research/locomo
+# reference code (dataset generation + evaluation harness). It is kept
+# byte-identical to upstream for provenance, so it is excluded from
+# this project's lint/format rules.
+# translations/ holds localized READMEs; their inline Python snippets
+# are documentation, not source, so they are excluded too (ruff 0.16+
+# format-checks markdown code fences and would flag them).
+extend-exclude = ["scripts/dataset/locomo", "translations"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults (FastAPI)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["memos"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
