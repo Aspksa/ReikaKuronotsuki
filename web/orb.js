@@ -3,7 +3,7 @@
 // Its place is remembered as fractions of the window, so it stays sensible after a resize.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const orb = $('orb'), panel = $('chat-panel'), navChat = $('nav-chat');
+  const orb = $('orb'), panel = $('chat-panel');
   if (!orb || !panel) return;
 
   const KEY = 'reika.orb.v1';
@@ -56,14 +56,11 @@
   function setOpen(open) {
     panel.hidden = !open;
     orb.setAttribute('aria-expanded', String(open));
-    navChat.setAttribute('aria-expanded', String(open));
-    navChat.classList.toggle('active', open);
     orb.classList.toggle('open', open);
     if (open) { place(); setTimeout(() => $('input').focus({ preventScroll: true }), 0); const log = $('log'); log.scrollTop = log.scrollHeight; }
   }
   const toggle = () => setOpen(panel.hidden);
   window.ReikaOrb = { open: () => setOpen(true), close: () => setOpen(false), toggle };
-  navChat.addEventListener('click', toggle);
   $('chat-close').addEventListener('click', () => { setOpen(false); orb.focus(); });
   $('hero-chat').addEventListener('click', () => setOpen(true));
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !panel.hidden) { setOpen(false); orb.focus(); } });

@@ -1,4 +1,4 @@
-/* Left menu: brand card, quick search, navigation, the "Обновления" block and the footer. Collapsed mode shows icons with tooltips. */
+/* Left menu: brand card, navigation, the "Обновления" block and the footer. Collapsed mode shows icons with tooltips. */
 .sidebar { position: relative; z-index: var(--z-sidebar); display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-3); min-height: 0;
   background: radial-gradient(130% 34% at 0 0, rgb(var(--crimson-rgb) / .24), transparent 70%), linear-gradient(180deg, rgb(var(--night-rgb) / .86), rgb(var(--night-rgb) / .94));
   backdrop-filter: blur(14px); box-shadow: var(--rim-light); }
@@ -20,11 +20,6 @@
 .mood-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mood-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--sakura); box-shadow: 0 0 8px rgb(var(--crimson-rgb) / .8); }
 
-/* quick search */
-.side-search { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 40px; padding: 0 var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-pill);
-  background: rgb(var(--night-rgb) / .55); color: var(--text-muted); text-align: left; transition: border-color var(--dur-fast), color var(--dur-fast); }
-.side-search:hover { border-color: var(--border); color: var(--pearl); }
-.side-search .label { flex: 1; font-size: var(--text-sm); }
 .side-title { margin: var(--space-2) var(--space-3) 0; font-size: var(--text-xs); letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
 
 /* navigation */
@@ -60,9 +55,6 @@
 .update-card .nav-item[aria-current="page"] { background: none; }
 .update-card .nav-item:hover { transform: none; }
 .update-entry .badge-dot { margin-left: auto; }
-.mini-bar { height: 3px; margin: 0 var(--space-3) var(--space-2) 36px; border-radius: var(--radius-sm); background: rgb(var(--pearl-rgb) / .1); overflow: hidden; }
-.mini-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--crimson), var(--gold)); transition: width var(--dur); }
-.update-card .update-quick { width: auto; margin: 0 var(--space-2) var(--space-2) 36px; min-height: 28px; padding: 0 var(--space-4); font-size: var(--text-xs); }
 
 .side-foot { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-3); border-top: 1px solid var(--border-soft); }
 .side-foot-row { display: flex; align-items: center; gap: var(--space-2); }
@@ -74,10 +66,9 @@
 /* collapsed: icons only, with a tooltip on hover/focus */
 .collapsed .sidebar { align-items: center; padding-inline: var(--space-2); }
 .collapsed .brand { padding: var(--space-2); background: none; border-color: transparent; box-shadow: none; }
-.collapsed .brand-text, .collapsed .label, .collapsed .side-title, .collapsed .mini-bar, .collapsed .update-quick, .collapsed .kbd { display: none; }
+.collapsed .brand-text, .collapsed .label, .collapsed .side-title, .collapsed .kbd { display: none; }
 .collapsed .nav, .collapsed .side-bottom, .collapsed .update-card { width: 100%; align-items: center; }
 .collapsed .nav-item { justify-content: center; width: auto; padding: 7px; }
-.collapsed .side-search { width: 40px; justify-content: center; padding: 0; }
 .collapsed .update-card { display: flex; justify-content: center; border-color: transparent; background: none; }
 .collapsed .badge-dot { position: absolute; top: 4px; right: 4px; margin: 0; }
 .collapsed .side-foot { align-items: center; width: 100%; }
