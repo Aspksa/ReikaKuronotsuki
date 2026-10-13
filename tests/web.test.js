@@ -66,8 +66,9 @@ test('left menu: home, chat and (hidden until a server answers) update; no old h
   const bottom = side.slice(side.indexOf('class="side-bottom"'));
   assert.ok(bottom.includes('id="nav-update"') && bottom.includes('id="side-toggle"') && bottom.indexOf('id="nav-update"') < bottom.indexOf('id="side-toggle"'), 'the update entry sits in the bottom block, above the footer');
   assert.ok(!side.slice(0, side.indexOf('class="side-bottom"')).includes('id="nav-update"'), 'not in the menu list');
-  for (const id of ['palette-open', 'about-open', 'presence', 'side-mood', 'update-status', 'update-mini', 'update-install-quick', 'update-news']) assert.ok(side.includes(`id="${id}"`), `#${id} is missing in the menu`);
+  for (const id of ['palette-open', 'about-open', 'presence', 'side-mood', 'update-mini', 'update-install-quick', 'update-news']) assert.ok(side.includes(`id="${id}"`), `#${id} is missing in the menu`);
   assert.ok(!side.includes('id="menu-mode"'));
+  assert.ok(!side.includes('id="update-status"'), 'no status text in the menu');
   assert.match(side, /id="side-toggle"/);
   assert.ok(!/id="menu-btn"|id="menu-update"|id="menu-clear"|id="open-update"/.test(html), 'leftovers of the old dropdown menu');
   assert.ok(html.indexOf('<aside') < html.indexOf('<main'), 'the menu is on the left (before the content)');
