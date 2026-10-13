@@ -225,7 +225,10 @@ function createApp({ webRoot, dataDir, projectRoot = path.resolve(webRoot, '..')
             if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || graph.nodes.length > 50000 || graph.edges.length > 200000 ||
                 graph.nodes.some(n => !n || typeof n.id !== 'string' || n.id.length > 128 || typeof n.content !== 'string' || n.content.length > 10000 ||
                   !['fact','preference','context','relationship','entity','custom'].includes(n.type) || !Number.isSafeInteger(n.createdAt) || !Number.isSafeInteger(n.updatedAt)) ||
-                graph.edges.some(e => !e || typeof e.sourceId !== 'string' || typeof e.targetId !== 'string')) {
+                graph.edges.some(e => !e || typeof e.sourceId !== 'string' || typeof e.targetId !== 'string' ||
+                  !['relates_to','contradicts','supports','derived_from','part_of','temporal_precedes','custom'].includes(e.relation) ||
+                  !Number.isFinite(e.weight) || e.weight < 0 || e.weight > 1) ||
+                graph.edges.some(e => !graph.nodes.some(n => n.id === e.sourceId) || !graph.nodes.some(n => n.id === e.targetId))) {
               return sendJson(res, 400, { error: 'В копии повреждены данные долговременной памяти' });
             }
             const mem = await memory();
