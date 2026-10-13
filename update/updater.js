@@ -419,7 +419,13 @@ class ProjectUpdater {
           if (!bytes || gitHash(bytes) !== e.sha) throw new Error('Файл в подготовке повреждён: ' + e.path);
         }
       });
-      await this.step('test', () => this.run(staging, process.execPath, ['tests/run.js']));
+      // The staged project has no node_modules (protected user installation).
+      // MemOS tests need the local SDK and SQLite driver: provision them in
+      // staging, never touching the running project's dependencies or data.
+      await this.step('test', async () => {
+        await this.installStagingDependencies(staging);
+        await this.run(staging, process.execPath, ['tests/run.js']);
+      });
       this.throwIfCancelled(); // never leave a cancelled update "ready"
       await this.writeJson('ready.json', { sha, files: entries.map((e) => ({ path: e.path, sha: e.sha })), removals, description: this.latest.description, notes: (this.latest.changes ?? []).slice(0, 12).map((c) => ({ title: c.title })), createdAt: new Date().toISOString() });
       await this.emit('update_prepared', '', 'ready', { sha });
@@ -635,6 +641,19 @@ class ProjectUpdater {
       if (process.platform === 'win32') spawn('taskkill', ['/pid', String(c.pid), '/T', '/F'], { stdio: 'ignore' }).on('error', () => {});
       else process.kill(-c.pid, 'SIGTERM'); // the whole group: tests spawn children of their own
     } catch { /* already gone */ }
+  }
+  async installStagingDependencies(staging) {
+    if (!existsSync(path.join(staging, 'package.json'))) return;
+    // Test runners injected by unit tests simulate execution; no npm network.
+    if (this.runner) return;
+    const candidates = [
+      path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+      path.join(this.root, 'runtime', 'node', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    ];
+    const cli = candidates.find((candidate) => existsSync(candidate));
+    if (cli) return this.run(staging, process.execPath, [cli, 'install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts']);
+    // Use the platform's npm only if portable npm isn't available.
+    return this.run(staging, process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts']);
   }
   async run(cwd, command, args) {
     this.throwIfCancelled();
