@@ -120,3 +120,12 @@ test('comparison and findings are based on persisted samples', async () => {
   assert.match(js,/replaySamples\(data\)/);
   assert.match(js,/function showContext\(data\)/);
 });
+
+test('dashboard provides hour, day and week histories with truthful trend context', async () => {
+  const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
+  const script=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
+  assert.match(html,/id="up-stats-period"/);
+  for(const ms of ['3600000','86400000','604800000'])assert.ok(html.includes('value="'+ms+'"'));
+  assert.match(script,/const cutoff=now-Number\(period.value\)/);
+  assert.match(script,/previous-recorded-version/);
+});
