@@ -14,7 +14,8 @@ web/css/layout.css     каркас: область контента, главн
 web/css/sidebar.css    левое меню: карточка Рэйки, поиск, навигация, блок «Обновления», свёрнутый режим
 web/css/components.css кнопки, панели, карточки, поля, прогресс
 web/css/chat.css       плавающий логотип и окно чата
-web/css/update.css     страница «Обновление»
+web/css/update.css     страница «Обновление проекта»: карточка состояния, шаги, карточки, история
+web/css/stats.css      блок «Статистика проекта» на этой странице
 web/css/overlays.css   всплывающее: «Что нового», уведомления, палитра команд, окно «О проекте»
 web/sky.js             лепестки
 web/shell.js           меню слева, маршруты, статус
@@ -41,7 +42,7 @@ web/orb.js             плавающий логотип (перетаскива
 - **Кнопка** `.btn` + вариант: `btn--primary` (малиновая, главное действие), `btn--gold`, `btn--outline`, `btn--ghost`, `btn--icon`; размер `btn--sm`.
 - **Поверхности** `.panel` (стекло с лунной кромкой), `.card` (`.card__label`, `.card__value`), окно чата `.chat-panel`.
 - **Поле** `.field` (input/select/textarea), строка формы `.form-row`.
-- **Прогресс** `.bar > div`. **Текст** `.text-muted`, `.text-warn`.
+- **Заметка** `.callout` (`callout--warn` для ошибок и предупреждений). **Прогресс** `.bar > div`. **Текст** `.text-muted`, `.text-warn`.
 
 ## Фон (`sky.css`, `sky.js`)
 

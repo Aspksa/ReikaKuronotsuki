@@ -34,6 +34,12 @@
 .field::placeholder { color: var(--faint); }
 .form-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); margin: var(--space-2) 0; font-size: .92rem; }
 
+/* ---- callout: a highlighted note inside a panel ---- */
+.callout { margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--border-soft); border-left-width: 3px; border-radius: var(--radius-md); background: rgb(var(--pearl-rgb) / .04); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.callout--warn { border-color: rgb(var(--warn-rgb) / .5); background: rgb(var(--warn-rgb) / .08); color: var(--pearl); }
+.callout p { margin: 0 0 var(--space-2); white-space: normal; }
+.callout .btn { min-height: 36px; padding: 0 var(--space-4); }
+
 /* ---- progress ---- */
 .bar { height: 8px; background: rgb(var(--pearl-rgb) / .08); border-radius: var(--radius-sm); overflow: hidden; }
 .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--crimson), var(--gold)); transition: width var(--dur); }

@@ -69,50 +69,98 @@
     </section>
 
     <section class="page" id="page-update" data-page="update" aria-labelledby="update-title" hidden>
-      <header class="page-head"><h2 id="update-title">Обновление проекта</h2></header>
-      <div class="update-columns">
-      <div class="panel update">
-        <p class="text-muted">Источник: github.com/Aspksa/ReikaKuronotsuki · установлено: <b id="up-local">…</b> · доступно: <b id="up-latest">—</b></p>
-        <p id="up-blocked" class="text-warn" hidden></p>
-        <ol class="route" aria-label="Маршрут обновления">
-          <li id="node-github">GitHub</li><li class="lane"><span id="fly" class="fly" hidden></span></li>
-          <li id="node-check">Проверка</li><li class="lane"></li><li id="node-project">Проект</li>
-        </ol>
-        <div class="bar"><div id="up-bar"></div></div>
-        <p id="up-message" class="text-muted">Ожидание</p>
-        <p id="up-error" class="text-warn" hidden></p>
-        <ul id="up-checks" class="checks"></ul>
-        <div id="up-removals" class="removals" hidden>
-          <p>Новая версия удаляет файлы. Они будут удалены только после вашего подтверждения:</p>
-          <ul id="up-removals-list"></ul><button id="up-confirm" class="btn btn--gold" type="button">Подтвердить удаление</button>
-        </div>
-        <div class="actions">
-          <button id="up-check" class="btn btn--gold" type="button">Проверить</button><button id="up-download" class="btn btn--gold" type="button">Скачать и проверить</button>
-          <button id="up-cancel" class="btn btn--gold" type="button" hidden>Отмена</button><button id="up-install" class="btn btn--gold" type="button" hidden>Установить и перезапустить</button>
-        </div>
-        <label class="form-row">Канал <select id="up-channel" class="field"><option value="fresh">Свежий (последние изменения)</option><option value="stable">Стабильный (последний выпуск)</option></select></label>
-        <label class="form-row">Автопроверка <select id="up-auto" class="field"><option value="hourly">Раз в час</option><option value="daily">Раз в сутки</option><option value="off">Отключена</option></select></label>
-        <h3>Обновить из файла</h3>
-        <p class="text-muted">Выберите ZIP-архив проекта (на GitHub: Code → Download ZIP). Подходит без интернета и для проекта на флешке. Архив не сверяется с GitHub, поэтому ставьте только те, которым доверяете. Перед установкой тесты запускаются в отдельной папке, а ваши данные и настройки не затрагиваются.</p>
-        <label class="btn btn--ghost file-btn">Выбрать ZIP-файл…<input id="up-file" class="sr" type="file" accept=".zip,application/zip"></label>
+      <header class="up-head">
+        <h2 id="update-title">Обновление проекта</h2>
+        <a class="up-source" href="https://github.com/Aspksa/ReikaKuronotsuki" target="_blank" rel="noopener noreferrer">github.com/Aspksa/ReikaKuronotsuki</a>
+      </header>
 
-        <h3>История</h3><ul id="up-history" class="history"></ul>
-        <button id="up-rollback" type="button" class="btn btn--ghost" hidden>Откатить последнюю установку</button>
+      <section class="up-hero panel" id="up-hero" data-state="idle" aria-live="polite">
+        <div class="up-hero-main">
+          <span class="up-emblem" aria-hidden="true"><svg viewBox="0 0 24 24"><path id="up-emblem-path" d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5"/></svg></span>
+          <div class="up-hero-text">
+            <h3 id="up-headline">Проверяем…</h3>
+            <p id="up-sub" class="up-sub"></p>
+          </div>
+          <div class="up-actions">
+            <button id="up-install" class="btn btn--primary" type="button" hidden>Установить и перезапустить</button>
+            <button id="up-download" class="btn btn--gold" type="button">Скачать и проверить</button>
+            <button id="up-cancel" class="btn btn--outline" type="button" hidden>Отмена</button>
+            <button id="up-check" class="btn btn--ghost" type="button">Проверить</button>
+          </div>
+        </div>
+
+        <ol class="steps" aria-label="Ход обновления">
+          <li id="node-github" class="step"><i></i><span>Скачивание</span></li>
+          <li id="node-check" class="step"><i></i><span>Проверка</span></li>
+          <li id="node-project" class="step"><i></i><span>Готово</span></li>
+        </ol>
+        <div class="bar" id="up-progress" hidden><div id="up-bar"></div></div>
+        <p id="up-message" class="up-message"></p>
+        <ul id="up-checks" class="checks"></ul>
+
+        <p id="up-blocked" class="callout callout--warn" hidden></p>
+        <p id="up-error" class="callout callout--warn" hidden></p>
+        <div id="up-removals" class="callout callout--warn" hidden>
+          <p><b>Новая версия удаляет файлы.</b> Они будут удалены только после вашего подтверждения:</p>
+          <ul id="up-removals-list" class="removals"></ul>
+          <button id="up-confirm" class="btn btn--gold" type="button">Подтвердить удаление</button>
+        </div>
+      </section>
+
+      <div class="up-cards">
+        <section class="panel up-card" aria-labelledby="up-news-title">
+          <h3 id="up-news-title">Что нового</h3>
+          <p class="up-fact">Установлено <b id="up-local">…</b> · доступно <b id="up-latest">—</b></p>
+          <ul id="up-changes" class="changes"></ul>
+        </section>
+
+        <section class="panel up-card" aria-labelledby="up-file-title">
+          <h3 id="up-file-title">Обновить из файла</h3>
+          <label class="dropzone" id="up-drop">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+            <span><b>Выберите ZIP</b> или перетащите сюда</span>
+            <small>GitHub: Code → Download ZIP. Работает без интернета, в том числе с флешки.</small>
+            <input id="up-file" class="sr" type="file" accept=".zip,application/zip">
+          </label>
+          <p class="text-muted">Архив не сверяется с GitHub: ставьте только те, которым доверяете. Проверяются файлы и синтаксис, данные и настройки не затрагиваются.</p>
+        </section>
+
+        <section class="panel up-card" aria-labelledby="up-settings-title">
+          <h3 id="up-settings-title">Настройки</h3>
+          <label class="form-row">Канал <select id="up-channel" class="field"><option value="fresh">Свежий: последние изменения</option><option value="stable">Стабильный: последний выпуск</option></select></label>
+          <label class="form-row">Автопроверка <select id="up-auto" class="field"><option value="hourly">Раз в час</option><option value="daily">Раз в сутки</option><option value="off">Отключена</option></select></label>
+        </section>
+
+        <section class="panel up-card up-card--wide" aria-labelledby="up-history-title">
+          <div class="up-card-head"><h3 id="up-history-title">История</h3><button id="up-rollback" type="button" class="btn btn--ghost" hidden>Откатить последнюю установку</button></div>
+          <ul id="up-history" class="history"></ul>
+        </section>
       </div>
-      <section class="stats-panel panel" aria-label="Статистика проекта">
-          <div class="stats-toolbar"><span class="stats-live" aria-label="Данные обновляются автоматически"><i></i> <span id="stats-live-time">На связи</span></span></div>
-          <div class="stats-period"><label for="up-stats-period">Период графиков</label><select id="up-stats-period" class="field"><option value="3600000">1 час</option><option value="86400000">24 часа</option><option value="604800000">7 дней</option></select></div><div id="up-stats-highlights" class="stats-highlights" aria-label="Главные показатели"></div>
-          <div class="stats-explorer"><nav id="up-stats-tabs" class="stats-tabs" aria-label="Разделы статистики"></nav><div class="stats-content"><div class="stats-content-head"><span id="up-stats-section-title">Прямо сейчас</span><span id="up-stats-section-count">10 показателей</span></div><div id="up-stats"></div></div></div>
-          
-          </section>
-          <dialog id="up-stats-detail" class="stats-detail" aria-labelledby="up-stats-detail-title">
-            <div class="stats-detail-head"><div><p class="text-muted">Подробности показателя</p><h3 id="up-stats-detail-title"></h3></div><button type="button" id="up-stats-detail-close" aria-label="Закрыть" class="btn btn--ghost">✕</button></div>
-            <strong id="up-stats-detail-value" class="stats-detail-value">—</strong>
-            <p id="up-stats-detail-desc" class="text-muted"></p>
-            <div id="up-stats-detail-chart" class="stats-detail-chart"></div>
-            <div id="up-stats-detail-points" class="stats-detail-points"></div>
-          </dialog>
-      </div>
+
+      <section class="stats-panel" aria-labelledby="up-stats-title">
+        <header class="stats-head">
+          <h3 id="up-stats-title">Статистика проекта</h3>
+          <div class="stats-toolbar">
+            <span class="stats-live" aria-label="Данные обновляются автоматически"><i></i> <span id="stats-live-time">На связи</span></span>
+            <label class="stats-period" for="up-stats-period">Период графиков <select id="up-stats-period" class="field"><option value="3600000">1 час</option><option value="86400000">24 часа</option><option value="604800000">7 дней</option></select></label>
+          </div>
+        </header>
+        <div id="up-stats-highlights" class="stats-highlights" aria-label="Главные показатели"></div>
+        <div class="stats-explorer">
+          <nav id="up-stats-tabs" class="stats-tabs" aria-label="Разделы статистики"></nav>
+          <div class="stats-content">
+            <div class="stats-content-head"><span id="up-stats-section-title">Прямо сейчас</span><span id="up-stats-section-count">10 показателей</span></div>
+            <div id="up-stats"></div>
+          </div>
+        </div>
+      </section>
+      <dialog id="up-stats-detail" class="stats-detail" aria-labelledby="up-stats-detail-title">
+        <div class="stats-detail-head"><div><p class="text-muted">Подробности показателя</p><h3 id="up-stats-detail-title"></h3></div><button type="button" id="up-stats-detail-close" aria-label="Закрыть" class="btn btn--ghost">✕</button></div>
+        <strong id="up-stats-detail-value" class="stats-detail-value">—</strong>
+        <p id="up-stats-detail-desc" class="text-muted"></p>
+        <div id="up-stats-detail-chart" class="stats-detail-chart"></div>
+        <div id="up-stats-detail-points" class="stats-detail-points"></div>
+      </dialog>
     </section>
   </main>
 </div>

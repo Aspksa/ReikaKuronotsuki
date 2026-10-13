@@ -32,30 +32,51 @@
 
   // ---------- the update page ----------
   function renderPage(st) {
+    const state = S.cardState(st);
+    const working = state === 'busy';
+    const hero = $('up-hero');
+    hero.dataset.state = state;
+    $('up-emblem-path').setAttribute('d', S.ICONS[state]);
+    const d = S.describe(st);
+    $('up-headline').textContent = d.title;
+    $('up-sub').textContent = d.sub;
     $('up-local').textContent = S.shortVersion(st.localVersion);
     $('up-latest').textContent = st.latest ? st.latest.version : '—';
-    $('up-message').textContent = st.message || '';
+    $('up-message').textContent = working || state === 'ready' ? (st.message || '') : '';
     $('up-bar').style.width = `${st.percent || 0}%`;
+    show($('up-progress'), working);
     show($('up-blocked'), !!st.blocked); $('up-blocked').textContent = st.blocked || '';
     show($('up-error'), !!st.error); $('up-error').textContent = st.error ? `${st.error}${st.logTail ? '\n' + st.logTail : ''}` : '';
     $('up-checks').innerHTML = '';
-    for (const c of st.checks || []) { const li = document.createElement('li'); li.className = label[c.status]; li.textContent = c.title; $('up-checks').appendChild(li); }
-    const working = st.phase === 'downloading' || st.phase === 'testing';
-    $('node-github').classList.toggle('on', st.phase === 'downloading');
-    $('node-check').classList.toggle('on', st.phase === 'testing');
-    $('node-project').classList.toggle('on', st.phase === 'ready');
-    show($('fly'), working);
+    for (const c of st.checks || []) { if (state === 'idle' || state === 'available') break; const li = document.createElement('li'); li.className = label[c.status]; li.textContent = c.title; $('up-checks').appendChild(li); }
+    const phase = st.phase;
+    const stepOn = (id, on, done) => { const el = $(id); el.classList.toggle('on', on); el.classList.toggle('done', done); };
+    stepOn('node-github', phase === 'downloading', phase === 'testing' || phase === 'ready');
+    stepOn('node-check', phase === 'testing', phase === 'ready');
+    stepOn('node-project', false, phase === 'ready');
     show($('up-cancel'), working);
-    show($('up-check'), !working); show($('up-download'), !working && st.phase !== 'ready');
-    $('up-download').disabled = !!st.blocked || !st.latest;
-    $('up-file').disabled = working || st.phase === 'ready';
-    show($('up-install'), st.phase === 'ready' || st.rollbackPending);
+    show($('up-check'), !working && state !== 'ready');
+    show($('up-download'), !working && state !== 'ready' && !st.blocked && !!st.latest && state !== 'idle');
+    show($('up-install'), state === 'ready');
+    $('up-file').disabled = working || state === 'ready';
+    $('up-drop').classList.toggle('disabled', $('up-file').disabled);
     const needConfirm = st.phase === 'ready' && st.pendingRemovals.length > 0 && !st.removalsConfirmed;
     show($('up-removals'), st.pendingRemovals.length > 0 && st.phase === 'ready');
     $('up-removals-list').innerHTML = '';
     for (const p of st.pendingRemovals) { const li = document.createElement('li'); li.textContent = p; $('up-removals-list').appendChild(li); }
     show($('up-confirm'), needConfirm);
     $('up-channel').value = st.config.channel; $('up-auto').value = st.config.autoCheck;
+    const list = $('up-changes');
+    list.textContent = '';
+    const n = S.news(st, 8);
+    if (n && n.items.length) {
+      for (const t of n.items) { const li = document.createElement('li'); li.textContent = t; list.appendChild(li); }
+      if (n.more) { const li = document.createElement('li'); li.className = 'more'; li.textContent = `…и ещё ${n.more}`; list.appendChild(li); }
+    } else {
+      const li = document.createElement('li'); li.className = 'empty';
+      li.textContent = n && n.text ? n.text : (state === 'available' || state === 'ready' ? 'Описание изменений недоступно.' : 'Новых изменений нет.');
+      list.appendChild(li);
+    }
   }
 
   // ---------- the entry in the side panel ----------
@@ -130,12 +151,18 @@
     try {
       const h = await call('history');
       $('up-history').innerHTML = '';
-      const kinds = { install: 'Установка', rollback: 'Откат', failed: 'Неудачная установка', startup_failed: 'Не запустилась, возвращена прежняя' };
-      for (const item of h.items) {
+      const kinds = { install: ['Установка', 'ok'], rollback: ['Откат', 'info'], failed: ['Неудачная установка', 'warn'], startup_failed: ['Не запустилась, возвращена прежняя', 'warn'] };
+      for (const item of h.items.slice(0, 12)) {
+        const [name, tone] = kinds[item.kind] || [item.kind, 'info'];
         const li = document.createElement('li');
-        li.textContent = `${new Date(item.at).toLocaleString('ru-RU')} · ${kinds[item.kind] || item.kind}${item.to ? ' · ' + item.to.slice(0, 8) : ''}${item.message ? ' · ' + item.message : ''}`;
+        li.dataset.tone = tone;
+        const title = document.createElement('b'); title.textContent = name + (item.to ? ' · ' + S.shortVersion(item.to) : '');
+        const when = document.createElement('time'); when.textContent = new Date(item.at).toLocaleString('ru-RU');
+        li.append(title, when);
+        if (item.message) { const m = document.createElement('p'); m.textContent = item.message; li.appendChild(m); }
         $('up-history').appendChild(li);
       }
+      if (!h.items.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'Установок пока не было.'; $('up-history').appendChild(li); }
       show($('up-rollback'), !!h.canRollback && !h.rollbackPending);
     } catch { /* history is informative */ }
   }
@@ -164,6 +191,16 @@
     const file = input.files && input.files[0];
     input.value = '';
     try { await fromFile(file); } catch (e) { fail(e); }
+    poll();
+  });
+
+  const drop = $('up-drop');
+  for (const type of ['dragenter', 'dragover']) drop.addEventListener(type, (e) => { e.preventDefault(); if (!$('up-file').disabled) drop.classList.add('over'); });
+  for (const type of ['dragleave', 'drop']) drop.addEventListener(type, () => drop.classList.remove('over'));
+  drop.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    if ($('up-file').disabled) return;
+    try { await fromFile(e.dataTransfer && e.dataTransfer.files[0]); } catch (err) { fail(err); }
     poll();
   });
 

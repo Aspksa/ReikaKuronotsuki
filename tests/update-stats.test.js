@@ -36,14 +36,14 @@ test('150 named statistics are present in the browser catalog', async () => {
   assert.equal(new Set(catalog.flatMap(g=>g[1].map(x=>x[0]))).size, 150);
 });
 
-test('statistics live in a separate right column with accessible icon decorations', async () => {
+test('statistics are their own section below the update controls, with accessible icon decorations', async () => {
   const html = await fs.readFile(path.join(__dirname, '..', 'web', 'index.html'), 'utf8');
-  const css = await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'update.css'), 'utf8');
+  const css = await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'stats.css'), 'utf8');
   const js = await fs.readFile(path.join(__dirname, '..', 'web', 'update-stats.js'), 'utf8');
-  assert.match(html, /class="update-columns"/);
-  assert.match(html, /class="stats-panel panel"/);
-  assert.match(css, /grid-template-columns: minmax\(320px/);
-  assert.match(css, /@media \(max-width:\s*1180px\)/);
+  assert.match(html, /class="up-cards"/);
+  assert.match(html, /class="stats-panel"/);
+  assert.ok(html.indexOf('class="up-hero') < html.indexOf('class="stats-panel"'), 'update controls come first, statistics below');
+  assert.match(css, /@media \(max-width:\s*1100px\)/);
   assert.match(js, /stats-icon/);
   assert.match(js, /aria-hidden/);
   assert.match(js, /toneFor\(key,index\)/);
@@ -55,7 +55,7 @@ test('statistics live in a separate right column with accessible icon decoration
   assert.match(css, /stats-content-head/);
   assert.doesNotMatch(html, /100 фактов/);
   assert.match(js, /function activate\(/);
-  assert.match(css, /prefers-reduced-motion/);
+  assert.match(await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'base.css'), 'utf8'), /prefers-reduced-motion/);
 });
 
 test('new file curiosities reflect actual files, not mock counters', async () => {
@@ -77,23 +77,22 @@ test('new file curiosities reflect actual files, not mock counters', async () =>
 test('refined dashboard has no redundant headings and supports searching all metrics', async () => {
   const html = await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
   const js = await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
-  const css = await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
+  const css = await fs.readFile(path.join(__dirname,'..','web','css','stats.css'),'utf8');
   assert.doesNotMatch(html, /<h3>Статистика<\/h3>/);
   assert.doesNotMatch(html, /Состояние проекта/);
   assert.doesNotMatch(html, /id="up-stats-search"/);
   assert.doesNotMatch(js, /function filterMetrics\(/);
   assert.doesNotMatch(js, /search\.addEventListener\('input',filterMetrics\)/);
   assert.match(css, /stats-tile--hero:nth-child\(2\)/);
-  assert.match(css, /prefers-reduced-motion/);
 });
 
 test('dashboard CSS uses one canonical declaration per base selector and breakpoint', async () => {
-  const css = await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'update.css'), 'utf8');
+  const css = await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'stats.css'), 'utf8');
   for (const selector of ['.stats-highlights', '.stats-tile--hero', '.stats-live', '.stats-tab[aria-pressed="true"]']) {
     const hits = css.split('\n').filter(line => line.startsWith(selector + ' {'));
     assert.equal(hits.length, 1, selector + ' must have one base declaration');
   }
-  assert.equal((css.match(/@media \(max-width:1180px\)/g) || []).length, 1);
+  assert.equal((css.match(/@media \(max-width: 1100px\)/g) || []).length, 1);
   assert.doesNotMatch(css, /\.stats-heading/);
 });
 
@@ -144,7 +143,7 @@ test('anomaly warnings require six real observations and a material departure', 
 test('new metric interactions expose keyboard-accessible controls and dialog', async () => {
   const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
   const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
-  const css=await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
+  const css=await fs.readFile(path.join(__dirname,'..','web','css','stats.css'),'utf8');
   for(const id of ['up-stats-detail','up-stats-detail-close'])assert.ok(html.includes('id="'+id+'"'));
   assert.match(js,/function openDetail\(/);
   assert.match(js,/showModal\(\)/);
@@ -153,14 +152,12 @@ test('new metric interactions expose keyboard-accessible controls and dialog', a
 });
 
 test('crimson dashboard retains usable controls and mobile accessibility', async () => {
-  const css=await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
+  const css=await fs.readFile(path.join(__dirname,'..','web','css','stats.css'),'utf8');
   const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
-  assert.match(css,/--stat-pro-accent:var\(--crimson-hi\)/);
-  assert.match(css,/\.stats-tile--hero:focus-within/);
+  assert.match(css,/\.stats-tile:focus-within/);
   assert.match(css,/\.stats-tab\[aria-pressed="true"\]/);
   assert.match(css,/\.stats-open:focus-visible/);
-  assert.match(css,/@media\(max-width:670px\)/);
-  assert.match(css,/prefers-reduced-motion:reduce/);
+  assert.match(css,/@media \(max-width: 780px\)/);
   for(const id of ['up-stats-period','up-stats-detail'])assert.ok(html.includes('id="'+id+'"'));
   assert.doesNotMatch(html, /<h3>Статистика<\/h3>/);
 });
@@ -168,7 +165,7 @@ test('crimson dashboard retains usable controls and mobile accessibility', async
 test('every metric has a distinct value source and removed controls cannot return', async () => {
   const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
   const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
-  const css=await fs.readFile(path.join(__dirname,'..','web','css','update.css'),'utf8');
+  const css=await fs.readFile(path.join(__dirname,'..','web','css','stats.css'),'utf8');
   const begin=js.indexOf('const groups = '),end=js.indexOf(';',begin);
   const groups=JSON.parse(js.slice(begin+'const groups = '.length,end));
   const keys=groups.flatMap(g=>g[1].map(x=>x[1]));
