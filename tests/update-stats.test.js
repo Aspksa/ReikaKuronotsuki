@@ -34,3 +34,16 @@ test('100 named statistics are present in the browser catalog', async () => {
   assert.equal(catalog.reduce((n,g)=>n+g[1].length,0),100);
   assert.equal(new Set(catalog.flatMap(g=>g[1].map(x=>x[0]))).size, 100);
 });
+
+test('statistics live in a separate right column with accessible icon decorations', async () => {
+  const html = await fs.readFile(path.join(__dirname, '..', 'web', 'index.html'), 'utf8');
+  const css = await fs.readFile(path.join(__dirname, '..', 'web', 'css', 'update.css'), 'utf8');
+  const js = await fs.readFile(path.join(__dirname, '..', 'web', 'update-stats.js'), 'utf8');
+  assert.match(html, /class="update-columns"/);
+  assert.match(html, /class="stats-panel panel"/);
+  assert.match(css, /grid-template-columns: minmax\(320px/);
+  assert.match(css, /@media \(max-width: 1180px\)/);
+  assert.match(js, /stats-icon/);
+  assert.match(js, /aria-hidden/);
+  assert.match(js, /toneFor\(key,cards.length\)/);
+});

@@ -48,6 +48,29 @@
     if(unit==='bytes'){if(value<1024)return num(value)+' Б';const units=['КБ','МБ','ГБ','ТБ'];let n=value,i=-1;do{n/=1024;i++;}while(n>=1024&&i<units.length-1);return num(n)+' '+units[i];}
     return typeof value==='number'?num(value):String(value);
   };
+  // Each card has its own symbol; tones reflect the metric's meaning, not random decoration.
+  const symbols = [
+    '◷','⚑','◉','⇩','↧','▣','☷','↺','▤','◫',
+    '▦','⌗','▰','▱','⇣','⌘','▥','▧','{ }','▨',
+    '≡','▫','※','¶','☰','∑','◔','✎','↔','№',
+    '☷','✓','⚠','⟲','▣','◈','▥','◴','☁','↶',
+    '↓','⇓','◇','⇢','⊙','⌕','✔','!','⊘','▤',
+    '⑂','⌁','⌚','♙','⌛','◷','◉','#','◐','✦',
+    '◴','▣','▥','◵','◔','◎','⬡','▧','◩','◷',
+    '◈','▶','↕','◐','⌘','▥','⌥','▦','◴','◉',
+    '⏱','◷','⌁','↶','◴','◵','↔','⌛','↑','↓',
+    '%','▤','◧','⌗','◫','▦','÷','◉','≡','↻'
+  ];
+  const tones=['gold','blue','mint','violet','rose','orange','cyan','silver'];
+  const toneFor=(key,i)=>{
+    if(/error|failure|blocked|cancel|rollback/i.test(key))return 'rose';
+    if(/download|Bytes|totalBytes|freeDisk/i.test(key))return 'blue';
+    if(/success|ready|checkDone|verify|install/i.test(key))return 'mint';
+    if(/cpu|memory|cores|node|platform/i.test(key))return 'violet';
+    if(/date|At|uptime|since|Age|Duration/i.test(key))return 'cyan';
+    if(/growth|lines|commit|git/i.test(key))return 'orange';
+    return tones[i % tones.length];
+  };
   const cards=[];
   for(const [title,items] of groups){
     const section=document.createElement('details');section.className='stats-section';
@@ -56,9 +79,11 @@
     const grid=document.createElement('div');grid.className='stats-grid';
     for(const [label,key,unit] of items){
       const card=document.createElement('div');card.className='stats-tile';
+      card.dataset.tone=toneFor(key,cards.length);
+      const icon=document.createElement('span');icon.className='stats-icon';icon.setAttribute('aria-hidden','true');icon.textContent=symbols[cards.length];
       const name=document.createElement('span');name.className='stats-name';name.textContent=label;
       const value=document.createElement('strong');value.className='stats-number';value.textContent='—';
-      card.append(name,value);grid.appendChild(card);cards.push({key,unit,value});
+      card.append(icon,name,value);grid.appendChild(card);cards.push({key,unit,value});
     }
     section.appendChild(grid);root.appendChild(section);
   }
