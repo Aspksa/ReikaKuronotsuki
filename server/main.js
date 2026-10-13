@@ -45,10 +45,12 @@ async function main() {
   const updater = new ProjectUpdater(projectRoot);
   // Only the launcher (launcher/boot.js) can install an update: it restarts this process with exit code 75.
   const restart = () => { if (process.env.REIKA_SUPERVISED !== '1') return false; setTimeout(() => process.exit(75), 300); return true; };
-  const server = createApp({ webRoot: path.join(projectRoot, 'web'), dataDir, updater, restart });
+  let activePort = null;
+  const server = createApp({ webRoot: path.join(projectRoot, 'web'), dataDir, projectRoot, get port() { return activePort; }, updater, restart });
   const host = '127.0.0.1'; // local only: the chat is never exposed to the network
   const free = await findFreePort(Number(process.env.REIKA_PORT) || Number(config.port) || 8731, { host });
   const port = await listen(server, host, free.port);
+  activePort = port;
   if (!free.preferred) console.log(`Порт ${config.port} занят, использую свободный: ${port}`);
   const runtime = { pid: process.pid, port, url: `http://127.0.0.1:${port}/`, dataDir };
   console.log(`REIKA_READY ${JSON.stringify(runtime)}`);

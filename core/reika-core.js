@@ -64,11 +64,20 @@ function createStore(dataDir) {
     return message;
   }
 
+  // Used by "restore from a copy": whatever is not a valid message is dropped, never written as is.
+  function replace(list) {
+    messages = (Array.isArray(list) ? list : []).filter(isValidMessage).slice(-MAX_HISTORY)
+      .map((m) => ({ id: String(m.id || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`), role: m.role, text: normalizeText(m.text), emotion: typeof m.emotion === 'string' ? m.emotion.slice(0, 20) : 'neutral', at: m.at }));
+    save();
+    return messages.length;
+  }
+
   load();
   return {
     file,
     all: () => messages.slice(),
     add,
+    replace,
     clear() { messages = []; save(); },
   };
 }

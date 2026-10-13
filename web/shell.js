@@ -27,16 +27,19 @@
   // ---- routes: #/home, #/update ----
   const pages = Array.from(document.querySelectorAll('[data-page]'));
   const navs = Array.from(document.querySelectorAll('[data-route]'));
+  // Pages that need the local server: in a plain browser build they are hidden and their links fall back to the home page.
+  const needsServer = { update: () => updaterPresent, settings: () => serverSeen };
   function currentRoute() {
     const wanted = location.hash.replace(/^#\/?/, '') || 'home';
     const exists = pages.some((p) => p.dataset.page === wanted);
-    return exists && !(wanted === 'update' && !updaterPresent) ? wanted : 'home';
+    return exists && (!needsServer[wanted] || needsServer[wanted]()) ? wanted : 'home';
   }
   function route() {
     const r = currentRoute();
     for (const p of pages) p.hidden = p.dataset.page !== r;
     for (const n of navs) { if (n.dataset.route === r) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current'); }
-    document.title = r === 'update' ? 'Обновление · Reika Kuronotsuki' : 'Reika Kuronotsuki';
+    const titles = { update: 'Обновление · Reika Kuronotsuki', settings: 'Настройки · Reika Kuronotsuki' };
+    document.title = titles[r] || 'Reika Kuronotsuki';
     $('content').scrollTop = 0;
     window.dispatchEvent(new CustomEvent('reika:route', { detail: r }));
   }
@@ -69,8 +72,11 @@
     try {
       const h = await (await fetch('api/health', { cache: 'no-store' })).json();
       if (!h || !h.ok) throw new Error('not ok');
+      const first = !serverSeen;
       serverSeen = true;
       setPresence('server');
+      $('nav-settings').hidden = false;
+      if (first) route(); // a direct link to #/settings works once the server is known to be there
       const v = h.version && /^[0-9a-f]{40}$/.test(h.version) ? h.version.slice(0, 8) : null;
       if (v && version === null) showVersion(v);
     } catch { if (serverSeen) setPresence('down'); }
