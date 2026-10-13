@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { collect, inspect } = require('../update/stats');
+const { collect, inspect, readSamples, cachedInspect } = require('../update/stats');
 
 test('statistics scan excludes user data and maintains project growth baseline', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'reika-stats-'));
@@ -94,4 +94,38 @@ test('dashboard CSS uses one canonical declaration per base selector and breakpo
   }
   assert.equal((css.match(/@media \(max-width:1180px\)/g) || []).length, 1);
   assert.doesNotMatch(css, /\.stats-heading/);
+});
+
+test('metric history stays on disk and repeated requests reuse scans', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'reika-metric-history-'));
+  try {
+    await fs.writeFile(path.join(root,'before.js'),'const n=1;\n');
+    const updater={root,status:()=>({phase:'idle',checks:[],pendingRemovals:[],config:{}})};
+    const a=await collect(updater);
+    const b=await collect(updater);
+    assert.ok(Array.isArray(a.samples));
+    assert.equal(b.samples.length,1);
+    assert.equal((await readSamples(root)).length,1);
+    assert.equal(a.samples[0].bytes,b.samples[0].bytes);
+    const cached=await cachedInspect(root);
+    assert.equal(cached.bytes,a.scan.bytes);
+    assert.equal(a.versionComparison.baseline,'earliest-recorded-sample');
+  } finally {await fs.rm(root,{recursive:true,force:true});}
+});
+test('comparison and findings are based on persisted samples', async () => {
+  const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
+  const js=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
+  assert.match(html,/up-stats-comparison/);
+  assert.match(html,/up-stats-insights/);
+  assert.match(js,/replaySamples\(data\)/);
+  assert.match(js,/function showContext\(data\)/);
+});
+
+test('dashboard provides hour, day and week histories with truthful trend context', async () => {
+  const html=await fs.readFile(path.join(__dirname,'..','web','index.html'),'utf8');
+  const script=await fs.readFile(path.join(__dirname,'..','web','update-stats.js'),'utf8');
+  assert.match(html,/id="up-stats-period"/);
+  for(const ms of ['3600000','86400000','604800000'])assert.ok(html.includes('value="'+ms+'"'));
+  assert.match(script,/const cutoff=now-Number\(period.value\)/);
+  assert.match(script,/previous-recorded-version/);
 });

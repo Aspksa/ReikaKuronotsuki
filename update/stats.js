@@ -15,6 +15,60 @@ const sum = (xs, key) => xs.reduce((n, x) => n + (Number.isFinite(Number(x[key])
 const count = (xs, pred) => xs.filter(pred).length;
 const dateMs = x => { const n = Date.parse(x || ''); return Number.isFinite(n) ? n : null; };
 const optional = (arr, f) => arr.length ? f(arr) : null;
+const CACHE_MS = 60_000;
+const HISTORY_MAX = 10080; // up to one week of one-minute samples
+const cache = new Map();
+const gitCache = new Map();
+const writes = new Map();
+async function cachedInspect(root) {
+  const existing=cache.get(root);
+  const directoryMtime=(await fs.stat(root).catch(()=>null))?.mtimeMs ?? null;
+  if(existing?.value && existing.directoryMtime===directoryMtime && Date.now()-existing.at<CACHE_MS)return existing.value;
+  if(existing?.pending)return existing.pending;
+  const pending=inspect(root);
+  cache.set(root,{pending,at:Date.now(),directoryMtime});
+  try { const value=await pending;cache.set(root,{value,at:Date.now(),directoryMtime});return value; }
+  catch(e){cache.delete(root);throw e;}
+}
+async function readSamples(root){
+  try {const value=JSON.parse(await fs.readFile(path.join(root,'.updates','metric-samples.json'),'utf8'));return Array.isArray(value)?value.slice(-HISTORY_MAX):[];}
+  catch{return [];}
+}
+async function appendSample(root,sample){
+  const previous=writes.get(root);
+  if(previous?.pending)return previous.pending;
+  if(previous?.at && sample.at-previous.at<60_000)return;
+  const pending=(async()=>{
+    const samples=await readSamples(root);
+    if(samples.length && sample.at-samples.at(-1).at<60_000)return;
+    samples.push(sample);
+    const dir=path.join(root,'.updates');
+    const filename=path.join(dir,'metric-samples.json');
+    const temp=filename+'.'+process.pid+'.tmp';
+    await fs.mkdir(dir,{recursive:true});
+    try{await fs.writeFile(temp,JSON.stringify(samples.slice(-HISTORY_MAX)));await fs.rename(temp,filename);}
+    finally{await fs.rm(temp,{force:true}).catch(()=>{});}
+  })();
+  writes.set(root,{pending});
+  try {await pending;writes.set(root,{at:sample.at});}catch{writes.delete(root);}
+}
+
+function getGitStats(root){
+  const previous=gitCache.get(root);
+  if(previous && Date.now()-previous.at<300_000)return previous.value;
+  const git={commitCount:null,firstCommit:null,lastCommit:null,authors:null};
+  try{
+    const run=args=>execFileSync('git',['-C',root,...args],{timeout:1800,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();
+    const commitCount=Number(run(['rev-list','--count','HEAD']));
+    git.commitCount=Number.isSafeInteger(commitCount)?commitCount:null;
+    git.firstCommit=dateMs(run(['log','--reverse','--format=%aI','HEAD']).split('\n')[0]);
+    git.lastCommit=dateMs(run(['log','-1','--format=%aI']));
+    git.authors=run(['shortlog','-sne','HEAD']).split('\n').filter(Boolean).length;
+  }catch{ /* Git unavailable for ZIP installs */ }
+  gitCache.set(root,{at:Date.now(),value:git});
+  return git;
+}
+
 async function inspect(root) {
   const result = { files: 0, bytes: 0, js: 0, css: 0, html: 0, json: 0, images: 0, text: 0,
     lines: 0, blank: 0, comments: 0, largest: 0, smallest: null, deepest: 0, directories: 0,
@@ -73,7 +127,7 @@ async function inspect(root) {
 async function collect(updater) {
   const root = updater.root, dir = path.join(root, '.updates');
   const [events, history, scan, lifetime] = await Promise.all([
-    readLines(path.join(dir, 'events.jsonl')), readLines(path.join(dir, 'history.jsonl')), inspect(root), readLines(path.join(dir, 'telemetry.jsonl'))
+    readLines(path.join(dir, 'events.jsonl')), readLines(path.join(dir, 'history.jsonl')), cachedInspect(root), readLines(path.join(dir, 'telemetry.jsonl'))
   ]);
   const status = updater.status();
   const types = Object.create(null);
@@ -96,18 +150,17 @@ async function collect(updater) {
     try { await fs.mkdir(dir, {recursive:true}); await fs.writeFile(baselineFile, JSON.stringify(baseline), {flag:'wx'}); } catch { /* another process may have written it */ }
   }
   const current = status;
-  let git = { commitCount: null, firstCommit: null, lastCommit: null, authors: null };
-  try {
-    const run = args => execFileSync('git', ['-C', root, ...args], { timeout: 1800, encoding: 'utf8', stdio:['ignore','pipe','ignore'] }).trim();
-    const countCommits = Number(run(['rev-list','--count','HEAD']));
-    git.commitCount = Number.isFinite(countCommits) ? countCommits : null;
-    git.firstCommit = dateMs(run(['log','--reverse','--format=%aI','HEAD']).split('\n')[0]) ?? null;
-    git.lastCommit = dateMs(run(['log','-1','--format=%aI']));
-    git.authors = run(['shortlog','-sne','HEAD']).split('\n').filter(Boolean).length;
-  } catch { /* ZIP installations may not have git */ }
+  const git = getGitStats(root);
   const fsInfo = await fs.statfs(root).catch(() => null);
   const free = fsInfo ? Number(fsInfo.bavail) * Number(fsInfo.bsize) : null;
+  const sample={at:Date.now(),version:status.localVersion||null,bytes:scan.bytes,files:scan.files,lines:scan.lines,rss:process.memoryUsage().rss,freeDiskBytes:free,installs:installs.length,failures:failures.length,downloads:sum(downloadEvents,'bytes_done')};
+  await appendSample(root,sample);
+  const samples=await readSamples(root);
+  const olderVersion=samples.findLast(x=>x.version && sample.version && x.version!==sample.version);
+  const oldest=olderVersion||samples[0]||null;
+  const versionComparison=oldest?{from:oldest.at,to:sample.at,fromVersion:oldest.version||null,toVersion:sample.version,bytes:sample.bytes-oldest.bytes,files:sample.files-oldest.files,lines:sample.lines-oldest.lines,baseline:olderVersion?'previous-recorded-version':'earliest-recorded-sample'}:null;
   return {
+    samples,versionComparison,
     capturedAt: Date.now(), processStartedAt: Date.now() - Math.floor(process.uptime()*1000),
     uptimeMs: Math.floor(process.uptime()*1000), node: process.version, platform: process.platform,
     memoryRss: process.memoryUsage().rss, memoryHeap: process.memoryUsage().heapUsed,
@@ -132,4 +185,4 @@ async function collect(updater) {
       backups, backupBytes},
   };
 }
-module.exports = {collect, inspect, readLines};
+module.exports = {collect, inspect, readLines, cachedInspect, readSamples};

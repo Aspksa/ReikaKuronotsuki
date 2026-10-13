@@ -113,11 +113,15 @@
   const selected={index:0};
   const reduced=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const numeric=value=>typeof value==='number'&&Number.isFinite(value);
-  function sparkline(values){
+  function sparkline(values,key){
     const good=values.filter(numeric);
     if(good.length<2)return null; // never pretend there is a trend without samples
-    const lo=Math.min(...good), hi=Math.max(...good);
-    const range=hi-lo || 1;
+    const rawLo=Math.min(...good), hi=Math.max(...good);
+    // Cumulative counters start at zero; fluctuating gauges keep an honest context band.
+    const cumulative=/^(events\.|history\.|growth\.|scan\.|uptimeMs)/.test(key);
+    const lo=cumulative?Math.min(0,rawLo):Math.min(0,rawLo-(Math.max(hi,1)*0.1));
+    const upper=Math.max(hi,lo+Math.max(Math.abs(hi)*0.1,1));
+    const range=upper-lo;
     const points=good.map((v,i)=>[4+i*112/(good.length-1),27-(v-lo)*22/range]);
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox','0 0 120 32');
@@ -206,6 +210,40 @@
     ['Ошибок','events.errorCount','number']
   ];
   heroes.forEach(([label,key,unit],i)=>highlights.appendChild(createCard(label,key,unit,100+i,true)));
+  let lastData=null;
+  const period=$('up-stats-period');
+  period.addEventListener('change',()=>{if(lastData){replaySamples(lastData);for(const c of cards)renderValue(c,lastData);}});
+  const persisted = {'events.downloadedBytes':'downloads','scan.bytes':'bytes','scan.files':'files','scan.lines':'lines','memoryRss':'rss','freeDiskBytes':'freeDiskBytes','history.installs':'installs','history.failures':'failures'};
+  function replaySamples(data) {
+    const now=data.capturedAt||Date.now();
+    const cutoff=now-Number(period.value);
+    const rows=(Array.isArray(data.samples)?data.samples:[]).filter(x=>Number.isFinite(x.at)&&x.at>=cutoff);
+    for(const [key,field] of Object.entries(persisted)){
+      const all=rows.map(row=>row[field]).filter(numeric);
+      const series=all.length>36?all.filter((_,i)=>i%Math.ceil(all.length/36)===0).concat(all.at(-1)).slice(-36):all;
+      if(series.length)traces.set(key,series);
+    }
+  }
+  function showContext(data) {
+    const comparison=$('up-stats-comparison');
+    const insights=$('up-stats-insights');
+    const baseline=data.versionComparison;
+    if(baseline){
+      const when=new Date(baseline.from).toLocaleDateString('ru-RU');
+      const signed=n=>(n>0?'+':'')+num(n);
+      comparison.textContent=(baseline.baseline==='previous-recorded-version'?'С прошлой записанной версии, ': 'С первой записи, ')+when+': '+signed(baseline.files)+' файлов · '+signed(baseline.lines)+' строк · '+signed(baseline.bytes)+' байт. Сравнение с первой сохранённой точкой, не с первой версией.';
+    }else comparison.textContent='Сравнение появится после первого сохранённого измерения.';
+    const sentences=[];
+    if(baseline){
+      if(baseline.bytes>0 && baseline.files===0)sentences.push('Размер проекта вырос без увеличения числа файлов — вероятно, изменилось содержимое существующих.');
+      if(baseline.files>0 && baseline.bytes<0)sentences.push('Файлов стало больше, но проект стал занимать меньше места.');
+      if(baseline.lines>0 && baseline.bytes<0)sentences.push('Строк стало больше, хотя общий размер уменьшился.');
+    }
+    if(data.history?.failures>0)sentences.push('В истории есть неудачные установки: '+data.history.failures+'.');
+    insights.replaceChildren();
+    if(!sentences.length){insights.textContent='Необычных изменений пока не обнаружено.';return;}
+    for(const msg of sentences.slice(0,3)){const p=document.createElement('p');p.textContent=msg;insights.appendChild(p);}
+  }
   function renderValue(c,data){
     const value=get(data,c.key);
     const previous=c.previous;
@@ -221,9 +259,9 @@
     if(numeric(value)){
       const arr=traces.get(c.key)||[];
       // A fresh poll with the same value is still a real sample, not fake chart data.
-      if(c.sampleAt!==data.capturedAt){arr.push(value);if(arr.length>24)arr.shift();traces.set(c.key,arr);c.sampleAt=data.capturedAt;}
+      if(c.sampleAt!==data.capturedAt && !persisted[c.key]){arr.push(value);if(arr.length>24)arr.shift();traces.set(c.key,arr);c.sampleAt=data.capturedAt;}
       c.chart.replaceChildren();
-      const line=sparkline(arr);
+      const line=sparkline(arr,c.key);
       if(line)c.chart.appendChild(line);
       if(arr.length<2){c.trend.textContent='Набираем данные';c.card.dataset.direction='unknown';}
       else{
@@ -246,7 +284,9 @@
     try{
       const res=await fetch('api/update/stats',{cache:'no-store'});
       if(!res.ok)throw Error('HTTP '+res.status);
-      const data=expand(await res.json());lastFetch=Date.now();
+      const data=expand(await res.json());lastData=data;lastFetch=Date.now();
+      replaySamples(data);
+      showContext(data);
       for(const c of cards)renderValue(c,data);
       $('stats-live-time').textContent=new Date(data.capturedAt).toLocaleTimeString('ru-RU');
       $('up-stats-note').textContent='Данные из файлов проекта и локальных журналов. Графики отражают измерения текущей сессии; история до начала записи может отсутствовать.';
